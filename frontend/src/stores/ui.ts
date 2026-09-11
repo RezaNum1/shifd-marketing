@@ -11,15 +11,23 @@ interface Toast {
 export const useUiStore = defineStore('ui', () => {
   const toasts = ref<Toast[]>([])
   let nextId = 0
+  let dismissTimer: ReturnType<typeof setTimeout> | undefined
 
   function dismissToast(id: number) {
+    if (toasts.value[0]?.id !== id) return
     toasts.value = toasts.value.filter((toast) => toast.id !== id)
+    if (dismissTimer) {
+      clearTimeout(dismissTimer)
+      dismissTimer = undefined
+    }
   }
 
-  // Explicit dismissal keeps important feedback available to keyboard and screen-reader users.
+  // Keep feedback concise and replace older messages so the workspace stays unobstructed.
   function notify(message: string, tone: Tone = 'info') {
     const id = ++nextId
-    toasts.value.push({ id, message, tone })
+    if (dismissTimer) clearTimeout(dismissTimer)
+    toasts.value = [{ id, message, tone }]
+    dismissTimer = setTimeout(() => dismissToast(id), 4000)
     return id
   }
 

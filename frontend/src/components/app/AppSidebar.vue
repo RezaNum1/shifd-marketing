@@ -2,7 +2,16 @@
 import AppBrand from './AppBrand.vue'
 import AppNavigation from './AppNavigation.vue'
 import UserIdentity from './UserIdentity.vue'
-import AppIcon from '../ui/AppIcon.vue'
+import IconButton from '../ui/IconButton.vue'
+import { useAuthStore } from '../../stores/auth'
+import { useRouter } from 'vue-router'
+
+const auth = useAuthStore()
+const router = useRouter()
+function signOut() {
+  auth.logout()
+  router.replace('/login')
+}
 </script>
 
 <template>
@@ -11,13 +20,9 @@ import AppIcon from '../ui/AppIcon.vue'
     <AppNavigation />
     <div class="app-sidebar__footer">
       <UserIdentity />
-      <RouterLink
-        to="/settings/ai"
-        class="ui-button ui-button--ghost ui-icon-button"
-        aria-label="Workspace settings"
-        title="Workspace settings"
-        ><AppIcon name="settings" :size="18"
-      /></RouterLink>
+      <div class="app-sidebar__footer-actions">
+        <IconButton icon="arrow-left" label="Sign out" @click="signOut" />
+      </div>
     </div>
   </aside>
 </template>

@@ -2,12 +2,15 @@
 import { useRoute } from 'vue-router'
 import { navigationGroups } from '../../router/navigation'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { useContentWorkflowStore } from '../../stores/contentWorkflow'
 import AppIcon from '../ui/AppIcon.vue'
 
 const route = useRoute()
 const workspace = useWorkspaceStore()
+const workflow = useContentWorkflowStore()
 
-function onNavigate(event: MouseEvent, navigate: (event: MouseEvent) => unknown) {
+function onNavigate(event: MouseEvent, navigate: (event: MouseEvent) => unknown, key: string) {
+  if (key === 'create') workflow.startNewWorkflow()
   navigate(event)
   workspace.closeNavigation()
 }
@@ -31,7 +34,7 @@ function onNavigate(event: MouseEvent, navigate: (event: MouseEvent) => unknown)
               :aria-current="
                 route.meta.navigationKey === item.key ? 'page' : undefined
               "
-              @click="onNavigate($event, navigate)"
+              @click="onNavigate($event, navigate, item.key)"
             >
               <AppIcon :name="item.icon" /><span>{{ item.label }}</span>
             </a>

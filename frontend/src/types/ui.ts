@@ -19,6 +19,7 @@ export type IconName =
   | 'arrow-left'
   | 'arrow-right'
   | 'check'
+  | 'circle'
   | 'info'
   | 'alert'
   | 'plus'

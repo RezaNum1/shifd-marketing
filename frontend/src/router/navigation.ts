@@ -71,7 +71,7 @@ export const pages: PageDefinition[] = [
     path: '/',
     name: 'overview',
     title: 'Overview',
-    description: 'Keep your marketing execution on track.',
+    description: 'Your marketing execution at a glance.',
     icon: 'overview',
     navigationKey: 'overview',
     group: 'Platform',
@@ -130,12 +130,22 @@ export const pages: PageDefinition[] = [
   {
     path: '/performance',
     name: 'performance',
-    title: 'Marketing Performance',
+    title: 'Performance',
     description:
-      'Understand your publishing consistency and marketing performance.',
+      'Track content execution and social media performance over time.',
     icon: 'chart',
     navigationKey: 'performance',
     group: 'Planning & Insights',
+  },
+  {
+    path: '/performance/linkedin',
+    name: 'performance-linkedin',
+    title: 'LinkedIn Metrics',
+    description: 'Record LinkedIn performance metrics manually.',
+    icon: 'chart',
+    navigationKey: 'performance',
+    group: 'Planning & Insights',
+    parent: { label: 'Performance', to: '/performance' },
   },
   {
     path: '/context/company',
