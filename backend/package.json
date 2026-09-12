@@ -1,0 +1,35 @@
+{
+  "name": "shifd-marketing-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.11.0 <23"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "test": "npm run test:unit",
+    "test:unit": "vitest run",
+    "test:db": "node -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:db'); process.exit(1) }\" && vitest run tests/database.test.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@prisma/client": "^6.19.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "prisma": "^6.19.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

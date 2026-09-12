@@ -1,0 +1,44 @@
+import 'dotenv/config'
+
+export type NodeEnvironment = 'development' | 'test' | 'production'
+
+export interface AppConfig {
+  nodeEnv: NodeEnvironment
+  port: number
+  host: string
+  databaseUrl: string
+  allowedOrigin: string
+}
+
+export class ConfigError extends Error {
+  constructor(public readonly fields: Record<string, string>) {
+    super('Invalid application configuration.')
+    this.name = 'ConfigError'
+  }
+}
+
+function required(name: string, value: string | undefined, fields: Record<string, string>) {
+  const trimmed = value?.trim()
+  if (!trimmed) fields[name] = 'Value is required.'
+  return trimmed ?? ''
+}
+
+function parsePort(value: string | undefined, fields: Record<string, string>) {
+  const port = Number(value ?? '3000')
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) fields.PORT = 'Must be an integer between 1 and 65535.'
+  return port
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const fields: Record<string, string> = {}
+  const nodeEnv = (env.NODE_ENV?.trim() || 'development') as NodeEnvironment
+  if (!['development', 'test', 'production'].includes(nodeEnv)) fields.NODE_ENV = 'Must be development, test, or production.'
+  const databaseUrl = required('DATABASE_URL', env.DATABASE_URL, fields)
+  if (databaseUrl && !/^postgres(?:ql):\/\//.test(databaseUrl)) fields.DATABASE_URL = 'Must be a PostgreSQL connection URL.'
+  const allowedOrigin = required('ALLOWED_ORIGIN', env.ALLOWED_ORIGIN, fields)
+  if (allowedOrigin && allowedOrigin === '*') fields.ALLOWED_ORIGIN = 'Wildcard origin is not allowed.'
+  const port = parsePort(env.PORT, fields)
+  const host = required('HOST', env.HOST || '127.0.0.1', fields)
+  if (Object.keys(fields).length) throw new ConfigError(fields)
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin }
+}

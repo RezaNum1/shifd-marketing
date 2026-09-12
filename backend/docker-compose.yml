@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shifd_marketing}
+      POSTGRES_USER: ${POSTGRES_USER:-shifd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shifd_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - shifd_marketing_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  shifd_marketing_postgres_data:
