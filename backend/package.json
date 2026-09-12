@@ -12,15 +12,20 @@
     "start": "node dist/src/server.js",
     "test": "npm run test:unit",
     "test:unit": "vitest run",
-    "test:db": "node -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:db'); process.exit(1) }\" && vitest run tests/database.test.ts",
+    "test:db": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:db'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/database.test.ts",
+    "test:auth": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:auth'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/auth.test.ts",
+    "auth:bootstrap": "tsx src/modules/auth/bootstrap.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.1.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@prisma/client": "^6.19.0",
+    "argon2": "^0.41.1",
     "dotenv": "^16.4.7",
     "fastify": "^5.6.1",
     "fastify-plugin": "^5.0.1"

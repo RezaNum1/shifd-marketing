@@ -9,7 +9,7 @@ const valid = {
 
 describe('configuration validation', () => {
   it('loads valid required configuration', () => {
-    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN })
+    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN, sessionIdleMinutes: 480, sessionAbsoluteHours: 24, loginRateLimitMax: 5, loginRateLimitWindowMinutes: 15 })
   })
 
   it('fails fast for invalid required values', () => {
@@ -17,5 +17,9 @@ describe('configuration validation', () => {
     try { loadConfig({ ...valid, DATABASE_URL: 'sqlite://local', ALLOWED_ORIGIN: '*' }) } catch (error) {
       expect(error).toMatchObject({ fields: { DATABASE_URL: expect.any(String), ALLOWED_ORIGIN: expect.any(String) } })
     }
+  })
+
+  it('fails fast for invalid authentication settings', () => {
+    expect(() => loadConfig({ ...valid, SESSION_IDLE_MINUTES: '0', LOGIN_RATE_LIMIT_MAX: '-1' })).toThrow(ConfigError)
   })
 })

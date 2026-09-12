@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-primary-fixed": "#001551",
+          "surface-bright": "#f8f9ff",
+          "on-primary-fixed-variant": "#0039b5",
+          "surface-container": "#e5eeff",
+          "on-secondary-container": "#5c647a",
+          "on-secondary-fixed-variant": "#3f465c",
+          "primary-fixed": "#dce1ff",
+          "surface-container-low": "#eff4ff",
+          "secondary-fixed-dim": "#bec6e0",
+          "background": "#f8f9ff",
+          "on-tertiary-fixed": "#002114",
+          "inverse-primary": "#b7c4ff",
+          "on-surface": "#0b1c30",
+          "inverse-surface": "#213145",
+          "error": "#ba1a1a",
+          "on-surface-variant": "#434655",
+          "outline-variant": "#c4c5d7",
+          "error-container": "#ffdad6",
+          "secondary-fixed": "#dae2fd",
+          "surface-container-highest": "#d3e4fe",
+          "secondary-container": "#dae2fd",
+          "secondary": "#565e74",
+          "outline": "#747686",
+          "on-background": "#0b1c30",
+          "tertiary-fixed": "#85f8c4",
+          "surface-dim": "#cbdbf5",
+          "surface": "#f8f9ff",
+          "on-tertiary-container": "#76eab6",
+          "surface-container-high": "#dce9ff",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#68dba9",
+          "primary": "#0037b0",
+          "on-error": "#ffffff",
+          "surface-tint": "#2151da",
+          "tertiary-container": "#006948",
+          "surface-variant": "#d3e4fe",
+          "on-primary-container": "#cad3ff",
+          "on-secondary": "#ffffff",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-tertiary-fixed-variant": "#005137",
+          "primary-container": "#1d4ed8",
+          "on-secondary-fixed": "#131b2e",
+          "inverse-on-surface": "#eaf1ff",
+          "surface-container-lowest": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "tertiary": "#004f35",
+          "on-primary": "#ffffff"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "space-2": "0.125rem",
+          "space-40": "2.5rem",
+          "space-8": "0.5rem",
+          "space-16": "1rem",
+          "gutter-tablet": "1rem",
+          "gutter-desktop": "1.5rem",
+          "space-12": "0.75rem",
+          "space-48": "3rem",
+          "space-20": "1.25rem",
+          "space-4": "0.25rem",
+          "space-32": "2rem",
+          "margin-shell": "1.5rem",
+          "space-24": "1.5rem"
+        },
+        "fontFamily": {
+          "label-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "code-sm": ["JetBrains Mono"],
+          "headline-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "display-lg": ["Inter"],
+          "headline-sm": ["Inter"],
+          "headline-md": ["Inter"],
+          "body-md": ["Inter"]
+        },
+        "fontSize": {
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+          "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "code-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+          "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600"}],
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-20 flex items-center gap-space-12 bg-surface-container-lowest"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">Shifd Marketing</span><span class="font-label-sm text-label-sm text-on-surface-variant">Shifd Labs Suite</span></div></div><nav class="flex flex-col px-space-12 py-space-16 gap-space-4" data-active-classes="bg-primary-container text-on-primary font-body-md font-medium rounded-lg"><div class="px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Platform</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="overview" href="#">Overview</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Content Studio</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ideas" href="#">Ideas</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="create-content" href="#">Create Content</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-library" href="#">Content Library</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Planning &amp; Insights</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="calendar" href="#">Calendar</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="performance" href="#">Performance</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Context Engine</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="company" href="#">Company</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="products" href="#">Products</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">System</div><a aria-current="page" class="flex items-center px-space-12 py-space-8 transition-colors bg-primary-container text-on-primary font-body-md font-medium rounded-lg" data-path="integrations" href="#">Integrations</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ai-system" href="#">AI &amp; System</a></nav></div><div class="p-space-16 m-space-12 bg-surface-container-low rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-12 min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="flex flex-col min-w-0"><span class="font-label-md text-label-md text-on-surface font-semibold truncate">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Founder</span></div></div><a class="text-on-surface-variant hover:text-on-surface p-space-4 rounded flex items-center justify-center transition-colors" data-path="ai-system" href="#"><span class="material-symbols-outlined text-[18px]">tune</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-16"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex items-center gap-space-8 font-label-md text-label-md text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span>Shifd Labs Workspace</span><span class="text-outline">/</span><span class="text-on-surface font-medium">Execution Engine</span></div></div><div class="flex items-center gap-space-16"><div class="relative hidden sm:flex items-center"><span class="material-symbols-outlined absolute left-space-12 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-9 pl-9 pr-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search prompt drafts, campaigns, assets..." type="text"/></div><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-8"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-none">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Founder</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)] flex-1 px-gutter-desktop py-space-24"><div class="flex flex-col w-full">
+<div class="flex flex-col gap-space-24 w-full max-w-[1400px] mx-auto pb-space-48">
+<!-- Header & Subtitle Block -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-16 pb-space-8">
+<div class="flex flex-col gap-space-4">
+<div class="flex items-center gap-space-8 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span>System Architecture</span>
+<span>/</span>
+<span class="text-primary font-semibold">Integrations &amp; Feeds</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Integrations &amp; Data Feeds</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+          Connect publishing channels, manual metric ingest pipelines, and buyer signal notification webhooks with strict cryptographic guardrails.
+        </p>
+</div>
+<div class="flex items-center gap-space-12 self-start md:self-auto">
+<button class="h-9 px-space-16 rounded-xl bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors font-body-sm text-body-sm font-medium flex items-center gap-space-8 shadow-sm" id="testConnectionsBtn">
+<span class="material-symbols-outlined text-[18px] text-secondary">wifi_protected_setup</span>
+<span>Test All Connections</span>
+</button>
+<button class="h-9 px-space-16 rounded-xl bg-primary text-on-primary hover:bg-primary-container transition-colors font-body-sm text-body-sm font-semibold flex items-center gap-space-8 shadow-sm" id="syncNowBtn">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+<span>Sync Now</span>
+</button>
+</div>
+</div>
+<!-- Top Banner / Status Overview Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-16">
+<div class="bg-surface-container-lowest p-space-20 rounded-xl shadow-sm flex flex-col justify-between relative overflow-hidden">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Channel Status</span>
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-display-lg text-display-lg text-on-surface tracking-tight">3 / 5</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Channels Active</span>
+</div>
+<div class="mt-space-8 w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 60%"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-20 rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Pipeline Health</span>
+<span class="px-space-8 py-space-2 rounded bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm">Nominal</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-display-lg text-display-lg text-on-surface tracking-tight font-code-sm">99.4%</span>
+<span class="font-body-sm text-body-sm text-tertiary font-medium">Uptime SLA</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Zero dropped webhook frames</span>
+</div>
+<div class="bg-surface-container-lowest p-space-20 rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Last Sync Cycle</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">schedule</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-headline-lg text-headline-lg text-on-surface tracking-tight">12m ago</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Automated Graph API Ingest</span>
+</div>
+<div class="bg-surface-container-lowest p-space-20 rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Signals Ingested</span>
+<span class="material-symbols-outlined text-primary text-[18px]">bolt</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-display-lg text-display-lg text-primary tracking-tight font-code-sm">24 Leads</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Procurement &amp; RFP intents (8w)</span>
+</div>
+</div>
+<!-- Main Content Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-24">
+<!-- Left Column: Channel & Signal Integration Modules (8 Cols) -->
+<div class="xl:col-span-8 flex flex-col gap-space-24">
+<!-- SECTION A: External Publishing & Distribution Channels -->
+<div class="flex flex-col gap-space-16">
+<div class="flex items-center justify-between px-space-4">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[20px]">share</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">External Publishing &amp; Distribution Channels</h2>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">2 connected · 1 paused</span>
+</div>
+<!-- Channel 1: LinkedIn Personal & Company -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-20">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-16">
+<div class="flex items-start gap-space-16">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+<svg class="w-6 h-6 fill-primary" viewbox="0 0 24 24">
+<path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"></path>
+</svg>
+</div>
+<div class="flex flex-col gap-space-4">
+<div class="flex flex-wrap items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">LinkedIn Personal &amp; Company Workspace</h3>
+<span class="inline-flex items-center gap-1.5 px-space-8 py-space-2 rounded-full bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                      Connected &amp; Active
+                    </span>
+</div>
+<div class="flex items-center gap-space-8 mt-space-4">
+<img alt="Reza profile avatar" class="w-6 h-6 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/>
+<span class="font-label-md text-label-md text-on-surface font-medium">Reza — Founder @ Shifd Labs</span>
+<span class="text-outline text-label-sm">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-code-sm">org-id: 9942084</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-8 self-end sm:self-auto">
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors">Configure Hook</button>
+<button class="h-8 px-space-8 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Guardrail & Permission Alert -->
+<div class="p-space-16 rounded-xl bg-surface-container-low flex flex-col gap-space-12">
+<div class="flex items-start gap-space-12">
+<span class="material-symbols-outlined text-primary-container text-[20px] mt-0.5">verified_user</span>
+<div class="flex flex-col gap-space-2">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold uppercase tracking-wider">Strict Security Guardrail: Zero Auto-Posting</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    All drafts prepared in Content Studio require founder sign-off before manual dispatch handoff. Direct unmoderated auto-publish is cryptographically blocked at the API transport layer.
+                  </p>
+</div>
+</div>
+<div class="flex flex-wrap items-center justify-between pt-space-8 font-label-sm text-label-sm text-secondary">
+<span>Scope: <code class="font-code-sm text-primary font-medium">w_member_social, r_organization_social, r_analytics</code></span>
+<a class="text-primary hover:underline font-medium" href="#">View Token Health (Expires in 88 days)</a>
+</div>
+</div>
+</div>
+<!-- Channel 2: Instagram Business Account -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-20">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-16">
+<div class="flex items-start gap-space-16">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[26px]">photo_camera</span>
+</div>
+<div class="flex flex-col gap-space-4">
+<div class="flex flex-wrap items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Instagram Business Account</h3>
+<span class="inline-flex items-center gap-1.5 px-space-8 py-space-2 rounded-full bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                      Meta Graph API v19.0
+                    </span>
+</div>
+<span class="font-label-md text-label-md text-primary font-medium">@shifdlabs</span>
+</div>
+</div>
+<div class="flex items-center gap-space-8 self-end sm:self-auto">
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors">Re-authenticate</button>
+<button class="h-8 px-space-12 rounded-lg bg-primary-fixed text-on-primary-fixed hover:bg-primary-fixed-dim font-body-sm text-body-sm font-semibold transition-colors">Manage Settings</button>
+</div>
+</div>
+<!-- Stats Bar -->
+<div class="grid grid-cols-3 gap-space-12 p-space-16 rounded-xl bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase">Follower Audience</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-code-sm">1,420</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase">Carousel Pipeline</span>
+<span class="font-headline-sm text-headline-sm text-tertiary font-code-sm">5 Ready to Stage</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase">Access Token</span>
+<span class="font-headline-sm text-headline-sm text-on-surface-variant font-code-sm">Valid (54 days)</span>
+</div>
+</div>
+</div>
+<!-- Channel 3: X (Twitter) B2B Dispatch -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-space-16 opacity-85">
+<div class="flex items-start gap-space-16">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center shrink-0">
+<svg class="w-5 h-5 fill-secondary" viewbox="0 0 24 24">
+<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+</svg>
+</div>
+<div class="flex flex-col gap-space-4">
+<div class="flex items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">X (Twitter) B2B Dispatch</h3>
+<span class="px-space-8 py-space-2 rounded bg-surface-container-high text-secondary font-label-sm text-label-sm font-medium">Disconnected / On Hold</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-lg">
+                  Optional broadcast channel for GovTech protocol upgrades and enterprise security release notes. Disabled during current stealth sprint.
+                </p>
+</div>
+</div>
+<button class="h-9 px-space-16 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm font-medium transition-colors shrink-0">
+              Connect Account
+            </button>
+</div>
+</div>
+<!-- SECTION B: Inbound Buyer Signals & CRM Pipelines -->
+<div class="flex flex-col gap-space-16 pt-space-16">
+<div class="flex items-center justify-between px-space-4">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[20px]">sensors</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Inbound Buyer Signals &amp; CRM Pipelines</h2>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Real-time webhook ingestion</span>
+</div>
+<!-- Signal 1: WhatsApp Business API -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-20">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-16">
+<div class="flex items-start gap-space-16">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[26px]">chat</span>
+</div>
+<div class="flex flex-col gap-space-4">
+<div class="flex flex-wrap items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">WhatsApp Business API</h3>
+<span class="inline-flex items-center gap-1.5 px-space-8 py-space-2 rounded-full bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                      Active Webhook Listener
+                    </span>
+</div>
+<span class="font-body-sm text-body-sm font-code-sm text-secondary">+1 (415) •••-8921 (GovTech Desk)</span>
+</div>
+</div>
+<div class="flex items-center gap-space-8 self-end sm:self-auto">
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors">Edit Webhook</button>
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-primary font-body-sm text-body-sm font-medium transition-colors">View Payload Logs</button>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Captures inbound procurement questions, pilot RFPs, and whitepaper requests triggered by post CTAs. Every signal automatically generates an enriched founder notification.
+            </p>
+<!-- Webhook URL Box -->
+<div class="p-space-16 rounded-xl bg-surface-container-low flex flex-col gap-space-8">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Production Endpoint</span>
+<span class="font-label-sm text-label-sm text-tertiary font-semibold">24 verified leads logged</span>
+</div>
+<div class="flex items-center justify-between gap-space-12 bg-surface-container-lowest px-space-12 py-space-8 rounded-lg">
+<code class="font-code-sm text-code-sm text-primary truncate">https://api.shifdlabs.com/v1/webhooks/whatsapp-inbound</code>
+<button class="text-secondary hover:text-on-surface transition-colors shrink-0" title="Copy endpoint">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Signal 2: HubSpot CRM / GovCloud Export -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col sm:flex-row sm:items-start justify-between gap-space-16">
+<div class="flex items-start gap-space-16">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[26px]">hub</span>
+</div>
+<div class="flex flex-col gap-space-4">
+<div class="flex flex-wrap items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">HubSpot CRM / GovCloud Lead Export</h3>
+<span class="inline-flex items-center gap-1.5 px-space-8 py-space-2 rounded-full bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                    Connected
+                  </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xl">
+                  Synchronizes buyer interactions and tags qualified enterprise conversations as <span class="text-primary font-medium">"High-Intent Procurement Spec"</span> in real-time.
+                </p>
+</div>
+</div>
+<div class="flex items-center gap-space-8 self-end sm:self-auto shrink-0">
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors">Map Custom Properties</button>
+<button class="h-8 px-space-12 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors">Sync Rules</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Manual Ingest Form & Ingest Audit Logs (4 Cols) -->
+<div class="xl:col-span-4 flex flex-col gap-space-24">
+<!-- Card: Weekly Manual Metric Ingest Form -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-20">
+<div class="flex items-start justify-between gap-space-8">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[22px]">post_add</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Weekly Metric Ingest</h2>
+</div>
+<span class="px-space-8 py-space-2 rounded bg-surface-container-high font-label-sm text-label-sm font-code-sm text-secondary">Manual Audit</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Input verified impressions and private engagement metrics from native dashboards to enrich executive reporting pipelines.
+          </p>
+<!-- Input Form Fields -->
+<form class="flex flex-col gap-space-16" id="manualIngestForm" onsubmit="event.preventDefault(); window.submitMetricEntry();">
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-secondary uppercase">Reporting Cycle</label>
+<select class="h-9 px-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-colors" id="cycleSelect">
+<option value="W38 (Sep 21, 2024)">W38 (Sep 15 – Sep 21) · Current</option>
+<option value="W37 (Sep 14, 2024)">W37 (Sep 08 – Sep 14)</option>
+</select>
+</div>
+<div class="grid grid-cols-2 gap-space-12">
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-secondary uppercase">LinkedIn Impressions</label>
+<input class="h-9 px-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface font-code-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors" id="inputImpressions" placeholder="42,850" required="" type="number"/>
+</div>
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-secondary uppercase">Direct Inbound Chats</label>
+<input class="h-9 px-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface font-code-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors" id="inputChats" placeholder="18" required="" type="number"/>
+</div>
+</div>
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-secondary uppercase">Verified Reach (Meta / IG)</label>
+<input class="h-9 px-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface font-code-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors" id="inputReach" placeholder="6,420" required="" type="number"/>
+</div>
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-secondary uppercase">Founder Authentication Signature</label>
+<div class="flex items-center gap-space-8 px-space-12 py-space-8 rounded-lg bg-surface-container-low">
+<span class="material-symbols-outlined text-[16px] text-tertiary">fingerprint</span>
+<span class="font-code-sm text-code-sm text-on-surface font-medium">RSA-SHA256: Reza (Founder)</span>
+</div>
+</div>
+<button class="h-9 w-full rounded-xl bg-primary text-on-primary hover:bg-primary-container transition-colors font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-8 shadow-sm mt-space-4" type="submit">
+<span class="material-symbols-outlined text-[18px]">publish</span>
+<span>Commit Ingest Record</span>
+</button>
+</form>
+</div>
+<!-- Card: Recent Audit Logs Table -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-16">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Recent Ingest Records</h3>
+<span class="font-label-sm text-label-sm text-secondary font-code-sm">IMMUTABLE LOG</span>
+</div>
+<div class="flex flex-col gap-space-12" id="auditLogContainer">
+<!-- Log Entry 1 -->
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-space-6">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">W37 (Sep 14)</span>
+<span class="font-label-sm text-label-sm text-secondary font-code-sm">Sep 14, 19:40 UTC</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-code-sm text-label-sm">
+<span>38,400 Imp · 14 Chats · 5,190 Reach</span>
+<span class="text-tertiary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Verified
+                </span>
+</div>
+</div>
+<!-- Log Entry 2 -->
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-space-6">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">W36 (Sep 07)</span>
+<span class="font-label-sm text-label-sm text-secondary font-code-sm">Sep 07, 18:22 UTC</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-code-sm text-label-sm">
+<span>44,120 Imp · 21 Chats · 6,800 Reach</span>
+<span class="text-tertiary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Verified
+                </span>
+</div>
+</div>
+<!-- Log Entry 3 -->
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-space-6">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">W35 (Aug 31)</span>
+<span class="font-label-sm text-label-sm text-secondary font-code-sm">Aug 31, 20:05 UTC</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-code-sm text-label-sm">
+<span>31,950 Imp · 11 Chats · 4,450 Reach</span>
+<span class="text-tertiary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Verified
+                </span>
+</div>
+</div>
+</div>
+<a class="font-label-sm text-label-sm text-primary hover:underline font-medium text-center pt-space-4" href="#">Export Full Audit Trail (.CSV)</a>
+</div>
+<!-- Infrastructure & Security Card -->
+<div class="p-space-20 rounded-xl bg-surface-container-high flex flex-col gap-space-12">
+<div class="flex items-center gap-space-8 text-on-surface font-headline-sm text-headline-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">vpn_key</span>
+<span>Zero-Trust Credential Vault</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            All client secrets and OAuth access refresh tokens are sealed using AWS KMS with hardware HSM isolation. Rotation schedule enforces automatic token re-verification every 90 days.
+          </p>
+<div class="flex items-center justify-between font-label-sm text-label-sm text-secondary pt-space-4">
+<span class="font-code-sm">HSM: us-east-1a-fips</span>
+<span class="text-tertiary font-medium">Policy Enforced</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  window.submitMetricEntry = function() {
+    const cycle = document.getElementById('cycleSelect').value;
+    const impressions = document.getElementById('inputImpressions').value;
+    const chats = document.getElementById('inputChats').value;
+    const reach = document.getElementById('inputReach').value;
+
+    if (!impressions || !chats || !reach) return;
+
+    const container = document.getElementById('auditLogContainer');
+    const newEntry = document.createElement('div');
+    newEntry.className = 'p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-space-6 border border-primary/20 transition-all';
+    newEntry.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="font-label-md text-label-md font-semibold text-on-surface">${cycle.split('·')[0].trim()}</span>
+        <span class="font-label-sm text-label-sm text-secondary font-code-sm">Just now</span>
+      </div>
+      <div class="flex items-center justify-between text-on-surface-variant font-code-sm text-label-sm">
+        <span>${Number(impressions).toLocaleString()} Imp · ${chats} Chats · ${Number(reach).toLocaleString()} Reach</span>
+        <span class="text-tertiary font-semibold flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">check_circle</span> Verified
+        </span>
+      </div>
+    `;
+
+    container.prepend(newEntry);
+    document.getElementById('manualIngestForm').reset();
+  };
+
+  document.getElementById('syncNowBtn')?.addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">autorenew</span><span>Syncing...</span>';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span><span>Synced!</span>';
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }, 1500);
+    }, 1200);
+  });
+
+  document.getElementById('testConnectionsBtn')?.addEventListener('click', function() {
+    const btn = this;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin text-secondary">wifi_protected_setup</span><span>Probing...</span>';
+    setTimeout(() => {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px] text-tertiary">task_alt</span><span>All 5 Healthy</span>';
+      setTimeout(() => {
+        btn.innerHTML = original;
+      }, 2000);
+    }, 1000);
+  });
+</script></main></div></body></html>

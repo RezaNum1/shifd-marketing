@@ -6,3 +6,65 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Company {
+  id                  String        @id @default(uuid()) @db.Uuid
+  name                String
+  description         String
+  industry            String?
+  businessTypes       String[]      @default([]) @map("business_types")
+  primaryMarket       String?       @map("primary_market")
+  website             String?
+  mission             String?
+  vision              String?
+  positioning         String?
+  coreValueProposition String?       @map("core_value_proposition")
+  differentiators     String[]      @default([])
+  customerSegments    String[]      @default([]) @map("customer_segments")
+  decisionMakers      String[]      @default([]) @map("decision_makers")
+  painPoints          String[]      @default([]) @map("pain_points")
+  reportingTimezone   String        @default("Asia/Jakarta") @map("reporting_timezone")
+  contextVersion      Int           @default(1) @map("context_version")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version             Int           @default(1)
+  users               User[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  companyId    String        @map("company_id") @db.Uuid
+  name         String
+  email        String
+  passwordHash String        @map("password_hash")
+  role         String        @default("founder")
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version      Int           @default(1)
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sessions     AuthSession[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  tokenHash        String    @unique @map("token_hash")
+  csrfSecretHash   String    @map("csrf_secret_hash")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime @map("absolute_expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([absoluteExpiresAt])
+  @@map("auth_sessions")
+}

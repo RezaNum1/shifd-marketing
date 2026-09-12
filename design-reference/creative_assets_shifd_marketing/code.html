@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "error": "#ba1a1a",
+          "on-tertiary-container": "#76eab6",
+          "surface-container-highest": "#d3e4fe",
+          "on-tertiary-fixed": "#002114",
+          "surface-container-high": "#dce9ff",
+          "on-surface-variant": "#434655",
+          "on-secondary-container": "#5c647a",
+          "surface-variant": "#d3e4fe",
+          "surface-container-low": "#eff4ff",
+          "primary-container": "#1d4ed8",
+          "on-background": "#0b1c30",
+          "on-tertiary-fixed-variant": "#005137",
+          "secondary-fixed": "#dae2fd",
+          "tertiary-fixed": "#85f8c4",
+          "inverse-on-surface": "#eaf1ff",
+          "on-tertiary": "#ffffff",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-primary-container": "#cad3ff",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#68dba9",
+          "secondary-fixed-dim": "#bec6e0",
+          "surface-tint": "#2151da",
+          "tertiary-container": "#006948",
+          "primary-fixed": "#dce1ff",
+          "tertiary": "#004f35",
+          "on-error": "#ffffff",
+          "surface": "#f8f9ff",
+          "error-container": "#ffdad6",
+          "on-primary": "#ffffff",
+          "on-primary-fixed": "#001551",
+          "on-secondary-fixed-variant": "#3f465c",
+          "inverse-surface": "#213145",
+          "secondary-container": "#dae2fd",
+          "background": "#f8f9ff",
+          "primary": "#0037b0",
+          "outline": "#747686",
+          "on-secondary": "#ffffff",
+          "surface-bright": "#f8f9ff",
+          "surface-dim": "#cbdbf5",
+          "surface-container": "#e5eeff",
+          "on-primary-fixed-variant": "#0039b5",
+          "outline-variant": "#c4c5d7",
+          "inverse-primary": "#b7c4ff",
+          "surface-container-lowest": "#ffffff",
+          "secondary": "#565e74",
+          "on-secondary-fixed": "#131b2e",
+          "on-surface": "#0b1c30"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "gutter-desktop": "1.5rem",
+          "space-20": "1.25rem",
+          "space-16": "1rem",
+          "space-4": "0.25rem",
+          "space-48": "3rem",
+          "margin-shell": "1.5rem",
+          "space-24": "1.5rem",
+          "space-32": "2rem",
+          "space-40": "2.5rem",
+          "space-8": "0.5rem",
+          "space-12": "0.75rem",
+          "space-2": "0.125rem",
+          "gutter-tablet": "1rem"
+        },
+        "fontFamily": {
+          "display-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "body-md": ["Inter"],
+          "headline-sm": ["Inter"],
+          "headline-lg": ["Inter"],
+          "code-sm": ["JetBrains Mono"],
+          "body-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "headline-md": ["Inter"]
+        },
+        "fontSize": {
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "code-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-20 flex items-center gap-space-12 bg-surface-container-lowest"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">Shifd Marketing</span><span class="font-label-sm text-label-sm text-on-surface-variant">Shifd Labs Suite</span></div></div><nav class="flex flex-col px-space-12 py-space-16 gap-space-4" data-active-classes="bg-primary-container text-on-primary font-body-md font-medium rounded-lg"><div class="px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Platform</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>Overview</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Content Studio</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-ideas" href="#"><span class="material-symbols-outlined text-[20px]">lightbulb</span><span>Ideas</span></a><a aria-current="page" class="flex items-center gap-space-12 px-space-12 py-space-8 transition-colors bg-primary-container text-on-primary font-body-md font-medium rounded-lg" data-path="create-content" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span>Create Content</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-library" href="#"><span class="material-symbols-outlined text-[20px]">library_books</span><span>Content Library</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Planning &amp; Insights</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="calendar" href="#"><span class="material-symbols-outlined text-[20px]">calendar_month</span><span>Calendar</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="performance" href="#"><span class="material-symbols-outlined text-[20px]">insights</span><span>Performance</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Context Engine</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-company" href="#"><span class="material-symbols-outlined text-[20px]">business</span><span>Company</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-products" href="#"><span class="material-symbols-outlined text-[20px]">inventory_2</span><span>Products</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">System</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-integrations" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span>Integrations</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[20px]">neurology</span><span>AI &amp; System</span></a></nav></div><div class="p-space-16 m-space-12 bg-surface-container-low rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-12 min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="flex flex-col min-w-0"><span class="font-label-md text-label-md text-on-surface font-semibold truncate">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Founder</span></div></div><a class="text-on-surface-variant hover:text-on-surface p-space-4 rounded flex items-center justify-center transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[18px]">tune</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-16"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex items-center gap-space-8 font-label-md text-label-md text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span>Shifd Labs Workspace</span><span class="text-outline">/</span><span class="text-on-surface font-medium">Execution Engine</span></div></div><div class="flex items-center gap-space-16"><div class="relative hidden sm:flex items-center"><span class="material-symbols-outlined absolute left-space-12 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-9 pl-9 pr-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search prompt drafts, campaigns, assets..." type="text"/></div><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-8"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-none">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Founder</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)] flex-1 px-gutter-desktop py-space-24"><div class="flex flex-col w-full">
+<!-- Top Workflow Stepper Strip -->
+<div class="w-full bg-surface-container-lowest shadow-sm rounded-xl p-space-16 mb-space-24">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-16">
+<div class="flex items-center gap-space-8 text-on-surface-variant font-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px] text-primary">hub</span>
+<span class="font-semibold text-on-surface">Campaign: Enterprise Trust Launch</span>
+<span class="text-outline-variant">/</span>
+<span>Guided Pipeline</span>
+</div>
+<!-- Stepper Nodes -->
+<ol class="flex items-center gap-space-12 overflow-x-auto py-1">
+<!-- Step 1 -->
+<li class="flex items-center gap-space-8 shrink-0">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary-container font-label-md">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<span class="font-label-md text-on-surface font-medium">1 Brief</span>
+<span class="w-6 h-0.5 bg-tertiary-container/40 ml-space-4"></span>
+</li>
+<!-- Step 2 -->
+<li class="flex items-center gap-space-8 shrink-0">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary-container font-label-md">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<span class="font-label-md text-on-surface font-medium">2 Generate</span>
+<span class="w-6 h-0.5 bg-tertiary-container/40 ml-space-4"></span>
+</li>
+<!-- Step 3 -->
+<li class="flex items-center gap-space-8 shrink-0">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary-container font-label-md">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<span class="font-label-md text-on-surface font-medium">3 Adapt</span>
+<span class="w-6 h-0.5 bg-primary/40 ml-space-4"></span>
+</li>
+<!-- Step 4 (Active) -->
+<li class="flex items-center gap-space-8 shrink-0">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-primary-container text-on-primary font-label-md shadow-sm">
+<span class="w-2 h-2 rounded-full bg-surface-container-lowest"></span>
+</div>
+<span class="font-label-md text-primary font-bold">4 Creative</span>
+<span class="w-6 h-0.5 bg-outline-variant/60 ml-space-4"></span>
+</li>
+<!-- Step 5 -->
+<li class="flex items-center gap-space-8 shrink-0 opacity-60">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant font-label-md">
+<span>5</span>
+</div>
+<span class="font-label-md text-on-surface-variant">Review</span>
+<span class="w-6 h-0.5 bg-outline-variant/60 ml-space-4"></span>
+</li>
+<!-- Step 6 -->
+<li class="flex items-center gap-space-8 shrink-0 opacity-60">
+<div class="flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant font-label-md">
+<span>6</span>
+</div>
+<span class="font-label-md text-on-surface-variant">Schedule</span>
+</li>
+</ol>
+</div>
+</div>
+<!-- Screen Header Area -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-space-24 gap-space-16">
+<div class="flex flex-col gap-space-4 max-w-3xl">
+<div class="flex items-center gap-space-12">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Creative Assets</h1>
+<div class="flex items-center gap-space-4 px-space-8 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+<span>In Progress</span>
+</div>
+<div class="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-code-sm text-code-sm">
+<span>AI-Spec v2.4</span>
+</div>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+        Bridge AI-guided messaging with your external design process. Design in Canva or Figma, then upload final assets for brand verification.
+      </p>
+</div>
+<!-- Quick Tool Switcher / Actions -->
+<div class="flex items-center gap-space-8 shrink-0">
+<a class="inline-flex items-center gap-space-8 px-space-12 py-2 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm shadow-sm transition-colors" href="https://www.canva.com" rel="noopener noreferrer" target="_blank">
+<span class="material-symbols-outlined text-[18px] text-primary">palette</span>
+<span>Open Canva</span>
+</a>
+<button class="inline-flex items-center gap-space-8 px-space-12 py-2 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm shadow-sm transition-colors" id="copyAllBriefBtn">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">content_copy</span>
+<span id="copyAllBriefText">Copy Visual Brief</span>
+</button>
+</div>
+</div>
+<!-- Main Split Canvas: Left Column Brief / Right Column Uploads -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-24 mb-space-32 items-start">
+<!-- LEFT COLUMN: Visual Direction Brief (5 Cols) -->
+<div class="lg:col-span-5 flex flex-col gap-space-20">
+<!-- Directing Callout Banner -->
+<div class="relative overflow-hidden bg-surface-container-lowest rounded-xl p-space-16 shadow-sm">
+<div class="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-surface-container-highest/50 blur-xl pointer-events-none"></div>
+<div class="flex items-start gap-space-12 relative z-10">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+</div>
+<div class="flex flex-col gap-space-4">
+<span class="font-label-md text-label-md font-semibold text-on-surface">External Design Protocol</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Create your final visual using your preferred design tool, such as Canva, then upload the exported PNG/JPG files below.
+            </p>
+</div>
+</div>
+</div>
+<!-- Comprehensive Structured Direction Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col overflow-hidden">
+<!-- Card Header -->
+<div class="px-space-20 py-space-16 bg-surface-container-low/70 flex items-center justify-between">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-[18px] text-primary">tune</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Visual Direction Brief</h2>
+</div>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Automated Prompt Spec</span>
+</div>
+<div class="p-space-20 flex flex-col gap-space-20">
+<!-- Key Meta Spec Grid -->
+<div class="grid grid-cols-2 gap-space-12">
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Format</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Carousel (5 Slides)</span>
+<span class="font-code-sm text-code-sm text-secondary">1080 × 1350 px (4:5)</span>
+</div>
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Palette Guide</span>
+<div class="flex items-center gap-space-4 mt-1">
+<span class="w-4 h-4 rounded-full bg-[#1D4ED8] shadow-sm inline-block" title="Brand Navy #1D4ED8"></span>
+<span class="w-4 h-4 rounded-full bg-[#0B1C30] shadow-sm inline-block" title="Dark Slate #0B1C30"></span>
+<span class="w-4 h-4 rounded-full bg-[#F8F9FF] shadow-sm inline-block" title="Off-White Canvas"></span>
+<span class="w-4 h-4 rounded-full bg-[#85F8C4] shadow-sm inline-block" title="Accent Glow"></span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">Contrast ratio 7.8:1</span>
+</div>
+</div>
+<!-- Creative Concept Narrative -->
+<div class="flex flex-col gap-space-8">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">Visual Concept</span>
+<div class="p-space-12 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface leading-relaxed">
+              High-contrast split comparison showing paper stack friction vs clean digital approval timeline. Industrial clarity, razor-sharp typography hierarchy, and deliberate whitespace framing key statistics.
+            </div>
+</div>
+<!-- Slide by Slide Breakdown -->
+<div class="flex flex-col gap-space-12">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">Slide-by-Slide Structure</span>
+<span class="font-code-sm text-code-sm text-secondary">5 Target Frames</span>
+</div>
+<div class="flex flex-col gap-space-8 font-body-sm text-body-sm">
+<!-- Slide 01 Item -->
+<div class="p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-start gap-space-12 group">
+<span class="font-code-sm text-code-sm font-semibold text-primary px-1.5 py-0.5 rounded bg-surface-container-lowest shrink-0 mt-0.5">01</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-8">
+<span class="font-semibold text-on-surface">Hook:</span>
+<span class="text-on-surface-variant italic truncate">"Still chasing physical signatures in 2026?"</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary mt-1">Bold minimal typography, isolated archival clipboard hero shot.</span>
+</div>
+</div>
+<!-- Slide 02 Item -->
+<div class="p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-start gap-space-12 group">
+<span class="font-code-sm text-code-sm font-semibold text-primary px-1.5 py-0.5 rounded bg-surface-container-lowest shrink-0 mt-0.5">02</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-8">
+<span class="font-semibold text-on-surface">Problem:</span>
+<span class="text-on-surface-variant truncate">"The hidden cost: 4.2 days average delay"</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary mt-1">Huge numerical metric callout, subtle descending bar chart vignette.</span>
+</div>
+</div>
+<!-- Slide 03 Item -->
+<div class="p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-start gap-space-12 group">
+<span class="font-code-sm text-code-sm font-semibold text-primary px-1.5 py-0.5 rounded bg-surface-container-lowest shrink-0 mt-0.5">03</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-8">
+<span class="font-semibold text-on-surface">Traditional:</span>
+<span class="text-on-surface-variant truncate">"The physical runner dilemma &amp; lost audit trails"</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary mt-1">Desaturated red/gray friction nodes illustrating broken paper chains.</span>
+</div>
+</div>
+<!-- Slide 04 Item -->
+<div class="p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-start gap-space-12 group">
+<span class="font-code-sm text-code-sm font-semibold text-primary px-1.5 py-0.5 rounded bg-surface-container-lowest shrink-0 mt-0.5">04</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-8">
+<span class="font-semibold text-on-surface">Digital:</span>
+<span class="text-on-surface-variant truncate">"Instant routing with verifiable timestamps"</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary mt-1">Clean product UI snippet showing authenticated single-click approvals.</span>
+</div>
+</div>
+<!-- Slide 05 Item -->
+<div class="p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-start gap-space-12 group">
+<span class="font-code-sm text-code-sm font-semibold text-primary px-1.5 py-0.5 rounded bg-surface-container-lowest shrink-0 mt-0.5">05</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-8">
+<span class="font-semibold text-on-surface">CTA:</span>
+<span class="text-on-surface-variant truncate">"Discover Shifd Approval for enterprise"</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary mt-1">Clear high-contrast button graphic + swipe encouragement footer.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Visual Notes Callout -->
+<div class="p-space-12 rounded-lg bg-surface-container-high/60 flex items-start gap-space-12">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">info</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm font-semibold text-on-surface">Art Direction Rules</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">
+                Use clean brand navy #1D4ED8 with warm off-white background. Avoid clip-art stamps or 3D character illustrations. Maintain minimum 40px safe margin around copy.
+              </span>
+</div>
+</div>
+<!-- Quick Actions Footer -->
+<div class="flex items-center justify-between pt-space-12">
+<span class="font-label-sm text-label-sm text-secondary">Export ready for Figma / Canva</span>
+<button class="font-label-md text-label-md text-primary font-semibold hover:underline flex items-center gap-1" onclick="navigator.clipboard.writeText('Format: Carousel (5 Slides, 1080x1350 4:5)\nConcept: High-contrast split comparison paper vs digital\nSlide 01: Hook - Still chasing physical signatures in 2026?\nSlide 02: Problem - The hidden cost: 4.2 days average delay\nSlide 03: Traditional - The physical runner dilemma &amp; lost audit trails\nSlide 04: Digital - Instant routing with verifiable timestamps\nSlide 05: CTA - Discover Shifd Approval for enterprise &amp; public sector\nPalette: #1D4ED8 navy, off-white'); alert('Visual brief copied to clipboard for your external design tool!');">
+<span class="material-symbols-outlined text-[16px]">assignment</span>
+<span>Copy Raw Text</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Asset Upload & Verification (7 Cols) -->
+<div class="lg:col-span-7 flex flex-col gap-space-24">
+<!-- Section 1: Instagram Creative (Carousel) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Section Bar -->
+<div class="px-space-20 py-space-16 bg-surface-container-low/70 flex items-center justify-between">
+<div class="flex items-center gap-space-12">
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">view_carousel</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Instagram Creative</h3>
+<span class="px-space-8 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm uppercase font-semibold">Carousel 5/5</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Target Aspect: 4:5 Portrait (1080 × 1350 px)</span>
+</div>
+</div>
+<div class="flex items-center gap-space-8">
+<span class="font-label-sm text-label-sm text-on-surface-variant hidden sm:inline">All slides verified</span>
+<span class="material-symbols-outlined text-tertiary-container text-[20px]">verified</span>
+</div>
+</div>
+<div class="p-space-20 flex flex-col gap-space-20">
+<!-- Modern Drag & Drop Zone -->
+<div class="relative group cursor-pointer rounded-xl bg-surface-container-low/60 hover:bg-surface-container p-space-20 transition-all flex flex-col items-center justify-center text-center">
+<input accept="image/png, image/jpeg" class="absolute inset-0 opacity-0 cursor-pointer z-10" id="fileUploadInput" multiple="" type="file"/>
+<div class="w-12 h-12 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-primary mb-space-8 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[24px]">cloud_upload</span>
+</div>
+<div class="flex flex-col gap-1">
+<p class="font-body-md text-body-md font-semibold text-on-surface">
+                Drop PNG/JPG files here or <span class="text-primary underline">Browse Files</span>
+</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">
+                Supports 1080 × 1350px or 1080 × 1080px (PNG, JPG up to 10MB each)
+              </p>
+</div>
+<div class="mt-space-12 flex items-center gap-space-16 text-secondary font-code-sm text-code-sm">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-tertiary">check_circle</span> Auto Dimension Validation</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-tertiary">check_circle</span> Color Profile Check</span>
+</div>
+</div>
+<!-- Carousel Slides Reorderable Grid -->
+<div class="flex flex-col gap-space-12">
+<div class="flex items-center justify-between text-secondary">
+<div class="flex items-center gap-space-8 font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">drag_indicator</span>
+<span>Drag cards to reorder slides</span>
+</div>
+<span class="font-label-sm text-label-sm">Sequence 01 through 05</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-5 gap-space-12" id="slidesContainer">
+<!-- Slide 01 -->
+<div class="group relative flex flex-col bg-surface-container-low rounded-lg p-space-8 transition-transform hover:-translate-y-1 shadow-sm">
+<div class="relative w-full aspect-[4/5] bg-surface-container-high rounded overflow-hidden mb-space-8">
+<img class="w-full h-full object-cover" data-alt="Modern minimal corporate marketing slide with huge bold typography asking 'Still chasing physical signatures in 2026?'. Minimalist off-white background with bold crisp cobalt blue typography and subtle paper document accent." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNPblrkifoct3Z9o0xow4-8_KCqY4Dz7wieHCf_eVrS0B6D18UPPfuPvAp9I25bKdb5O9iLnyEn6b09G8VrnDTQTygQK8OHiMKAvEsyf3CBBTyfRCDuuRhquqXT9I6iOlm3jSJBbCMghdXa1f3IfoiIVDRFQD7WA_qt3j5n-WZlC-qD0meqkje3jLMNne5_yLpKvYhcyj7ZIiCDmQfxefURcg3codXiSQKAKKhdXUaJ5CFbZjfkJ_Z9Q"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-on-background/80 backdrop-blur-sm text-surface font-code-sm text-[10px] font-medium">01 Hook</span>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Quick Preview">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Replace Image">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between px-1">
+<span class="font-label-sm text-[11px] font-semibold text-on-surface truncate">01 Hook</span>
+<button class="text-on-surface-variant hover:text-error transition-colors" title="Remove slide">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<span class="font-code-sm text-[10px] text-secondary px-1 mt-0.5">1080×1350 • PNG</span>
+</div>
+<!-- Slide 02 -->
+<div class="group relative flex flex-col bg-surface-container-low rounded-lg p-space-8 transition-transform hover:-translate-y-1 shadow-sm">
+<div class="relative w-full aspect-[4/5] bg-surface-container-high rounded overflow-hidden mb-space-8">
+<img class="w-full h-full object-cover" data-alt="Minimalist analytical slide displaying a giant statistic '4.2 Days Delay' in cobalt blue against pure white, with clean sans-serif editorial layout explaining hidden cost of physical signatures." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEZ_X_sjBB-Lzncz1aRlfiIp1ifTaEWrgxB6T9uScpbF9K7byENSw5XjRl3Jo86l1U00MFLRUiS_BG2XxDGmtnyihg3zjshU3uhhoudLKzk_5ot0NZRi8WyVeBSqtkwdrVGc4Da_V6PxO4rLLH4WRBT3_s9-s5VXivBkC1ahfhtZTErGzS8-1hsc4CYcy-1VU66-4HAno9Jk_Za8Fai2VYYCKhwL8BuNPL4y1uJN_Go3BzTzWHB6_F6w"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-on-background/80 backdrop-blur-sm text-surface font-code-sm text-[10px] font-medium">02 Problem</span>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Quick Preview">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Replace Image">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between px-1">
+<span class="font-label-sm text-[11px] font-semibold text-on-surface truncate">02 Problem</span>
+<button class="text-on-surface-variant hover:text-error transition-colors" title="Remove slide">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<span class="font-code-sm text-[10px] text-secondary px-1 mt-0.5">1080×1350 • PNG</span>
+</div>
+<!-- Slide 03 -->
+<div class="group relative flex flex-col bg-surface-container-low rounded-lg p-space-8 transition-transform hover:-translate-y-1 shadow-sm">
+<div class="relative w-full aspect-[4/5] bg-surface-container-high rounded overflow-hidden mb-space-8">
+<img class="w-full h-full object-cover" data-alt="Corporate slide design displaying fragmented physical routing diagram and broken audit stamps in muted slate and soft red tones, representing legacy approval bottlenecks." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDY3HevL78_EA3Xu-G9TPK0tgHuOHzeWkIsCwu3eAte1JEAPyejQInbO_ApSidfyw0o9PFMOxQ1wWW3KSzVIMWiVWWEGwLRt5-1gkZyq-pyymDOHNbpuqiCuX8LBl14NoNl3u7CZhgDL3hbMohO7p5zYjiPLoomvRj35dKOaK11g7f9y3dRkaFAwVwzSaZ2ThVX7Jz5h8dlluzZjFRqQNbd0_0bmIYMp6nPTBaeLsTvOWI26WgPEAR8hw"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-on-background/80 backdrop-blur-sm text-surface font-code-sm text-[10px] font-medium">03 Traditional</span>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Quick Preview">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Replace Image">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between px-1">
+<span class="font-label-sm text-[11px] font-semibold text-on-surface truncate">03 Traditional</span>
+<button class="text-on-surface-variant hover:text-error transition-colors" title="Remove slide">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<span class="font-code-sm text-[10px] text-secondary px-1 mt-0.5">1080×1350 • PNG</span>
+</div>
+<!-- Slide 04 -->
+<div class="group relative flex flex-col bg-surface-container-low rounded-lg p-space-8 transition-transform hover:-translate-y-1 shadow-sm">
+<div class="relative w-full aspect-[4/5] bg-surface-container-high rounded overflow-hidden mb-space-8">
+<img class="w-full h-full object-cover" data-alt="High tech software interface card illustration showcasing verified cryptographic timestamps and glowing clean progress timeline in bright blue on clean off-white background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqs2tkYJ6hNWQBR5uTk191g7ucsvlVbpx5sI5HFd_CilXH7VeQe5H-4Q4HI8jwG9Ya7DChdqkJYdoL2LgQTp1LnIAuGw2Ug_qPNbSRXh2CxSbAewTZFdgfrMEbHVOd3rg841O1rW88qhFDVGw9RnZCbwUKdgaH1eaxpLfIyUMX_6q67Fu-V8gh2IRfr_fMccKXsOmNP-QbR619b7F2csT-y93GJ7lv_WPA3YDZt3eQdwK-9_2sESOecA"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-on-background/80 backdrop-blur-sm text-surface font-code-sm text-[10px] font-medium">04 Digital</span>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Quick Preview">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Replace Image">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between px-1">
+<span class="font-label-sm text-[11px] font-semibold text-on-surface truncate">04 Digital</span>
+<button class="text-on-surface-variant hover:text-error transition-colors" title="Remove slide">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<span class="font-code-sm text-[10px] text-secondary px-1 mt-0.5">1080×1350 • PNG</span>
+</div>
+<!-- Slide 05 -->
+<div class="group relative flex flex-col bg-surface-container-low rounded-lg p-space-8 transition-transform hover:-translate-y-1 shadow-sm">
+<div class="relative w-full aspect-[4/5] bg-surface-container-high rounded overflow-hidden mb-space-8">
+<img class="w-full h-full object-cover" data-alt="Call to action carousel end card featuring elegant bold typography 'Discover Shifd Approval for enterprise' with crisp primary button visual and subtle swipe indicator." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCa0V4V-9tRN1NmrLsjHu_Hvz8CqHNANt6ZdGQ4mfTvNY2yo-7MrP3p-Bdhq4E-agfhEL5QZX3qAWsDUDl-7qrdGh4N_WJC5wG9rwdkYw0KzJU15Fpi960ER1-sMcUmb_dMY-ulHglvTOoo9W8EBeePUQLh4dbbBVgiRpXnUbuFRB8UmlGAHuBAKRlSS2XjxYaCxWgAO96SYdFtCgFYJ1ad367rcqfaHBvbbJx9mnw8V2qR8-aFyPiyQ"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-on-background/80 backdrop-blur-sm text-surface font-code-sm text-[10px] font-medium">05 CTA</span>
+<div class="absolute inset-0 bg-on-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Quick Preview">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+<button class="w-7 h-7 rounded-full bg-surface-container-lowest text-on-surface hover:text-primary flex items-center justify-center shadow-md transition-colors" title="Replace Image">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between px-1">
+<span class="font-label-sm text-[11px] font-semibold text-on-surface truncate">05 CTA</span>
+<button class="text-on-surface-variant hover:text-error transition-colors" title="Remove slide">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<span class="font-code-sm text-[10px] text-secondary px-1 mt-0.5">1080×1350 • PNG</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 2: LinkedIn Creative Adaptations -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Section Bar -->
+<div class="px-space-20 py-space-16 bg-surface-container-low/70 flex items-center justify-between">
+<div class="flex items-center gap-space-12">
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">share</span>
+</div>
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">LinkedIn Creative Strategy</h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Synchronize multi-platform creative assets</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-container"></span>
+<span class="font-label-sm text-label-sm text-tertiary-container font-semibold">Synced</span>
+</div>
+</div>
+<div class="p-space-20 flex flex-col gap-space-16">
+<!-- Sync Toggle Row -->
+<label class="flex items-start gap-space-12 p-space-12 rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="mt-1 w-4 h-4 rounded text-primary focus:ring-0" id="syncLinkedinToggle" type="checkbox"/>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-md text-body-md font-semibold text-on-surface">
+                Use the same creative as Instagram (Recommended for carousel)
+              </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">
+                Shifd automatically compiles your 5 slides into a native, high-resolution LinkedIn PDF carousel document.
+              </span>
+</div>
+</label>
+<!-- Alternative Custom Upload Drawer -->
+<div class="hidden flex flex-col gap-space-12 p-space-12 rounded-lg bg-surface-container-high/40" id="customLinkedinDrawer">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Upload Custom LinkedIn Asset</span>
+<span class="font-code-sm text-code-sm text-secondary">PDF or 1:1 / 4:5 PNG</span>
+</div>
+<div class="p-space-16 rounded bg-surface-container-lowest text-center flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-primary text-[24px]">upload_file</span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Select standalone LinkedIn PDF document</span>
+<span class="font-label-sm text-label-sm text-secondary">Up to 25MB document</span>
+</div>
+</div>
+<!-- Creative Health Diagnostic Mini Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-12 pt-space-4">
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Contrast Check</span>
+<span class="material-symbols-outlined text-tertiary-container text-[16px]">check_circle</span>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">AAA Passed</span>
+<span class="font-code-sm text-[11px] text-secondary">No low-visibility text</span>
+</div>
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Safe Margins</span>
+<span class="material-symbols-outlined text-tertiary-container text-[16px]">check_circle</span>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Within Bounds</span>
+<span class="font-code-sm text-[11px] text-secondary">Instagram UI overlay free</span>
+</div>
+<div class="p-space-12 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Resolution</span>
+<span class="material-symbols-outlined text-tertiary-container text-[16px]">check_circle</span>
+</div>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Retina Ready</span>
+<span class="font-code-sm text-[11px] text-secondary">Crisp 1080×1350 px</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Action Bar (Fixed-style or footer anchored) -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm p-space-16 flex flex-col sm:flex-row items-center justify-between gap-space-16 mt-auto">
+<div class="flex items-center gap-space-12 w-full sm:w-auto">
+<a class="inline-flex items-center justify-center gap-space-8 px-space-16 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm font-medium transition-colors w-full sm:w-auto" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back to Adapt</span>
+</a>
+<span class="hidden sm:inline font-label-sm text-label-sm text-secondary">Draft saved automatically 2m ago</span>
+</div>
+<div class="flex items-center gap-space-12 w-full sm:w-auto">
+<button class="inline-flex items-center justify-center gap-space-8 px-space-16 py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors w-full sm:w-auto">
+<span>Save as Draft</span>
+</button>
+<button class="inline-flex items-center justify-center gap-space-8 px-space-20 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-sm transition-colors w-full sm:w-auto">
+<span>Continue to Review</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Interactive Client-side Script -->
+<script>
+    (function() {
+      // Toggle custom linkedin drawer
+      const syncToggle = document.getElementById('syncLinkedinToggle');
+      const customDrawer = document.getElementById('customLinkedinDrawer');
+      if (syncToggle && customDrawer) {
+        syncToggle.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            customDrawer.classList.add('hidden');
+          } else {
+            customDrawer.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Copy visual brief action
+      const copyBtn = document.getElementById('copyAllBriefBtn');
+      const copyText = document.getElementById('copyAllBriefText');
+      if (copyBtn && copyText) {
+        copyBtn.addEventListener('click', () => {
+          const payload = `Shifd Creative Asset Brief:
+- Target: Carousel (5 Slides, 1080x1350 4:5)
+- Concept: High-contrast split comparison showing paper stack friction vs clean digital approval timeline
+- Colors: #1D4ED8 navy, warm off-white canvas, slate dark text
+- Slide 01: Hook - "Still chasing physical signatures in 2026?"
+- Slide 02: Problem - "The hidden cost of paper approval: 4.2 days average delay"
+- Slide 03: Traditional - "The physical runner dilemma & lost audit trails"
+- Slide 04: Digital - "Instant routing with cryptographically verifiable timestamps"
+- Slide 05: CTA - "Discover Shifd Approval for enterprise & public sector"`;
+          navigator.clipboard.writeText(payload).then(() => {
+            copyText.textContent = 'Copied to Clipboard!';
+            setTimeout(() => {
+              copyText.textContent = 'Copy Visual Brief';
+            }, 2500);
+          });
+        });
+      }
+    })();
+  </script>
+</div></main></div></body></html>

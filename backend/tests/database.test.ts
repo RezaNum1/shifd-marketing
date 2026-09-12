@@ -8,11 +8,15 @@ const config: AppConfig = {
   host: '127.0.0.1',
   databaseUrl: process.env.DATABASE_URL ?? '',
   allowedOrigin: 'http://localhost:5173',
+  sessionIdleMinutes: 480,
+  sessionAbsoluteHours: 24,
+  loginRateLimitMax: 5,
+  loginRateLimitWindowMinutes: 15,
 }
 
 describe('PostgreSQL foundation', () => {
   const requiresDatabase = process.env.REQUIRE_DATABASE === '1'
-  const testDatabase = process.env.DATABASE_URL ? it : requiresDatabase ? it : it.skip
+  const testDatabase = requiresDatabase ? it : it.skip
 
   testDatabase('connects when DATABASE_URL and PostgreSQL are available', async () => {
     const url = process.env.DATABASE_URL

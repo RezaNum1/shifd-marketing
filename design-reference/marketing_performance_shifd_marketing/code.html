@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "error": "#ba1a1a",
+          "on-tertiary-container": "#76eab6",
+          "surface-container-highest": "#d3e4fe",
+          "on-tertiary-fixed": "#002114",
+          "surface-container-high": "#dce9ff",
+          "on-surface-variant": "#434655",
+          "on-secondary-container": "#5c647a",
+          "surface-variant": "#d3e4fe",
+          "surface-container-low": "#eff4ff",
+          "primary-container": "#1d4ed8",
+          "on-background": "#0b1c30",
+          "on-tertiary-fixed-variant": "#005137",
+          "secondary-fixed": "#dae2fd",
+          "tertiary-fixed": "#85f8c4",
+          "inverse-on-surface": "#eaf1ff",
+          "on-tertiary": "#ffffff",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-primary-container": "#cad3ff",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#68dba9",
+          "secondary-fixed-dim": "#bec6e0",
+          "surface-tint": "#2151da",
+          "tertiary-container": "#006948",
+          "primary-fixed": "#dce1ff",
+          "tertiary": "#004f35",
+          "on-error": "#ffffff",
+          "surface": "#f8f9ff",
+          "error-container": "#ffdad6",
+          "on-primary": "#ffffff",
+          "on-primary-fixed": "#001551",
+          "on-secondary-fixed-variant": "#3f465c",
+          "inverse-surface": "#213145",
+          "secondary-container": "#dae2fd",
+          "background": "#f8f9ff",
+          "primary": "#0037b0",
+          "outline": "#747686",
+          "on-secondary": "#ffffff",
+          "surface-bright": "#f8f9ff",
+          "surface-dim": "#cbdbf5",
+          "surface-container": "#e5eeff",
+          "on-primary-fixed-variant": "#0039b5",
+          "outline-variant": "#c4c5d7",
+          "inverse-primary": "#b7c4ff",
+          "surface-container-lowest": "#ffffff",
+          "secondary": "#565e74",
+          "on-secondary-fixed": "#131b2e",
+          "on-surface": "#0b1c30"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "gutter-desktop": "1.5rem",
+          "space-20": "1.25rem",
+          "space-16": "1rem",
+          "space-4": "0.25rem",
+          "space-48": "3rem",
+          "margin-shell": "1.5rem",
+          "space-24": "1.5rem",
+          "space-32": "2rem",
+          "space-40": "2.5rem",
+          "space-8": "0.5rem",
+          "space-12": "0.75rem",
+          "space-2": "0.125rem",
+          "gutter-tablet": "1rem"
+        },
+        "fontFamily": {
+          "display-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "body-md": ["Inter"],
+          "headline-sm": ["Inter"],
+          "headline-lg": ["Inter"],
+          "code-sm": ["JetBrains Mono"],
+          "body-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "headline-md": ["Inter"]
+        },
+        "fontSize": {
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "code-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-20 flex items-center gap-space-12 bg-surface-container-lowest"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">Shifd Marketing</span><span class="font-label-sm text-label-sm text-on-surface-variant">Shifd Labs Suite</span></div></div><nav class="flex flex-col px-space-12 py-space-16 gap-space-4" data-active-classes="bg-primary-container text-on-primary font-body-md font-medium rounded-lg"><div class="px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Platform</div><a aria-current="page" class="flex items-center gap-space-12 px-space-12 py-space-8 transition-colors bg-primary-container text-on-primary font-body-md font-medium rounded-lg" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>Overview</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Content Studio</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-ideas" href="#"><span class="material-symbols-outlined text-[20px]">lightbulb</span><span>Ideas</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="create-content" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span>Create Content</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-library" href="#"><span class="material-symbols-outlined text-[20px]">library_books</span><span>Content Library</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Planning &amp; Insights</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="calendar" href="#"><span class="material-symbols-outlined text-[20px]">calendar_month</span><span>Calendar</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="performance" href="#"><span class="material-symbols-outlined text-[20px]">insights</span><span>Performance</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Context Engine</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-company" href="#"><span class="material-symbols-outlined text-[20px]">business</span><span>Company</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-products" href="#"><span class="material-symbols-outlined text-[20px]">inventory_2</span><span>Products</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">System</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-integrations" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span>Integrations</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[20px]">neurology</span><span>AI &amp; System</span></a></nav></div><div class="p-space-16 m-space-12 bg-surface-container-low rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-12 min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="flex flex-col min-w-0"><span class="font-label-md text-label-md text-on-surface font-semibold truncate">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Founder</span></div></div><a class="text-on-surface-variant hover:text-on-surface p-space-4 rounded flex items-center justify-center transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[18px]">tune</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-16"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex items-center gap-space-8 font-label-md text-label-md text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span>Shifd Labs Workspace</span><span class="text-outline">/</span><span class="text-on-surface font-medium">Execution Engine</span></div></div><div class="flex items-center gap-space-16"><div class="relative hidden sm:flex items-center"><span class="material-symbols-outlined absolute left-space-12 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-9 pl-9 pr-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search prompt drafts, campaigns, assets..." type="text"/></div><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-8"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-none">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Founder</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)] flex-1 px-gutter-desktop py-space-24"><div class="flex flex-col w-full">
+<!-- Interactive Script to highlight active navigation in app shell and provide tabs/filters -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Highlight sidebar 'Performance' item
+      const navLinks = document.querySelectorAll('aside nav a');
+      navLinks.forEach(link => {
+        if (link.getAttribute('data-path') === 'performance') {
+          link.className = 'flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg bg-primary-container text-on-primary font-body-md font-medium transition-colors shadow-sm';
+          const icon = link.querySelector('.material-symbols-outlined');
+          if (icon) icon.classList.add('text-on-primary');
+        } else {
+          link.classList.remove('bg-primary-container', 'text-on-primary', 'font-medium');
+        }
+      });
+    });
+
+    function setPlatformTab(btn, platform) {
+      const parent = btn.parentElement;
+      parent.querySelectorAll('button').forEach(b => {
+        b.className = 'px-space-12 py-1.5 font-label-md text-label-md rounded-md transition-all text-on-surface-variant hover:text-on-surface';
+      });
+      btn.className = 'px-space-12 py-1.5 font-label-md text-label-md rounded-md bg-surface-container-lowest text-primary shadow-sm font-semibold transition-all';
+    }
+  </script>
+<!-- Page Header & Executive Controls -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-16 pb-space-20">
+<div class="flex flex-col gap-space-4">
+<div class="flex items-center gap-space-8 font-label-sm text-label-sm text-secondary">
+<span>Shifd Labs Workspace</span>
+<span class="text-outline-variant">/</span>
+<span>Planning &amp; Insights</span>
+<span class="text-outline-variant">/</span>
+<span class="text-primary font-semibold">Performance</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface tracking-tight font-bold">Marketing Performance</h1>
+<p class="font-body-md text-body-md text-secondary max-w-3xl">
+        Track operational execution consistency, reach momentum, and inbound buyer inquiries. Not a vanity analytics dashboard—engineered for disciplined founder execution and GovTech buyer signals.
+      </p>
+</div>
+<!-- Toolbar Filters & Actions -->
+<div class="flex flex-wrap items-center gap-space-12 shrink-0">
+<!-- Period selector -->
+<div class="relative flex items-center bg-surface-container-lowest rounded-lg shadow-sm px-space-12 py-1.5">
+<span class="material-symbols-outlined text-[18px] text-secondary mr-space-8">calendar_today</span>
+<select class="bg-transparent font-label-md text-label-md text-on-surface font-semibold focus:outline-none cursor-pointer pr-space-16 appearance-none">
+<option>Last 8 Weeks (W30 – W37)</option>
+<option>Last 4 Weeks</option>
+<option>Current Quarter (Q3)</option>
+<option>Year to Date</option>
+</select>
+<span class="material-symbols-outlined text-[16px] text-secondary pointer-events-none absolute right-2">expand_more</span>
+</div>
+<!-- Segmented Platform Filter -->
+<div class="flex items-center bg-surface-container-low p-1 rounded-lg">
+<button class="px-space-12 py-1.5 font-label-md text-label-md rounded-md bg-surface-container-lowest text-primary shadow-sm font-semibold transition-all" onclick="setPlatformTab(this, 'combined')">Combined</button>
+<button class="px-space-12 py-1.5 font-label-md text-label-md rounded-md text-on-surface-variant hover:text-on-surface transition-all" onclick="setPlatformTab(this, 'linkedin')">LinkedIn</button>
+<button class="px-space-12 py-1.5 font-label-md text-label-md rounded-md text-on-surface-variant hover:text-on-surface transition-all" onclick="setPlatformTab(this, 'instagram')">Instagram</button>
+</div>
+<!-- Primary & Outlined Actions -->
+<button class="flex items-center gap-space-8 px-space-12 py-2 bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md rounded-lg shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px] text-secondary">file_download</span>
+<span>Export Report</span>
+</button>
+<button class="flex items-center gap-space-8 px-space-16 py-2 bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-semibold rounded-lg shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>+ Log Weekly Metrics</span>
+</button>
+</div>
+</div>
+<!-- Operational Doctrine Banner Note -->
+<div class="mb-space-20 px-space-16 py-space-8 bg-surface-container-low rounded-lg flex items-center justify-between gap-space-12">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[18px]">verified_user</span>
+<span class="font-label-sm text-label-sm text-secondary font-medium">
+<strong class="text-on-surface">Execution Principle:</strong> Internal metrics prioritize output consistency and verified buyer intent over algorithm vanity loops. Reach figures reflect verified GovTech &amp; Enterprise account exposure.
+      </span>
+</div>
+<span class="font-code-sm text-code-sm text-outline hidden md:inline-block">TARGET_CADENCE: 2x_WEEK/PLATFORM</span>
+</div>
+<!-- 1. KPI Cards: 6-Grid Executive Metric Row -->
+<section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-space-12 mb-space-24">
+<!-- Metric 1: Follower Growth -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Follower Growth</span>
+<span class="material-symbols-outlined text-primary text-[18px]">group_add</span>
+</div>
+<div class="my-space-8">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">+312</span>
+</div>
+<div class="flex items-center gap-space-4 font-label-sm text-label-sm text-tertiary font-semibold">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+<span>+14.2%</span>
+<span class="text-secondary font-normal ml-space-2">vs prior 8w</span>
+</div>
+</div>
+<!-- Metric 2: Weekly Reach -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Weekly Reach</span>
+<span class="material-symbols-outlined text-primary text-[18px]">cell_tower</span>
+</div>
+<div class="my-space-8">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">4,820</span>
+</div>
+<div class="flex items-center gap-space-4 font-label-sm text-label-sm text-secondary">
+<span class="font-medium text-on-surface">Avg 4.1k/wk</span>
+<span class="text-outline-variant">•</span>
+<span class="text-tertiary font-semibold">+18%</span>
+</div>
+</div>
+<!-- Metric 3: Impressions -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Impressions</span>
+<span class="material-symbols-outlined text-primary text-[18px]">visibility</span>
+</div>
+<div class="my-space-8">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">18,450</span>
+</div>
+<div class="font-label-sm text-label-sm text-secondary truncate">
+        Organic B2B cross-channel
+      </div>
+</div>
+<!-- Metric 4: Engagement Rate -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Eng. Rate</span>
+<span class="material-symbols-outlined text-primary text-[18px]">thumb_up</span>
+</div>
+<div class="my-space-8">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">4.6%</span>
+</div>
+<div class="flex items-center gap-space-4 font-label-sm text-label-sm text-tertiary font-semibold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Above 3.8% target</span>
+</div>
+</div>
+<!-- Metric 5: Content Published -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Published</span>
+<span class="material-symbols-outlined text-primary text-[18px]">publish</span>
+</div>
+<div class="my-space-8 flex items-baseline gap-space-4">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">15</span>
+<span class="font-label-md text-label-md text-secondary">/ 16 target</span>
+</div>
+<div class="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 93.8%;"></div>
+</div>
+</div>
+<!-- Metric 6: Posting Consistency -->
+<div class="bg-surface-container-lowest rounded-lg p-space-16 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Cadence Score</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+</div>
+<div class="my-space-8 flex items-baseline gap-space-4">
+<span class="font-headline-lg text-headline-lg font-bold text-tertiary tracking-tight">93.8%</span>
+</div>
+<div class="font-label-sm text-label-sm text-secondary truncate">
+        15 of 16 targets fulfilled
+      </div>
+</div>
+</section>
+<!-- 2. Dual Analytical Charts (Side by Side) -->
+<section class="grid grid-cols-1 lg:grid-cols-2 gap-space-20 mb-space-24">
+<!-- Chart A: Weekly Reach Over Time -->
+<div class="bg-surface-container-lowest rounded-lg shadow-sm p-space-20 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-space-12 border-b border-surface-container-low mb-space-16">
+<div>
+<h2 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Weekly Reach Over Time</h2>
+<p class="font-body-sm text-body-sm text-secondary">Unique accounts reached across Week 30 – Week 37</p>
+</div>
+<div class="flex items-center gap-space-12">
+<div class="flex items-center gap-space-4 font-label-sm text-label-sm text-secondary">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+<span>LinkedIn</span>
+</div>
+<div class="flex items-center gap-space-4 font-label-sm text-label-sm text-secondary">
+<span class="w-2.5 h-2.5 rounded-full bg-surface-tint"></span>
+<span>Instagram</span>
+</div>
+</div>
+</div>
+<!-- SVG Chart Canvas -->
+<div class="relative w-full h-56 flex flex-col justify-end">
+<svg class="w-full h-44 overflow-visible" fill="none" preserveaspectratio="none" viewbox="0 0 540 160">
+<defs>
+<lineargradient id="reachGradientLi" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#1d4ed8" stop-opacity="0.22"></stop>
+<stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.0"></stop>
+</lineargradient>
+<lineargradient id="reachGradientIg" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#2151da" stop-opacity="0.10"></stop>
+<stop offset="100%" stop-color="#2151da" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Subtle Horizontal Grid Lines -->
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="20" y2="20"></line>
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="65" y2="65"></line>
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="110" y2="110"></line>
+<line stroke="#e2e8f0" stroke-width="1" x1="0" x2="540" y1="155" y2="155"></line>
+<!-- Instagram Area & Line -->
+<path d="M 0 130 Q 75 125 150 115 T 300 95 T 450 82 T 540 70 L 540 155 L 0 155 Z" fill="url(#reachGradientIg)"></path>
+<path d="M 0 130 Q 75 125 150 115 T 300 95 T 450 82 T 540 70" fill="none" opacity="0.6" stroke="#2151da" stroke-linecap="round" stroke-width="2"></path>
+<!-- Combined / LinkedIn Area & Line (W30: 2.1k -> W37: 4.8k) -->
+<path d="M 0 115 C 40 110, 60 95, 77 92 C 120 85, 140 72, 154 68 C 200 60, 220 78, 231 75 C 270 70, 290 42, 308 40 C 350 38, 370 50, 385 46 C 420 40, 440 30, 462 26 C 500 22, 520 16, 540 14 L 540 155 L 0 155 Z" fill="url(#reachGradientLi)"></path>
+<path d="M 0 115 C 40 110, 60 95, 77 92 C 120 85, 140 72, 154 68 C 200 60, 220 78, 231 75 C 270 70, 290 42, 308 40 C 350 38, 370 50, 385 46 C 420 40, 440 30, 462 26 C 500 22, 520 16, 540 14" fill="none" stroke="#1d4ed8" stroke-linecap="round" stroke-width="2.5"></path>
+<!-- Highlight Key Data Points -->
+<circle cx="308" cy="40" fill="#ffffff" r="4.5" stroke="#1d4ed8" stroke-width="2.5"></circle>
+<circle cx="540" cy="14" fill="#1d4ed8" r="5"></circle>
+</svg>
+<!-- Tooltip Milestone Annotation for Peak Week -->
+<div class="absolute top-2 right-4 bg-inverse-surface text-inverse-on-surface rounded px-space-8 py-1 text-[11px] font-label-sm shadow-md pointer-events-none">
+          W37 Peak: <strong>4,820 Reach</strong> (+23% WoW)
+        </div>
+<!-- X-Axis Labels -->
+<div class="flex justify-between items-center pt-space-8 text-secondary font-code-sm text-[11px]">
+<span>W30 (2.1k)</span>
+<span>W31 (2.8k)</span>
+<span>W32 (3.4k)</span>
+<span>W33 (3.1k)</span>
+<span>W34 (4.2k)</span>
+<span>W35 (3.9k)</span>
+<span>W36 (4.5k)</span>
+<span class="text-primary font-bold">W37 (4.8k)</span>
+</div>
+</div>
+</div>
+<!-- Chart B: Follower Growth Over Time -->
+<div class="bg-surface-container-lowest rounded-lg shadow-sm p-space-20 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-space-12 border-b border-surface-container-low mb-space-16">
+<div>
+<h2 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Cumulative Follower Growth</h2>
+<p class="font-body-sm text-body-sm text-secondary">Verified audience scaling from 1,240 to 1,552 enterprise professionals</p>
+</div>
+<div class="flex items-center gap-space-8">
+<span class="px-space-8 py-1 rounded bg-surface-container-low text-primary font-label-sm text-label-sm font-semibold">+312 Net</span>
+</div>
+</div>
+<!-- SVG Chart Canvas -->
+<div class="relative w-full h-56 flex flex-col justify-end">
+<svg class="w-full h-44 overflow-visible" fill="none" preserveaspectratio="none" viewbox="0 0 540 160">
+<defs>
+<lineargradient id="growthGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#004f35" stop-opacity="0.18"></stop>
+<stop offset="100%" stop-color="#004f35" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Subtle Horizontal Grid Lines -->
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="20" y2="20"></line>
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="65" y2="65"></line>
+<line stroke="#eff4ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="540" y1="110" y2="110"></line>
+<line stroke="#e2e8f0" stroke-width="1" x1="0" x2="540" y1="155" y2="155"></line>
+<!-- Growth Curve: (0, 140) -> (540, 22) -->
+<path d="M 0 140 C 70 132, 120 120, 160 108 C 220 92, 270 74, 320 62 C 380 48, 440 38, 540 20 L 540 155 L 0 155 Z" fill="url(#growthGradient)"></path>
+<path d="M 0 140 C 70 132, 120 120, 160 108 C 220 92, 270 74, 320 62 C 380 48, 440 38, 540 20" fill="none" stroke="#004f35" stroke-linecap="round" stroke-width="2.5"></path>
+<!-- Milestone 1 Marker: Shifd Approval v2.4 Launch Post (Around x=320) -->
+<line stroke="#006948" stroke-dasharray="2 2" stroke-width="1.5" x1="320" x2="320" y1="25" y2="155"></line>
+<circle cx="320" cy="62" fill="#ffffff" r="5" stroke="#006948" stroke-width="2.5"></circle>
+<!-- Final Marker -->
+<circle cx="540" cy="20" fill="#004f35" r="5"></circle>
+</svg>
+<!-- Inline Milestone Flag -->
+<div class="absolute top-1 left-[50%] -translate-x-1/2 bg-surface-container-lowest border border-surface-container-high px-space-8 py-1 rounded shadow-sm flex items-center gap-space-4">
+<span class="material-symbols-outlined text-[14px] text-tertiary">flag</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">W34: Shifd Approval v2.4 Launch Post</span>
+</div>
+<!-- X-Axis Labels with Cumulative Values -->
+<div class="flex justify-between items-center pt-space-8 text-secondary font-code-sm text-[11px]">
+<span>W30 (1,240)</span>
+<span>W31 (1,278)</span>
+<span>W32 (1,310)</span>
+<span>W33 (1,348)</span>
+<span>W34 (1,412)</span>
+<span>W35 (1,455)</span>
+<span>W36 (1,498)</span>
+<span class="text-tertiary font-bold">W37 (1,552)</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. POSTING CONSISTENCY & EXECUTION CADENCE -->
+<section class="bg-surface-container-lowest rounded-lg shadow-sm p-space-20 mb-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-8 pb-space-16 border-b border-surface-container-low mb-space-16">
+<div>
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[20px]">save_as</span>
+<h2 class="font-headline-sm text-headline-sm font-bold text-on-surface">Posting Consistency &amp; Execution Cadence</h2>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-space-2">Target threshold: 2 posts / week / platform to maintain search indexing and stakeholder top-of-mind</p>
+</div>
+<div class="flex items-center gap-space-16">
+<div class="flex items-center gap-space-6 font-label-sm text-label-sm text-secondary">
+<span class="w-3 h-3 rounded-full bg-tertiary-fixed-dim inline-block"></span>
+<span>Target Met (2/2)</span>
+</div>
+<div class="flex items-center gap-space-6 font-label-sm text-label-sm text-secondary">
+<span class="w-3 h-3 rounded-full bg-error-container text-error flex items-center justify-center font-bold text-[9px]">!</span>
+<span>Cadence Gap (&lt;2)</span>
+</div>
+</div>
+</div>
+<!-- 2-Card Platform Breakdown Matrix -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-16">
+<!-- Card 1: Instagram Cadence -->
+<div class="bg-surface-container-low rounded-lg p-space-16 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-space-12">
+<div class="flex items-center gap-space-8">
+<div class="w-7 h-7 rounded bg-surface-container-lowest flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">photo_camera</span>
+</div>
+<div>
+<span class="font-headline-sm text-[15px] font-semibold text-on-surface">Instagram</span>
+<span class="text-secondary font-label-sm text-label-sm ml-space-8">7 of 8 weeks compliant</span>
+</div>
+</div>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">87.5%</span>
+</div>
+<!-- 8-Week Dot Matrix Visual -->
+<div class="grid grid-cols-8 gap-space-8 my-space-12">
+<!-- W30 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W30</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W31 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W31</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W32 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W32</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W33 (Warning Gap) -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-error font-semibold">W33</span>
+<div class="w-full h-8 rounded bg-error-container text-error flex items-center justify-center font-bold text-[12px]" title="Only 1 post published">1/2</div>
+</div>
+<!-- W34 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W34</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W35 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W35</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W36 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W36</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<!-- W37 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W37</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+</div>
+<div class="mt-space-8 pt-space-8 border-t border-surface-container-high flex items-center justify-between">
+<div class="flex items-center gap-space-6 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-error text-[16px]">info</span>
+<span>Minor cadence gap on W33 (1 post published instead of 2)</span>
+</div>
+<span class="px-space-8 py-0.5 rounded bg-surface-container-highest text-secondary font-label-sm text-label-sm font-semibold">Under Review</span>
+</div>
+</div>
+<!-- Card 2: LinkedIn Cadence -->
+<div class="bg-surface-container-low rounded-lg p-space-16 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-space-12">
+<div class="flex items-center gap-space-8">
+<div class="w-7 h-7 rounded bg-surface-container-lowest flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">share</span>
+</div>
+<div>
+<span class="font-headline-sm text-[15px] font-semibold text-on-surface">LinkedIn</span>
+<span class="text-secondary font-label-sm text-label-sm ml-space-8">8 of 8 weeks compliant</span>
+</div>
+</div>
+<span class="font-headline-sm text-headline-sm font-bold text-tertiary">100%</span>
+</div>
+<!-- 8-Week Dot Matrix Visual -->
+<div class="grid grid-cols-8 gap-space-8 my-space-12">
+<!-- W30 to W37: All 2/2 -->
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W30</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W31</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W32</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W33</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W34</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W35</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W36</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+<div class="flex flex-col items-center gap-space-4">
+<span class="font-code-sm text-[10px] text-secondary">W37</span>
+<div class="w-full h-8 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary font-bold text-[12px]">2/2</div>
+</div>
+</div>
+<div class="mt-space-8 pt-space-8 border-t border-surface-container-high flex items-center justify-between">
+<div class="flex items-center gap-space-6 text-tertiary font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>Target Met — 100% on schedule</span>
+</div>
+<span class="px-space-8 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">Flawless</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. SUPPLEMENTARY METRIC: WhatsApp Inquiries & Conversion Signals -->
+<section class="bg-surface-container-lowest rounded-lg shadow-sm p-space-20 mb-space-24">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-16 pb-space-16 border-b border-surface-container-low mb-space-16">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-8">
+<div class="w-8 h-8 rounded-lg bg-tertiary-container/15 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm font-bold text-on-surface">WhatsApp Business Inquiries (Direct Buyer Signals)</h2>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-space-4 max-w-3xl">
+          High-intent inbound procurement and technical inquiries initiated directly from LinkedIn &amp; Instagram call-to-actions.
+        </p>
+</div>
+<div class="flex items-center gap-space-12">
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-secondary uppercase block">Total Signals (8w)</span>
+<span class="font-headline-md text-headline-md font-bold text-on-surface">24 Inbound Chats</span>
+</div>
+<button class="flex items-center gap-space-6 px-space-12 py-2 bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[16px] text-primary">add_comment</span>
+<span>+ Record New WhatsApp Lead</span>
+</button>
+</div>
+</div>
+<!-- Inquiries Visual Breakdown & Category Distribution -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-20 items-center">
+<!-- Weekly Inbound Breakdown Bars (8 cols) -->
+<div class="lg:col-span-7 flex flex-col justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary mb-space-8">Inbound Conversations By Week</span>
+<div class="flex items-end justify-between h-28 pt-space-8 gap-space-8">
+<!-- W30: 1 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">1</span>
+<div class="w-full bg-primary-fixed rounded-t-md" style="height: 18%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W30</span>
+</div>
+<!-- W31: 2 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">2</span>
+<div class="w-full bg-primary-fixed rounded-t-md" style="height: 36%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W31</span>
+</div>
+<!-- W32: 3 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">3</span>
+<div class="w-full bg-primary-fixed rounded-t-md" style="height: 52%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W32</span>
+</div>
+<!-- W33: 2 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">2</span>
+<div class="w-full bg-primary-fixed rounded-t-md" style="height: 36%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W33</span>
+</div>
+<!-- W34: 4 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">4</span>
+<div class="w-full bg-primary-container/70 rounded-t-md" style="height: 70%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W34</span>
+</div>
+<!-- W35: 5 (Peak) -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-primary">5</span>
+<div class="w-full bg-primary-container rounded-t-md" style="height: 90%;"></div>
+<span class="font-code-sm text-[10px] text-primary font-bold">W35</span>
+</div>
+<!-- W36: 3 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">3</span>
+<div class="w-full bg-primary-fixed rounded-t-md" style="height: 52%;"></div>
+<span class="font-code-sm text-[10px] text-secondary">W36</span>
+</div>
+<!-- W37: 4 -->
+<div class="flex-1 flex flex-col items-center gap-space-4 h-full justify-end">
+<span class="font-code-sm text-[11px] font-semibold text-secondary">4</span>
+<div class="w-full bg-primary-container/80 rounded-t-md" style="height: 70%;"></div>
+<span class="font-code-sm text-[10px] text-on-surface font-semibold">W37</span>
+</div>
+</div>
+</div>
+<!-- Segment breakdown (5 cols) -->
+<div class="lg:col-span-5 bg-surface-container-low rounded-lg p-space-16 flex flex-col gap-space-12">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Buyer Intent Distribution</span>
+<!-- Category 1: Procurement Spec -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between font-body-sm text-body-sm text-on-surface">
+<span>Procurement Spec Request</span>
+<span class="font-semibold text-primary">45% (11 chats)</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 45%;"></div>
+</div>
+</div>
+<!-- Category 2: Pilot RFP -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between font-body-sm text-body-sm text-on-surface">
+<span>Pilot Integration RFP</span>
+<span class="font-semibold text-tertiary">35% (8 chats)</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-tertiary h-full rounded-full" style="width: 35%;"></div>
+</div>
+</div>
+<!-- Category 3: Security Inquiry -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between font-body-sm text-body-sm text-on-surface">
+<span>General Security / Compliance Inquiry</span>
+<span class="font-semibold text-secondary">20% (5 chats)</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 20%;"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. Recent Content Performance Table -->
+<section class="bg-surface-container-lowest rounded-lg shadow-sm p-space-20">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-8 pb-space-16 border-b border-surface-container-low mb-space-12">
+<div>
+<h2 class="font-headline-sm text-headline-sm font-bold text-on-surface">Recent Content Execution Performance</h2>
+<p class="font-body-sm text-body-sm text-secondary">Granular breakdown of the latest published thought-leadership items</p>
+</div>
+<div class="flex items-center gap-space-12">
+<span class="font-label-sm text-label-sm text-secondary">Showing 4 of 15 assets</span>
+<button class="font-label-sm text-label-sm text-primary font-semibold hover:underline">View All in Library →</button>
+</div>
+</div>
+<!-- Data Grid Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-secondary font-label-sm text-label-sm">
+<th class="py-space-12 px-space-16 rounded-l-md">Content Title &amp; Topic</th>
+<th class="py-space-12 px-space-12">Platform</th>
+<th class="py-space-12 px-space-12">Published</th>
+<th class="py-space-12 px-space-12 text-right">Reach</th>
+<th class="py-space-12 px-space-12 text-right">Impressions</th>
+<th class="py-space-12 px-space-12 text-right">Engagement</th>
+<th class="py-space-12 px-space-12 text-center">Inbound Leads</th>
+<th class="py-space-12 px-space-16 rounded-r-md text-right">Audit Status</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm divide-y divide-surface-container-low">
+<!-- Row 1 -->
+<tr class="hover:bg-surface transition-colors">
+<td class="py-space-12 px-space-16">
+<div class="flex flex-col min-w-0">
+<span class="font-medium text-on-surface hover:text-primary cursor-pointer truncate">Digital Approval vs Traditional Paper Approval</span>
+<span class="font-code-sm text-[11px] text-secondary">ID: SHIFD-ART-089 • Architecture &amp; Cost Analysis</span>
+</div>
+</td>
+<td class="py-space-12 px-space-12">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-primary-fixed/50 text-on-primary-fixed font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">share</span> LinkedIn
+              </span>
+</td>
+<td class="py-space-12 px-space-12 font-code-sm text-[12px] text-secondary">Sep 18, 2024</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-on-surface font-semibold">1,840</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-secondary">4,620</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-tertiary font-semibold">5.2%</td>
+<td class="py-space-12 px-space-12 text-center">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-code-sm text-[11px] font-bold">
+<span class="material-symbols-outlined text-[12px]">chat</span> 3 WhatsApp
+              </span>
+</td>
+<td class="py-space-12 px-space-16 text-right">
+<span class="inline-flex items-center gap-1 text-tertiary font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Active Top Performer
+              </span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface transition-colors">
+<td class="py-space-12 px-space-16">
+<div class="flex flex-col min-w-0">
+<span class="font-medium text-on-surface hover:text-primary cursor-pointer truncate">Why Enterprise Governance Requires Sovereign Chains</span>
+<span class="font-code-sm text-[11px] text-secondary">ID: SHIFD-ART-086 • Technical Whitepaper Summary</span>
+</div>
+</td>
+<td class="py-space-12 px-space-12">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-primary-fixed/50 text-on-primary-fixed font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">share</span> LinkedIn
+              </span>
+</td>
+<td class="py-space-12 px-space-12 font-code-sm text-[12px] text-secondary">Sep 14, 2024</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-on-surface font-semibold">1,420</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-secondary">3,890</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-tertiary font-semibold">4.8%</td>
+<td class="py-space-12 px-space-12 text-center">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-code-sm text-[11px] font-bold">
+<span class="material-symbols-outlined text-[12px]">chat</span> 2 WhatsApp
+              </span>
+</td>
+<td class="py-space-12 px-space-16 text-right">
+<span class="inline-flex items-center gap-1 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Verified Target
+              </span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface transition-colors">
+<td class="py-space-12 px-space-16">
+<div class="flex flex-col min-w-0">
+<span class="font-medium text-on-surface hover:text-primary cursor-pointer truncate">Founding Story: Streamlining Government Approvals</span>
+<span class="font-code-sm text-[11px] text-secondary">ID: SHIFD-MED-042 • Carousel Infographic Breakdown</span>
+</div>
+</td>
+<td class="py-space-12 px-space-12">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-secondary-container text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">photo_camera</span> Instagram
+              </span>
+</td>
+<td class="py-space-12 px-space-12 font-code-sm text-[12px] text-secondary">Sep 11, 2024</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-on-surface font-semibold">980</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-secondary">2,110</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-tertiary font-semibold">4.1%</td>
+<td class="py-space-12 px-space-12 text-center">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-surface-container-high text-secondary font-code-sm text-[11px]">
+                0 WhatsApp
+              </span>
+</td>
+<td class="py-space-12 px-space-16 text-right">
+<span class="inline-flex items-center gap-1 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Verified Target
+              </span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface transition-colors">
+<td class="py-space-12 px-space-16">
+<div class="flex flex-col min-w-0">
+<span class="font-medium text-on-surface hover:text-primary cursor-pointer truncate">Compliance in 2024: Navigating Data Residency for Cloud Records</span>
+<span class="font-code-sm text-[11px] text-secondary">ID: SHIFD-ART-082 • GovTech Regulatory Checklist</span>
+</div>
+</td>
+<td class="py-space-12 px-space-12">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-primary-fixed/50 text-on-primary-fixed font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">share</span> LinkedIn
+              </span>
+</td>
+<td class="py-space-12 px-space-12 font-code-sm text-[12px] text-secondary">Sep 07, 2024</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-on-surface font-semibold">1,260</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-secondary">3,120</td>
+<td class="py-space-12 px-space-12 text-right font-code-sm text-tertiary font-semibold">4.4%</td>
+<td class="py-space-12 px-space-12 text-center">
+<span class="inline-flex items-center gap-1 px-space-8 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-code-sm text-[11px] font-bold">
+<span class="material-symbols-outlined text-[12px]">chat</span> 1 WhatsApp
+              </span>
+</td>
+<td class="py-space-12 px-space-16 text-right">
+<span class="inline-flex items-center gap-1 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Verified Target
+              </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Pagination / Summary Footer -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-8 pt-space-16 mt-space-8 border-t border-surface-container-low font-label-sm text-label-sm text-secondary">
+<div class="flex items-center gap-space-8">
+<span>Rows per page:</span>
+<span class="font-semibold text-on-surface">10</span>
+<span class="text-outline-variant">•</span>
+<span>Displaying 1–4 of 15 entries</span>
+</div>
+<div class="flex items-center gap-space-8">
+<button class="px-space-8 py-1 rounded bg-surface-container-high text-secondary cursor-not-allowed opacity-50">Previous</button>
+<span class="px-space-8 py-1 rounded bg-primary-container text-on-primary font-bold">1</span>
+<button class="px-space-8 py-1 rounded hover:bg-surface-container text-on-surface">2</button>
+<button class="px-space-8 py-1 rounded hover:bg-surface-container text-on-surface">Next</button>
+</div>
+</div>
+</section>
+</div></main></div></body></html>

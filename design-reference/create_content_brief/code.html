@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "error": "#ba1a1a",
+          "on-tertiary-container": "#76eab6",
+          "surface-container-highest": "#d3e4fe",
+          "on-tertiary-fixed": "#002114",
+          "surface-container-high": "#dce9ff",
+          "on-surface-variant": "#434655",
+          "on-secondary-container": "#5c647a",
+          "surface-variant": "#d3e4fe",
+          "surface-container-low": "#eff4ff",
+          "primary-container": "#1d4ed8",
+          "on-background": "#0b1c30",
+          "on-tertiary-fixed-variant": "#005137",
+          "secondary-fixed": "#dae2fd",
+          "tertiary-fixed": "#85f8c4",
+          "inverse-on-surface": "#eaf1ff",
+          "on-tertiary": "#ffffff",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-primary-container": "#cad3ff",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#68dba9",
+          "secondary-fixed-dim": "#bec6e0",
+          "surface-tint": "#2151da",
+          "tertiary-container": "#006948",
+          "primary-fixed": "#dce1ff",
+          "tertiary": "#004f35",
+          "on-error": "#ffffff",
+          "surface": "#f8f9ff",
+          "error-container": "#ffdad6",
+          "on-primary": "#ffffff",
+          "on-primary-fixed": "#001551",
+          "on-secondary-fixed-variant": "#3f465c",
+          "inverse-surface": "#213145",
+          "secondary-container": "#dae2fd",
+          "background": "#f8f9ff",
+          "primary": "#0037b0",
+          "outline": "#747686",
+          "on-secondary": "#ffffff",
+          "surface-bright": "#f8f9ff",
+          "surface-dim": "#cbdbf5",
+          "surface-container": "#e5eeff",
+          "on-primary-fixed-variant": "#0039b5",
+          "outline-variant": "#c4c5d7",
+          "inverse-primary": "#b7c4ff",
+          "surface-container-lowest": "#ffffff",
+          "secondary": "#565e74",
+          "on-secondary-fixed": "#131b2e",
+          "on-surface": "#0b1c30"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "gutter-desktop": "1.5rem",
+          "space-20": "1.25rem",
+          "space-16": "1rem",
+          "space-4": "0.25rem",
+          "space-48": "3rem",
+          "margin-shell": "1.5rem",
+          "space-24": "1.5rem",
+          "space-32": "2rem",
+          "space-40": "2.5rem",
+          "space-8": "0.5rem",
+          "space-12": "0.75rem",
+          "space-2": "0.125rem",
+          "gutter-tablet": "1rem"
+        },
+        "fontFamily": {
+          "display-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "body-md": ["Inter"],
+          "headline-sm": ["Inter"],
+          "headline-lg": ["Inter"],
+          "code-sm": ["JetBrains Mono"],
+          "body-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "headline-md": ["Inter"]
+        },
+        "fontSize": {
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "code-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-20 flex items-center gap-space-12 bg-surface-container-lowest"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">Shifd Marketing</span><span class="font-label-sm text-label-sm text-on-surface-variant">Shifd Labs Suite</span></div></div><nav class="flex flex-col px-space-12 py-space-16 gap-space-4" data-active-classes="bg-primary-container text-on-primary font-body-md font-medium rounded-lg"><div class="px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Platform</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>Overview</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Content Studio</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-ideas" href="#"><span class="material-symbols-outlined text-[20px]">lightbulb</span><span>Ideas</span></a><a aria-current="page" class="flex items-center gap-space-12 px-space-12 py-space-8 transition-colors bg-primary-container text-on-primary font-body-md font-medium rounded-lg" data-path="create-content" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span>Create Content</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-library" href="#"><span class="material-symbols-outlined text-[20px]">library_books</span><span>Content Library</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Planning &amp; Insights</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="calendar" href="#"><span class="material-symbols-outlined text-[20px]">calendar_month</span><span>Calendar</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="performance" href="#"><span class="material-symbols-outlined text-[20px]">insights</span><span>Performance</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Context Engine</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-company" href="#"><span class="material-symbols-outlined text-[20px]">business</span><span>Company</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="context-products" href="#"><span class="material-symbols-outlined text-[20px]">inventory_2</span><span>Products</span></a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">System</div><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-integrations" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span>Integrations</span></a><a class="flex items-center gap-space-12 px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[20px]">neurology</span><span>AI &amp; System</span></a></nav></div><div class="p-space-16 m-space-12 bg-surface-container-low rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-12 min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="flex flex-col min-w-0"><span class="font-label-md text-label-md text-on-surface font-semibold truncate">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Founder</span></div></div><a class="text-on-surface-variant hover:text-on-surface p-space-4 rounded flex items-center justify-center transition-colors" data-path="settings-ai-system" href="#"><span class="material-symbols-outlined text-[18px]">tune</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-16"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex items-center gap-space-8 font-label-md text-label-md text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span>Shifd Labs Workspace</span><span class="text-outline">/</span><span class="text-on-surface font-medium">Execution Engine</span></div></div><div class="flex items-center gap-space-16"><div class="relative hidden sm:flex items-center"><span class="material-symbols-outlined absolute left-space-12 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-9 pl-9 pr-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search prompt drafts, campaigns, assets..." type="text"/></div><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-8"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-none">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Founder</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)] flex-1 px-gutter-desktop py-space-24"><div class="flex flex-col w-full">
+<!-- Dynamic Gradient Ambient Glow -->
+<div class="relative w-full overflow-hidden">
+<div class="absolute -top-16 right-1/4 w-96 h-96 bg-primary-fixed/30 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute top-48 -left-12 w-80 h-80 bg-surface-container-high/60 rounded-full blur-2xl pointer-events-none -z-10"></div>
+<!-- Header & Workflow Meta -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-16 pb-space-20">
+<div class="flex flex-col gap-space-4">
+<div class="flex items-center gap-space-8 text-on-surface-variant font-label-md text-label-md tracking-wide uppercase">
+<span>Content</span>
+<span class="text-outline-variant">/</span>
+<span>Create</span>
+<span class="text-outline-variant">/</span>
+<span class="text-primary font-semibold">Step 1</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface tracking-tight">Create Content</h1>
+<p class="font-body-md text-body-md text-secondary max-w-xl">
+          Translate strategic brand foundations and verified product knowledge into precision AI prompts.
+        </p>
+</div>
+<div class="flex items-center gap-space-12 self-start md:self-auto">
+<div class="flex items-center gap-space-8 bg-surface-container-low px-space-12 py-space-8 rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-tertiary">memory</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Context Engine: <strong class="text-on-surface font-semibold">Live Knowledge Graph</strong></span>
+</div>
+</div>
+</div>
+<!-- Step Progress Indicator -->
+<div class="bg-surface-container-lowest shadow-sm rounded-xl p-space-16 mb-space-24">
+<div class="grid grid-cols-2 md:grid-cols-6 gap-space-12">
+<!-- Step 1: Active -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg bg-surface-container-low transition-all">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm flex items-center justify-center shrink-0 shadow-sm font-semibold">
+            1
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-primary font-bold truncate">Brief</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Strategy Core</span>
+</div>
+</div>
+<!-- Step 2: Upcoming -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center shrink-0">
+            2
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Generate</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Model Prompts</span>
+</div>
+</div>
+<!-- Step 3: Upcoming -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center shrink-0">
+            3
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Adapt</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Multi-channel</span>
+</div>
+</div>
+<!-- Step 4: Upcoming -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center shrink-0">
+            4
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Creative</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Asset Studio</span>
+</div>
+</div>
+<!-- Step 5: Upcoming -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center shrink-0">
+            5
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Review</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Quality &amp; Brand</span>
+</div>
+</div>
+<!-- Step 6: Upcoming -->
+<div class="flex items-center gap-space-8 p-space-8 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center shrink-0">
+            6
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Schedule</span>
+<span class="font-label-sm text-label-sm text-secondary truncate">Deployment</span>
+</div>
+</div>
+</div>
+<!-- Linear progress track bar -->
+<div class="w-full bg-surface-container-high h-1.5 rounded-full mt-space-12 overflow-hidden">
+<div class="bg-primary-container h-full rounded-full transition-all duration-500 ease-out" style="width: 16.66%;"></div>
+</div>
+</div>
+<!-- Main Form Workbench & Context Inspector Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-24 pb-space-48">
+<!-- Main Form Container -->
+<div class="lg:col-span-8 flex flex-col gap-space-24">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-24 flex flex-col gap-space-24">
+<!-- Section: Scope & Product Anchor -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-20">
+<!-- Field 1: Content Context Toggle -->
+<div class="flex flex-col gap-space-8">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary flex items-center gap-space-4">
+<span>Content Context</span>
+<span class="material-symbols-outlined text-[14px] text-outline" title="Select whether this content focuses on enterprise-level positioning or product capabilities">info</span>
+</label>
+<div class="inline-flex p-1 bg-surface-container-low rounded-lg w-full max-w-sm" role="tablist">
+<button class="flex-1 py-1.5 text-center font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors rounded-md" onclick="switchContext('company')" type="button">
+                  Company
+                </button>
+<button class="flex-1 py-1.5 text-center font-label-md text-label-md bg-surface-container-lowest text-primary font-semibold shadow-sm rounded-md transition-all" type="button">
+                  Product
+                </button>
+</div>
+</div>
+<!-- Field 2: Product Selector Dropdown -->
+<div class="flex flex-col gap-space-8">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary flex items-center justify-between">
+<span>Product Asset Link</span>
+<span class="font-code-sm text-code-sm text-primary flex items-center gap-space-2">
+<span class="material-symbols-outlined text-[12px]">verified</span> Context Active
+                </span>
+</label>
+<div class="relative">
+<select class="w-full h-10 px-space-12 bg-surface-container-low hover:bg-surface-container rounded-lg font-body-md text-body-md text-on-surface appearance-none focus:outline-none focus:bg-surface-container-lowest shadow-sm pr-10 cursor-pointer transition-colors">
+<option selected="" value="shifd-approval">Shifd Approval — Digital correspondence and approval workflow</option>
+<option value="shifd-vault">Shifd Vault — Sovereign enterprise document repository</option>
+<option value="shifd-sign">Shifd Sign — E-signature and cryptographic audit log</option>
+<option value="shifd-identity">Shifd Identity — PKI infrastructure &amp; civil identity</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none text-[20px]">
+                  keyboard_arrow_down
+                </span>
+</div>
+</div>
+</div>
+<!-- Field 3: Content Pillar (Chip Grid) -->
+<div class="flex flex-col gap-space-12 pt-space-8">
+<div class="flex items-center justify-between">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+                Content Pillar
+              </label>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Select core narrative angle</span>
+</div>
+<div class="flex flex-wrap gap-space-8" id="pillar-group">
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-primary-container text-on-primary shadow-sm flex items-center gap-space-8 transition-transform active:scale-95" type="button">
+<span class="material-symbols-outlined text-[16px]">school</span>
+<span>Educational</span>
+<span class="w-1.5 h-1.5 rounded-full bg-surface-container-lowest"></span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">crisis_alert</span>
+<span>Problem / Pain Point</span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">insights</span>
+<span>Product Insight</span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">domain_verification</span>
+<span>Use Case</span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">query_stats</span>
+<span>Industry Insight</span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">psychology</span>
+<span>Thought Leadership</span>
+</button>
+<button class="px-space-12 py-space-8 rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[16px]">corporate_fare</span>
+<span>Company / Brand</span>
+</button>
+</div>
+</div>
+<!-- Field 4: Objective Badges -->
+<div class="flex flex-col gap-space-12">
+<div class="flex items-center justify-between">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+                Strategic Objective
+              </label>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Target conversion funnel tier</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-space-8" id="objective-group">
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-primary-container text-on-primary shadow-sm flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+<span>Awareness</span>
+</button>
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">local_library</span>
+<span>Education</span>
+</button>
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">forum</span>
+<span>Engagement</span>
+</button>
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">workspace_premium</span>
+<span>Credibility</span>
+</button>
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">compare</span>
+<span>Consideration</span>
+</button>
+<button class="p-space-8 text-center rounded-lg font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex flex-col items-center gap-space-4" type="button">
+<span class="material-symbols-outlined text-[18px]">explore</span>
+<span>Discovery</span>
+</button>
+</div>
+</div>
+<!-- Field 5: Target Audience -->
+<div class="flex flex-col gap-space-8">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary flex items-center justify-between">
+<span>Target Audience</span>
+<span class="font-label-sm text-label-sm text-primary hover:underline cursor-pointer">Browse Persona Matrix</span>
+</label>
+<div class="relative">
+<input class="w-full h-11 px-space-12 pl-10 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest shadow-sm transition-colors" type="text" value="IT Directors, Government Bureau Chiefs, &amp; Enterprise Operations Leads"/>
+<span class="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant text-[18px]">groups</span>
+</div>
+<!-- Quick Chips for Suggestions -->
+<div class="flex items-center gap-space-8 pt-space-2 overflow-x-auto">
+<span class="font-label-sm text-label-sm text-secondary shrink-0">Quick Add:</span>
+<button class="font-label-sm text-label-sm px-space-8 py-1 rounded-md bg-surface-container-high text-on-surface-variant hover:text-on-surface shrink-0" type="button">+ Ministry Dept Heads</button>
+<button class="font-label-sm text-label-sm px-space-8 py-1 rounded-md bg-surface-container-high text-on-surface-variant hover:text-on-surface shrink-0" type="button">+ Compliance Auditors</button>
+<button class="font-label-sm text-label-sm px-space-8 py-1 rounded-md bg-surface-container-high text-on-surface-variant hover:text-on-surface shrink-0" type="button">+ Chief Digital Officers</button>
+</div>
+</div>
+<!-- Field 6: Topic / Idea -->
+<div class="flex flex-col gap-space-8">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+              Topic / Primary Narrative
+            </label>
+<div class="relative">
+<input class="w-full h-11 px-space-12 bg-surface-container-low rounded-lg font-body-lg text-body-lg font-medium text-on-surface focus:outline-none focus:bg-surface-container-lowest shadow-sm transition-colors" type="text" value="Digital Approval vs Traditional Paper Approval"/>
+<span class="absolute right-3 top-3 font-code-sm text-code-sm text-secondary">42 chars</span>
+</div>
+</div>
+<!-- Field 7: Content Angle (Textarea) -->
+<div class="flex flex-col gap-space-8">
+<div class="flex items-center justify-between">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+                Content Angle &amp; Thesis
+              </label>
+<button class="text-primary font-label-sm text-label-sm flex items-center gap-space-4 hover:underline" type="button">
+<span class="material-symbols-outlined text-[14px]">auto_fix_high</span> Auto-Refine Thesis
+              </button>
+</div>
+<textarea class="w-full p-space-12 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest shadow-sm leading-relaxed transition-colors resize-none" rows="3">Highlight the time cost, document loss risk, and audit vulnerabilities of physical signature runs compared with automated digital audit trails.</textarea>
+</div>
+<!-- Field 8: Additional Instructions -->
+<div class="flex flex-col gap-space-8">
+<div class="flex items-center justify-between">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+                Execution Constraints &amp; Style Tone
+              </label>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Negative prompt guardrails</span>
+</div>
+<textarea class="w-full p-space-12 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest shadow-sm transition-colors resize-none" rows="2">Keep tone authoritative, respectful of civil servants, pragmatic. Avoid buzzwords like synergy or disruptive.</textarea>
+</div>
+</div>
+<!-- Sticky Bottom Action Bar -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-16 flex items-center justify-between sticky bottom-4 z-20">
+<div class="flex items-center gap-space-12">
+<button class="px-space-16 py-2 rounded-lg font-body-md text-body-md text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+              Cancel
+            </button>
+<button class="px-space-16 py-2 rounded-lg font-body-md text-body-md bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-space-8" type="button">
+<span class="material-symbols-outlined text-[18px]">bookmark</span>
+<span>Save as Draft</span>
+</button>
+</div>
+<div class="flex items-center gap-space-16">
+<span class="hidden sm:inline font-code-sm text-code-sm text-on-surface-variant">
+              Est. Tokens: <strong class="text-on-surface">650</strong>
+</span>
+<button class="px-space-20 py-2.5 rounded-lg font-headline-sm text-headline-sm bg-primary-container hover:bg-primary text-on-primary shadow-md flex items-center gap-space-8 group transition-all active:scale-[0.98]" type="button">
+<span>Generate Content</span>
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12">auto_awesome</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Context Inspector & AI Diagnostic Rail (Desktop 4 Cols) -->
+<div class="lg:col-span-4 flex flex-col gap-space-20">
+<!-- Active Context Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-20 flex flex-col gap-space-16">
+<div class="flex items-center justify-between pb-space-12 border-b-0">
+<div class="flex items-center gap-space-8">
+<span class="material-symbols-outlined text-primary text-[20px]">corporate_fare</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Context Anchor</span>
+</div>
+<span class="font-label-sm text-label-sm px-space-8 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-semibold">Synced</span>
+</div>
+<div class="relative rounded-lg overflow-hidden h-28 bg-surface-container-high shadow-inner">
+<img class="w-full h-full object-cover" data-alt="A clean modern office setting with senior governmental IT professionals reviewing secure document workflows on sleek tablets, soft architectural lighting in deep oceanic blue and warm grey tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBaOTT-XNd-AivO9EOM7N7V6CYI9ODShAf8cagzgeEZ1hWJMMc3GMkBI-jbcnixeviQYgKgWAoYvdCLwCsfsJ0rxyU28f-4C0mdwruEs2RJyEJdwqhXrafbPBHpng7K-IzNL3mr3eX79KJjFHLTsZNWHf4zniEbDw2j37RcRfQAFo5VvnInBm5MH-sGX-NKyDU7a9aCaYzumubhlHVrdbnbEdDeO_IkIYjvoNjE0g3hdTt5AspV5D2Qg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-inverse-surface/30 to-transparent flex items-end p-space-12">
+<span class="text-on-tertiary font-headline-sm text-headline-sm text-xs tracking-wider uppercase font-semibold">Shifd Approval v4.2 Core</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-8 text-on-surface-variant font-body-sm text-body-sm">
+<div class="flex justify-between">
+<span class="text-secondary">Category:</span>
+<span class="text-on-surface font-medium">GovTech / Enterprise SaaS</span>
+</div>
+<div class="flex justify-between">
+<span class="text-secondary">Key Feature Set:</span>
+<span class="text-on-surface font-medium text-right">Cryptographic Sign-off, Multi-tier Audit</span>
+</div>
+<div class="flex justify-between">
+<span class="text-secondary">Audience Match:</span>
+<span class="text-tertiary font-semibold text-right">98.4% Confidence</span>
+</div>
+</div>
+<!-- Context Suggestion Banner -->
+<div class="p-space-12 rounded-lg bg-surface-container-low flex items-start gap-space-8">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">tips_and_updates</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+              Mention the <strong class="text-on-surface">32% cycle time reduction</strong> verified from the Ministry of Public Works case study for increased conversion.
+            </p>
+</div>
+</div>
+<!-- Brief Readiness Score Visual -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-20 flex flex-col gap-space-16">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface">Brief Quality Score</span>
+<span class="font-headline-md text-headline-md text-primary font-bold">92<span class="text-on-surface-variant font-body-sm text-body-sm font-normal">/100</span></span>
+</div>
+<!-- Inline Visual Bar Chart Representation -->
+<div class="space-y-space-8">
+<div>
+<div class="flex justify-between font-label-sm text-label-sm mb-1 text-secondary">
+<span>Audience Precision</span>
+<span class="text-on-surface font-semibold">Optimal</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 95%;"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between font-label-sm text-label-sm mb-1 text-secondary">
+<span>Narrative Tension (Angle)</span>
+<span class="text-on-surface font-semibold">Strong</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 90%;"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between font-label-sm text-label-sm mb-1 text-secondary">
+<span>Tone Guardrails</span>
+<span class="text-on-surface font-semibold">Well-Defined</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-tertiary-container h-full rounded-full" style="width: 92%;"></div>
+</div>
+</div>
+</div>
+<div class="pt-space-8 flex items-center justify-between text-secondary font-label-sm text-label-sm">
+<span class="flex items-center gap-space-4">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> Engine ready for generation
+            </span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Model: Claude 3.5</span>
+</div>
+</div>
+<!-- Recent Prompts in Product Stream -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-20 flex flex-col gap-space-12">
+<span class="font-headline-sm text-headline-sm text-on-surface">Recent Product Angles</span>
+<div class="flex flex-col gap-space-8">
+<a class="p-space-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high transition-colors flex flex-col gap-1" href="#">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Zero Trust Audit Trail in Government</span>
+<span class="font-label-sm text-label-sm text-secondary">Used 2 days ago • 4,200 reads</span>
+</a>
+<a class="p-space-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high transition-colors flex flex-col gap-1" href="#">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Cost of Physical Couriers vs Secure Cloud</span>
+<span class="font-label-sm text-label-sm text-secondary">Used 5 days ago • 1,840 reads</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function switchContext(type) {
+    // Interactive context switcher micro-state
+    const btn = event.currentTarget;
+    const parent = btn.parentElement;
+    parent.querySelectorAll('button').forEach(b => {
+      b.className = "flex-1 py-1.5 text-center font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors rounded-md";
+    });
+    btn.className = "flex-1 py-1.5 text-center font-label-md text-label-md bg-surface-container-lowest text-primary font-semibold shadow-sm rounded-md transition-all";
+  }
+
+  // Chip Group Interactive Selection Handler
+  document.querySelectorAll('#pillar-group button, #objective-group button').forEach(button => {
+    button.addEventListener('click', function(e) {
+      const parent = this.parentElement;
+      const isChip = this.closest('#pillar-group');
+      
+      parent.querySelectorAll('button').forEach(btn => {
+        btn.classList.remove('bg-primary-container', 'text-on-primary', 'shadow-sm');
+        btn.classList.add('bg-surface-container-low', 'text-on-surface-variant');
+      });
+
+      this.classList.remove('bg-surface-container-low', 'text-on-surface-variant');
+      this.classList.add('bg-primary-container', 'text-on-primary', 'shadow-sm');
+    });
+  });
+</script></main></div></body></html>

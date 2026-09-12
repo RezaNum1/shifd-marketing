@@ -9,6 +9,10 @@ const config: AppConfig = {
   host: '127.0.0.1',
   databaseUrl: 'postgresql://test:test@127.0.0.1:5432/test',
   allowedOrigin: 'http://localhost:5173',
+  sessionIdleMinutes: 480,
+  sessionAbsoluteHours: 24,
+  loginRateLimitMax: 5,
+  loginRateLimitWindowMinutes: 15,
 }
 const apps: FastifyInstance[] = []
 

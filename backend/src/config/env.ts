@@ -8,6 +8,10 @@ export interface AppConfig {
   host: string
   databaseUrl: string
   allowedOrigin: string
+  sessionIdleMinutes: number
+  sessionAbsoluteHours: number
+  loginRateLimitMax: number
+  loginRateLimitWindowMinutes: number
 }
 
 export class ConfigError extends Error {
@@ -29,6 +33,12 @@ function parsePort(value: string | undefined, fields: Record<string, string>) {
   return port
 }
 
+function parsePositiveInteger(name: string, value: string | undefined, defaultValue: number, fields: Record<string, string>) {
+  const parsed = Number(value ?? defaultValue)
+  if (!Number.isInteger(parsed) || parsed < 1) fields[name] = 'Must be a positive integer.'
+  return parsed
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const fields: Record<string, string> = {}
   const nodeEnv = (env.NODE_ENV?.trim() || 'development') as NodeEnvironment
@@ -39,6 +49,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (allowedOrigin && allowedOrigin === '*') fields.ALLOWED_ORIGIN = 'Wildcard origin is not allowed.'
   const port = parsePort(env.PORT, fields)
   const host = required('HOST', env.HOST || '127.0.0.1', fields)
+  const sessionIdleMinutes = parsePositiveInteger('SESSION_IDLE_MINUTES', env.SESSION_IDLE_MINUTES, 480, fields)
+  const sessionAbsoluteHours = parsePositiveInteger('SESSION_ABSOLUTE_HOURS', env.SESSION_ABSOLUTE_HOURS, 24, fields)
+  const loginRateLimitMax = parsePositiveInteger('LOGIN_RATE_LIMIT_MAX', env.LOGIN_RATE_LIMIT_MAX, 5, fields)
+  const loginRateLimitWindowMinutes = parsePositiveInteger('LOGIN_RATE_LIMIT_WINDOW_MINUTES', env.LOGIN_RATE_LIMIT_WINDOW_MINUTES, 15, fields)
   if (Object.keys(fields).length) throw new ConfigError(fields)
-  return { nodeEnv, port, host, databaseUrl, allowedOrigin }
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes }
 }

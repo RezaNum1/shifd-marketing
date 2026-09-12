@@ -1,8 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import cors from '@fastify/cors'
+import cookie from '@fastify/cookie'
 import type { AppConfig } from './config/env.js'
 import prismaPlugin from './plugins/prisma.js'
+import authPlugin from './modules/auth/plugin.js'
+import { authRoutes } from './modules/auth/routes.js'
+import rateLimit from '@fastify/rate-limit'
 import { registerErrorHandler } from './shared/http/errorHandler.js'
 import { registerNotFoundHandler } from './shared/http/notFoundHandler.js'
 import { healthRoutes } from './modules/health/routes.js'
@@ -27,7 +31,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     },
     credentials: true,
   })
+  await app.register(cookie)
+  await app.register(rateLimit, { global: false })
   if (options.connectDatabase ?? true) await app.register(prismaPlugin, { config: options.config })
+  await app.register(authPlugin, { config: options.config })
+  await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })
   return app
 }

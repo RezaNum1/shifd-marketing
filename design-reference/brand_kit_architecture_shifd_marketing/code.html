@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-primary-fixed": "#001551",
+          "surface-bright": "#f8f9ff",
+          "on-primary-fixed-variant": "#0039b5",
+          "surface-container": "#e5eeff",
+          "on-secondary-container": "#5c647a",
+          "on-secondary-fixed-variant": "#3f465c",
+          "primary-fixed": "#dce1ff",
+          "surface-container-low": "#eff4ff",
+          "secondary-fixed-dim": "#bec6e0",
+          "background": "#f8f9ff",
+          "on-tertiary-fixed": "#002114",
+          "inverse-primary": "#b7c4ff",
+          "on-surface": "#0b1c30",
+          "inverse-surface": "#213145",
+          "error": "#ba1a1a",
+          "on-surface-variant": "#434655",
+          "outline-variant": "#c4c5d7",
+          "error-container": "#ffdad6",
+          "secondary-fixed": "#dae2fd",
+          "surface-container-highest": "#d3e4fe",
+          "secondary-container": "#dae2fd",
+          "secondary": "#565e74",
+          "outline": "#747686",
+          "on-background": "#0b1c30",
+          "tertiary-fixed": "#85f8c4",
+          "surface-dim": "#cbdbf5",
+          "surface": "#f8f9ff",
+          "on-tertiary-container": "#76eab6",
+          "surface-container-high": "#dce9ff",
+          "on-error-container": "#93000a",
+          "tertiary-fixed-dim": "#68dba9",
+          "primary": "#0037b0",
+          "on-error": "#ffffff",
+          "surface-tint": "#2151da",
+          "tertiary-container": "#006948",
+          "surface-variant": "#d3e4fe",
+          "on-primary-container": "#cad3ff",
+          "on-secondary": "#ffffff",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-tertiary-fixed-variant": "#005137",
+          "primary-container": "#1d4ed8",
+          "on-secondary-fixed": "#131b2e",
+          "inverse-on-surface": "#eaf1ff",
+          "surface-container-lowest": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "tertiary": "#004f35",
+          "on-primary": "#ffffff"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "space-2": "0.125rem",
+          "space-40": "2.5rem",
+          "space-8": "0.5rem",
+          "space-16": "1rem",
+          "gutter-tablet": "1rem",
+          "gutter-desktop": "1.5rem",
+          "space-12": "0.75rem",
+          "space-48": "3rem",
+          "space-20": "1.25rem",
+          "space-4": "0.25rem",
+          "space-32": "2rem",
+          "margin-shell": "1.5rem",
+          "space-24": "1.5rem"
+        },
+        "fontFamily": {
+          "label-sm": ["Inter"],
+          "label-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "code-sm": ["JetBrains Mono"],
+          "headline-lg": ["Inter"],
+          "body-sm": ["Inter"],
+          "display-lg": ["Inter"],
+          "headline-sm": ["Inter"],
+          "headline-md": ["Inter"],
+          "body-md": ["Inter"]
+        },
+        "fontSize": {
+          "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "600"}],
+          "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+          "body-lg": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "code-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "600"}],
+          "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600"}],
+          "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-space-20 flex items-center gap-space-12 bg-surface-container-lowest"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">Shifd Marketing</span><span class="font-label-sm text-label-sm text-on-surface-variant">Shifd Labs Suite</span></div></div><nav class="flex flex-col px-space-12 py-space-16 gap-space-4" data-active-classes="bg-primary-container text-on-primary font-body-md font-medium rounded-lg"><div class="px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Platform</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="overview" href="#">Overview</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Content Studio</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ideas" href="#">Ideas</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="create-content" href="#">Create Content</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="content-library" href="#">Content Library</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Planning &amp; Insights</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="calendar" href="#">Calendar</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="performance" href="#">Performance</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">Context Engine</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="company" href="#">Company</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="products" href="#">Products</a><div class="mt-space-12 px-space-8 py-space-4 font-label-sm text-label-sm uppercase tracking-wider text-secondary">System</div><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="integrations" href="#">Integrations</a><a class="flex items-center px-space-12 py-space-8 rounded-lg text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ai-system" href="#">AI &amp; System</a></nav></div><div class="p-space-16 m-space-12 bg-surface-container-low rounded-xl flex items-center justify-between"><div class="flex items-center gap-space-12 min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="flex flex-col min-w-0"><span class="font-label-md text-label-md text-on-surface font-semibold truncate">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Founder</span></div></div><a class="text-on-surface-variant hover:text-on-surface p-space-4 rounded flex items-center justify-center transition-colors" data-path="ai-system" href="#"><span class="material-symbols-outlined text-[18px]">tune</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter-desktop"><div class="flex items-center gap-space-16"><img alt="Shifd Marketing Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VfKKFeP8pJ1-nQBl4m17KLWYtYVA8m6ecmyG5Gbg3grLPi_cEhNb9EZlqYmKyFma8RDvxpsI6GrL-c0zn7Alnhm-jahqB1559n2lxam-ZkVLe2Q1gu9XCyxQr47t2cW32JtOZMw-yT4rVdoC1XqxF9_7gDJ3pKOCcxJ6nw9PgCTF1T8R46haoGoR82HfT1MPIu0SPXiWliRtFEGzmuVf4f6T2jTeS1aFkMepBv-Td4LQAa4LQN3N2m55R_"/><div class="flex items-center gap-space-8 font-label-md text-label-md text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span>Shifd Labs Workspace</span><span class="text-outline">/</span><span class="text-on-surface font-medium">Execution Engine</span></div></div><div class="flex items-center gap-space-16"><div class="relative hidden sm:flex items-center"><span class="material-symbols-outlined absolute left-space-12 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-9 pl-9 pr-space-12 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search prompt drafts, campaigns, assets..." type="text"/></div><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-8"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyx4af8iblCSiFDnMlU8TjTdCm7n9K0zBBBUWoOevw5MI8_bHjmIuFk7WicilkyZdZBdPluBstU7ZK0aIqkG4w4P228sCI_WeGiDYkrkk0HcrBjKLKzQo_yK_d-hSK-GUZvOGGBmxA5Qv40m7FcWeuwrdFlcz7eoOmMooEUx_ImJp-YBqEAbII9rPzAHfD0WR0_JWcbvUyXhtBHJhYlnyun8b5wwhdybbNk9knq_H5v_zAgIuIiHo7gQ"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-none">Reza</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Founder</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)] flex-1 px-gutter-desktop py-space-24"><div class="flex flex-col w-full">
+<div class="flex flex-col gap-space-32 max-w-[1600px] mx-auto w-full pb-space-48">
+<!-- Top Executive Header & Action Utility Bar -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-20 pb-space-24 bg-surface-container-lowest p-space-24 rounded-xl shadow-sm">
+<div class="flex flex-col gap-space-8 max-w-3xl">
+<div class="flex items-center gap-space-8 font-code-sm text-code-sm text-secondary tracking-tight">
+<span>CONTEXT ENGINE</span>
+<span class="text-outline-variant">/</span>
+<span class="text-primary font-medium">BRAND KIT &amp; UI ARCHITECTURE</span>
+<span class="text-outline-variant">/</span>
+<span class="px-space-8 py-space-2 rounded bg-tertiary/10 text-tertiary text-label-sm font-semibold tracking-wide">SPEC v2.4.2</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface tracking-tight leading-tight">
+          Brand Kit, Design Tokens &amp; Enterprise UI Architecture
+        </h1>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          Official design tokens, GovTech compliance typography, high-density component specifications, and cryptographic UI protocols powering the Shifd Marketing ecosystem.
+        </p>
+</div>
+<div class="flex flex-wrap items-center gap-space-12 shrink-0">
+<button class="flex items-center gap-space-8 px-space-16 py-space-8 rounded-lg bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors shadow-sm" id="copyTokensBtn" onclick="navigator.clipboard.writeText(':root { --shifd-primary: #1d4ed8; --shifd-surface: #f8f9ff; --shifd-tertiary: #004f35; --shifd-rsa-audit: true; }'); alert('CSS Custom Properties (v2.4) copied to clipboard');">
+<span class="material-symbols-outlined text-[16px] text-secondary">data_object</span>
+<span>Copy CDN Tokens</span>
+</button>
+<button class="flex items-center gap-space-8 px-space-16 py-space-8 rounded-lg bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors shadow-sm" onclick="window.print()">
+<span class="material-symbols-outlined text-[16px] text-secondary">download</span>
+<span>Figma UI Library</span>
+</button>
+<button class="flex items-center gap-space-8 px-space-20 py-space-8 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+<span>Export JSON Spec</span>
+</button>
+</div>
+</div>
+<!-- Quick Telemetry Ticker -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-16">
+<div class="bg-surface-container-lowest p-space-16 rounded-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-secondary">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Audit Compliance</span>
+<span class="material-symbols-outlined text-[18px] text-tertiary">verified_user</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">NIST SP 800-53</span>
+<span class="font-label-sm text-label-sm text-tertiary font-semibold">Tier-1 Pass</span>
+</div>
+<div class="mt-space-4 font-code-sm text-code-sm text-on-surface-variant">GovSafe FedRAMP Mod. Verified</div>
+</div>
+<div class="bg-surface-container-lowest p-space-16 rounded-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-secondary">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">WCAG Accessibility</span>
+<span class="material-symbols-outlined text-[18px] text-primary">contrast</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">AAA Ratio</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">12.4 : 1 max</span>
+</div>
+<div class="mt-space-4 font-code-sm text-code-sm text-on-surface-variant">100% High-Contrast Tokens</div>
+</div>
+<div class="bg-surface-container-lowest p-space-16 rounded-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-secondary">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Cryptographic Signature</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">fingerprint</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">RSA-4096</span>
+<span class="font-label-sm text-label-sm text-tertiary font-semibold">SHA-256</span>
+</div>
+<div class="mt-space-4 font-code-sm text-code-sm text-on-surface-variant font-mono">0x9F4B...C028</div>
+</div>
+<div class="bg-surface-container-lowest p-space-16 rounded-lg shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-secondary">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Component Primitives</span>
+<span class="material-symbols-outlined text-[18px] text-primary-container">widgets</span>
+</div>
+<div class="mt-space-12 flex items-baseline gap-space-8">
+<span class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">48 Atom Units</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">Zero CSS drift</span>
+</div>
+<div class="mt-space-4 font-code-sm text-code-sm text-on-surface-variant">Tailwind Token Synchronized</div>
+</div>
+</div>
+<!-- Section 1: Brand Identity & Visual Language Core -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-space-16 bg-surface-container-low p-space-16 rounded-lg">
+<div class="flex items-center gap-space-12">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold text-label-md">01</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Brand Identity &amp; Visual Language Core</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Deterministic design geometry, sovereignty hallmarks, and mark application tolerances.</p>
+</div>
+</div>
+<span class="font-code-sm text-code-sm px-space-12 py-space-4 rounded bg-surface-container text-on-surface-variant font-medium mt-space-8 md:mt-0">
+          IDENTIFIER: SHIFD-LABS-CORE-SPEC
+        </span>
+</div>
+<!-- Mark Showcase & Monogram Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-space-20">
+<!-- Mark 1: Primary Brand Mark -->
+<div class="bg-surface-container-low rounded-lg p-space-20 flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Primary System Mark</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Ratio 1:1</span>
+</div>
+<div class="py-space-32 flex flex-col items-center justify-center">
+<div class="w-24 h-24 rounded-xl bg-primary-container text-on-primary flex items-center justify-center shadow-md relative overflow-hidden group">
+<svg class="w-16 h-16" fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<rect fill="currentColor" fill-opacity="0.95" height="32" rx="3" width="16" x="6" y="8"></rect>
+<rect fill="currentColor" fill-opacity="0.6" height="26" rx="3" width="16" x="26" y="14"></rect>
+<path d="M14 20L34 28" stroke="#dce1ff" stroke-linecap="round" stroke-width="2.5"></path>
+<circle cx="34" cy="28" fill="#85f8c4" r="3.5"></circle>
+</svg>
+</div>
+</div>
+<div class="space-y-space-4 bg-surface-container-lowest p-space-12 rounded">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Clearance Zone</span>
+<span class="font-code-sm text-on-surface font-semibold">24px minimum</span>
+</div>
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Min Size (Screen)</span>
+<span class="font-code-sm text-on-surface font-semibold">20px × 20px</span>
+</div>
+</div>
+</div>
+<!-- Mark 2: Executive Wordmark Specimen -->
+<div class="bg-surface-container-low rounded-lg p-space-20 flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Executive Wordmark</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Tracking -0.025em</span>
+</div>
+<div class="py-space-32 flex flex-col items-center justify-center text-center">
+<div class="flex items-center gap-space-12">
+<div class="w-7 h-7 rounded-md bg-primary text-on-primary flex items-center justify-center font-bold font-code-sm">S</div>
+<div class="flex flex-col text-left">
+<span class="font-display-lg text-headline-lg font-bold tracking-tight text-on-surface leading-none">Shifd Marketing</span>
+<span class="font-code-sm text-code-sm text-primary tracking-widest uppercase mt-space-4">SOVEREIGN ENGINE</span>
+</div>
+</div>
+</div>
+<div class="space-y-space-4 bg-surface-container-lowest p-space-12 rounded">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Primary Usage</span>
+<span class="font-code-sm text-on-surface font-semibold">Workspace Nav &amp; Header</span>
+</div>
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Lockup Rules</span>
+<span class="font-code-sm text-on-surface font-semibold">Fixed Sub-descriptor</span>
+</div>
+</div>
+</div>
+<!-- Mark 3: Favicon & Monogram Application -->
+<div class="bg-surface-container-low rounded-lg p-space-20 flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Monogram &amp; App Icon</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Vector SVG Standard</span>
+</div>
+<div class="py-space-24 flex items-center justify-center gap-space-20">
+<div class="flex flex-col items-center gap-space-8">
+<div class="w-12 h-12 rounded-lg bg-on-surface text-surface flex items-center justify-center shadow">
+<span class="material-symbols-outlined text-[24px]">terminal</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">128px App</span>
+</div>
+<div class="flex flex-col items-center gap-space-8">
+<div class="w-8 h-8 rounded bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[16px]">token</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">32px Tab</span>
+</div>
+<div class="flex flex-col items-center gap-space-8">
+<div class="w-4 h-4 rounded bg-tertiary-container text-on-tertiary flex items-center justify-center shadow-sm">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary-fixed"></div>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">16px Favicon</span>
+</div>
+</div>
+<div class="space-y-space-4 bg-surface-container-lowest p-space-12 rounded">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Render Engine</span>
+<span class="font-code-sm text-on-surface font-semibold">Geometric Crisp Edges</span>
+</div>
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Contrast Verification</span>
+<span class="font-code-sm text-tertiary font-semibold">Pass: 14.2:1</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Core Architectural Principles Bento -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-16 pt-space-8">
+<div class="p-space-16 rounded-lg bg-surface-container-high flex flex-col gap-space-8">
+<div class="flex items-center gap-space-8 text-primary">
+<span class="material-symbols-outlined text-[20px]">shield_lock</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">Sovereign Precision</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Built for GovTech, defence contractors, and enterprise compliance. Zero consumer fluff, zero marketing hyperboles, and deterministic color-coded audit trails.
+          </p>
+</div>
+<div class="p-space-16 rounded-lg bg-surface-container-high flex flex-col gap-space-8">
+<div class="flex items-center gap-space-8 text-primary">
+<span class="material-symbols-outlined text-[20px]">density_medium</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">High-Density Hierarchy</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Rigid 4px and 8px baseline rhythm allowing executive operators to parse multi-channel telemetry and campaigns without cognitive fatigue or screen scrolling waste.
+          </p>
+</div>
+<div class="p-space-16 rounded-lg bg-surface-container-high flex flex-col gap-space-8">
+<div class="flex items-center gap-space-8 text-primary">
+<span class="material-symbols-outlined text-[20px]">enhanced_encryption</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">Deterministic Verification</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Every published asset, angle, and copy block contains a SHA-256 fingerprint chip confirming GovSafe compliance, author provenance, and regulatory audit readiness.
+          </p>
+</div>
+</div>
+</div>
+<!-- Section 2: Color Token Palette & Accessibility Matrix -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-space-16 bg-surface-container-low p-space-16 rounded-lg">
+<div class="flex items-center gap-space-12">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold text-label-md">02</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Color Token Palette &amp; GovTech Accessibility Matrix</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Rigid light-mode token architecture with mathematical contrast ratios (WCAG 2.1 AAA minimum).</p>
+</div>
+</div>
+<div class="flex items-center gap-space-8 mt-space-8 md:mt-0">
+<span class="px-space-12 py-space-4 rounded bg-tertiary-fixed-dim/30 text-on-tertiary-fixed font-code-sm text-code-sm font-medium">GovTech Pass: WCAG AAA</span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-16">
+<!-- Token Card 1: Sovereign Primary -->
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12">
+<div>
+<div class="h-20 w-full rounded-md bg-primary-container shadow-inner flex items-end p-space-8 justify-between">
+<span class="text-on-primary font-code-sm text-code-sm font-medium">#1d4ed8</span>
+<span class="px-space-8 py-space-2 rounded bg-surface-container-lowest/20 text-on-primary text-label-sm font-bold backdrop-blur-sm">7.9:1 AAA</span>
+</div>
+<div class="mt-space-12 flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Primary Container</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-primary-container</span>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant space-y-space-2">
+<div class="flex justify-between text-label-sm"><span class="text-secondary">RGB:</span> <span class="font-code-sm text-on-surface">29, 78, 216</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Application:</span> <span class="font-medium text-on-surface">Primary CTA, Active Navigation</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Text Pairing:</span> <span class="font-code-sm text-primary font-medium">text-on-primary (#ffffff)</span></div>
+</div>
+</div>
+<!-- Token Card 2: Deep Sovereign -->
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12">
+<div>
+<div class="h-20 w-full rounded-md bg-primary shadow-inner flex items-end p-space-8 justify-between">
+<span class="text-on-primary font-code-sm text-code-sm font-medium">#0037b0</span>
+<span class="px-space-8 py-space-2 rounded bg-surface-container-lowest/20 text-on-primary text-label-sm font-bold backdrop-blur-sm">9.4:1 AAA</span>
+</div>
+<div class="mt-space-12 flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Primary Sovereign</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-primary</span>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant space-y-space-2">
+<div class="flex justify-between text-label-sm"><span class="text-secondary">RGB:</span> <span class="font-code-sm text-on-surface">0, 55, 176</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Application:</span> <span class="font-medium text-on-surface">Executive Focus, Active Links</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Text Pairing:</span> <span class="font-code-sm text-primary font-medium">text-on-primary</span></div>
+</div>
+</div>
+<!-- Token Card 3: Cryptographic Verified Green -->
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12">
+<div>
+<div class="h-20 w-full rounded-md bg-tertiary-container shadow-inner flex items-end p-space-8 justify-between">
+<span class="text-on-tertiary font-code-sm text-code-sm font-medium">#006948</span>
+<span class="px-space-8 py-space-2 rounded bg-surface-container-lowest/20 text-on-tertiary text-label-sm font-bold backdrop-blur-sm">8.1:1 AAA</span>
+</div>
+<div class="mt-space-12 flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Tertiary Container</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-tertiary-container</span>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant space-y-space-2">
+<div class="flex justify-between text-label-sm"><span class="text-secondary">RGB:</span> <span class="font-code-sm text-on-surface">0, 105, 72</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Application:</span> <span class="font-medium text-on-surface">Cryptographic Verification, Pass</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Text Pairing:</span> <span class="font-code-sm text-tertiary font-medium">text-on-tertiary</span></div>
+</div>
+</div>
+<!-- Token Card 4: Executive Canvas Surface -->
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12">
+<div>
+<div class="h-20 w-full rounded-md bg-surface-container-lowest shadow-inner flex items-end p-space-8 justify-between">
+<span class="text-on-surface font-code-sm text-code-sm font-medium">#ffffff</span>
+<span class="px-space-8 py-space-2 rounded bg-surface-container text-on-surface text-label-sm font-bold">14.8:1 AAA</span>
+</div>
+<div class="mt-space-12 flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Surface Lowest</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-surface-container-lowest</span>
+</div>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant space-y-space-2">
+<div class="flex justify-between text-label-sm"><span class="text-secondary">RGB:</span> <span class="font-code-sm text-on-surface">255, 255, 255</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Application:</span> <span class="font-medium text-on-surface">Data Sheets, Cards, Top Panels</span></div>
+<div class="flex justify-between text-label-sm"><span class="text-secondary">Text Pairing:</span> <span class="font-code-sm text-on-surface font-medium">text-on-surface (#0b1c30)</span></div>
+</div>
+</div>
+</div>
+<!-- Semantic Status Matrix Table -->
+<div class="bg-surface-container-low rounded-lg p-space-16">
+<div class="flex items-center justify-between mb-space-12">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Semantic Guardrail Spectrum (NIST Strict Thresholds)</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Validated against FedRAMP Color Contrast Specs</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-12">
+<div class="p-space-12 rounded bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-8">
+<div class="w-3 h-3 rounded-full bg-tertiary"></div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Verified / Passed</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-tertiary (#004f35)</span>
+</div>
+</div>
+<span class="px-space-8 py-space-2 rounded bg-tertiary/10 text-tertiary text-label-sm font-bold">11.8:1</span>
+</div>
+<div class="p-space-12 rounded bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-8">
+<div class="w-3 h-3 rounded-full bg-error"></div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Strict GovTech Alert</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-error (#ba1a1a)</span>
+</div>
+</div>
+<span class="px-space-8 py-space-2 rounded bg-error-container text-on-error-container text-label-sm font-bold">6.9:1</span>
+</div>
+<div class="p-space-12 rounded bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-8">
+<div class="w-3 h-3 rounded-full bg-secondary"></div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Auditing Cadence</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-secondary (#565e74)</span>
+</div>
+</div>
+<span class="px-space-8 py-space-2 rounded bg-surface-container text-on-surface text-label-sm font-bold">5.8:1</span>
+</div>
+<div class="p-space-12 rounded bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-8">
+<div class="w-3 h-3 rounded-full bg-primary-container"></div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Cryptographic Lock</span>
+<span class="font-code-sm text-code-sm text-secondary">bg-primary-container (#1d4ed8)</span>
+</div>
+</div>
+<span class="px-space-8 py-space-2 rounded bg-secondary-container text-on-secondary-fixed text-label-sm font-bold">7.9:1</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 3: Typography System & Linguistic Protocol -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-space-16 bg-surface-container-low p-space-16 rounded-lg">
+<div class="flex items-center gap-space-12">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold text-label-md">03</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Typography Scale &amp; Linguistic Protocol</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Dual-font stack pairing Inter (Executive Prose) with JetBrains Mono (Hash signatures &amp; Token metrics).</p>
+</div>
+</div>
+<span class="font-code-sm text-code-sm px-space-12 py-space-4 rounded bg-surface-container text-on-surface-variant font-medium mt-space-8 md:mt-0">
+          STACK: INTER + JETBRAINS MONO
+        </span>
+</div>
+<!-- Type Specimen Table -->
+<div class="overflow-x-auto bg-surface-container-low rounded-lg p-space-16">
+<div class="min-w-[650px] space-y-space-8">
+<div class="grid grid-cols-12 text-label-sm font-label-sm uppercase tracking-wider text-secondary px-space-12 pb-space-4">
+<div class="col-span-3">Token &amp; Class</div>
+<div class="col-span-2">Size / Line</div>
+<div class="col-span-2">Tracking / Weight</div>
+<div class="col-span-5">Live Specimen</div>
+</div>
+<div class="grid grid-cols-12 items-center p-space-12 rounded bg-surface-container-lowest">
+<div class="col-span-3 font-code-sm text-code-sm text-primary font-medium">display-lg</div>
+<div class="col-span-2 font-code-sm text-code-sm text-on-surface-variant">32px / 40px</div>
+<div class="col-span-2 font-label-sm text-label-sm text-secondary">-0.025em / 600</div>
+<div class="col-span-5 font-display-lg text-display-lg text-on-surface truncate">Executive Orchestration</div>
+</div>
+<div class="grid grid-cols-12 items-center p-space-12 rounded bg-surface-container-lowest">
+<div class="col-span-3 font-code-sm text-code-sm text-primary font-medium">headline-lg</div>
+<div class="col-span-2 font-code-sm text-code-sm text-on-surface-variant">24px / 32px</div>
+<div class="col-span-2 font-label-sm text-label-sm text-secondary">-0.02em / 600</div>
+<div class="col-span-5 font-headline-lg text-headline-lg text-on-surface truncate">Deterministic Audience Clustering</div>
+</div>
+<div class="grid grid-cols-12 items-center p-space-12 rounded bg-surface-container-lowest">
+<div class="col-span-3 font-code-sm text-code-sm text-primary font-medium">headline-md</div>
+<div class="col-span-2 font-code-sm text-code-sm text-on-surface-variant">20px / 28px</div>
+<div class="col-span-2 font-label-sm text-label-sm text-secondary">-0.015em / 600</div>
+<div class="col-span-5 font-headline-md text-headline-md text-on-surface truncate">Sovereign Knowledge Engine Pipeline</div>
+</div>
+<div class="grid grid-cols-12 items-center p-space-12 rounded bg-surface-container-lowest">
+<div class="col-span-3 font-code-sm text-code-sm text-primary font-medium">body-md</div>
+<div class="col-span-2 font-code-sm text-code-sm text-on-surface-variant">14px / 20px</div>
+<div class="col-span-2 font-label-sm text-label-sm text-secondary">0em / 400</div>
+<div class="col-span-5 font-body-md text-body-md text-on-surface-variant">Enterprise marketing copy verified for cryptographic compliance.</div>
+</div>
+<div class="grid grid-cols-12 items-center p-space-12 rounded bg-surface-container-lowest">
+<div class="col-span-3 font-code-sm text-code-sm text-primary font-medium">code-sm</div>
+<div class="col-span-2 font-code-sm text-code-sm text-on-surface-variant">12px / 16px</div>
+<div class="col-span-2 font-label-sm text-label-sm text-secondary">0em / 400</div>
+<div class="col-span-5 font-code-sm text-code-sm text-on-surface font-mono truncate">SHA256: 4f98d7a12b...e8f90c3d (RSA-4096 VALID)</div>
+</div>
+</div>
+</div>
+<!-- Linguistic Guardrails Protocol -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-20">
+<div class="bg-error-container/30 p-space-20 rounded-lg flex flex-col gap-space-12">
+<div class="flex items-center gap-space-8 text-error">
+<span class="material-symbols-outlined text-[20px]">cancel</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">Forbidden Consumer Fluff (Blacklist)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Strictly prohibited in all internal interfaces, customer-facing exports, and automated LLM composition layers:
+          </p>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-8">
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-error line-through">
+<span>✕</span> "Revolutionary / Game-changer"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-error line-through">
+<span>✕</span> "Magical 1-click AI"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-error line-through">
+<span>✕</span> "Supercharge your viral growth"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-error line-through">
+<span>✕</span> "Skyrocket engagement fast"
+            </div>
+</div>
+</div>
+<div class="bg-tertiary-container/10 p-space-20 rounded-lg flex flex-col gap-space-12">
+<div class="flex items-center gap-space-8 text-tertiary">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">Approved Sovereign Terminology</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Standard enterprise terminology for all system prompts, reports, and component copy:
+          </p>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-8">
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-tertiary">
+<span class="font-bold">✓</span> "Cryptographically Verifiable"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-tertiary">
+<span class="font-bold">✓</span> "NIST SP 800-53 Compliant"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-tertiary">
+<span class="font-bold">✓</span> "Deterministic Angle Synthesis"
+            </div>
+<div class="p-space-8 rounded bg-surface-container-lowest flex items-center gap-space-8 font-code-sm text-code-sm text-tertiary">
+<span class="font-bold">✓</span> "Sovereign Content Governance"
+            </div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 4: Live Component Pattern Library & UI Kit -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-space-16 bg-surface-container-low p-space-16 rounded-lg">
+<div class="flex items-center gap-space-12">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold text-label-md">04</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Reusable Component Pattern Library</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Production-grade interactive component primitives with zero external border reliance.</p>
+</div>
+</div>
+<span class="font-code-sm text-code-sm px-space-12 py-space-4 rounded bg-surface-container text-on-surface-variant font-medium mt-space-8 md:mt-0">
+          INTERACTIVE SPECIMENS
+        </span>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-24">
+<!-- Interactive Buttons & Controls Showcase -->
+<div class="bg-surface-container-low rounded-lg p-space-20 flex flex-col gap-space-16">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Button Variants &amp; Control States</span>
+<div class="flex flex-wrap items-center gap-space-12">
+<button class="px-space-16 py-space-8 rounded bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md transition-all shadow-sm">
+              Primary Sovereign
+            </button>
+<button class="px-space-16 py-space-8 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors shadow-sm">
+              Secondary Outline
+            </button>
+<button class="px-space-16 py-space-8 rounded bg-error/10 hover:bg-error/20 text-error font-label-md text-label-md transition-colors">
+              Destructive Ghost
+            </button>
+<button class="w-9 h-9 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface flex items-center justify-center transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<button class="px-space-16 py-space-8 rounded bg-surface-container text-on-surface-variant/40 font-label-md text-label-md cursor-not-allowed" disabled="">
+              Locked State
+            </button>
+</div>
+<div class="mt-space-8 pt-space-16 bg-surface-container-lowest p-space-12 rounded space-y-space-12">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary block">Form Field &amp; Selector States</span>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-12">
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-on-surface-variant font-medium">Input (Resting)</label>
+<input class="h-9 px-space-12 bg-surface-container-low rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-colors" type="text" value="Enterprise Prompt Template v2"/>
+</div>
+<div class="flex flex-col gap-space-4">
+<label class="font-label-sm text-label-sm text-primary font-medium">Input (Active Focus)</label>
+<input class="h-9 px-space-12 bg-surface-container-lowest rounded font-body-sm text-body-sm text-on-surface shadow-sm focus:outline-none" type="text" value="Angle: GovTech Data Sovereignty"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Status Badges & Cryptographic Chips -->
+<div class="bg-surface-container-low rounded-lg p-space-20 flex flex-col gap-space-16">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Status Badges, Trust Seals &amp; Audit Chips</span>
+<div class="flex flex-wrap items-center gap-space-8">
+<span class="inline-flex items-center gap-space-4 px-space-8 py-space-4 rounded bg-tertiary/10 text-tertiary font-code-sm text-code-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+              RSA-SHA256 SIGNED
+            </span>
+<span class="inline-flex items-center gap-space-4 px-space-8 py-space-4 rounded bg-primary-container/10 text-primary font-code-sm text-code-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+              GovSafe Tier 3
+            </span>
+<span class="inline-flex items-center gap-space-4 px-space-8 py-space-4 rounded bg-surface-container-high text-secondary font-code-sm text-code-sm font-medium">
+              Audit Pending (48h)
+            </span>
+<span class="inline-flex items-center gap-space-4 px-space-8 py-space-4 rounded bg-error/10 text-error font-code-sm text-code-sm font-semibold">
+              Non-Compliant Claim
+            </span>
+</div>
+<!-- Cryptographic Copyable Chip Component -->
+<div class="p-space-12 rounded bg-surface-container-lowest shadow-sm flex flex-col gap-space-8">
+<div class="flex items-center justify-between text-secondary">
+<span class="font-label-sm text-label-sm uppercase">Canonical Hash Verification Chip</span>
+<span class="font-code-sm text-code-sm text-tertiary font-medium">ECDSA-P256</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low p-space-8 rounded font-code-sm text-code-sm text-on-surface font-mono">
+<div class="flex items-center gap-space-8 truncate">
+<span class="material-symbols-outlined text-[16px] text-primary">fingerprint</span>
+<span class="truncate">SHA256: 9f8a3c01b...72ed084e4f01</span>
+</div>
+<button class="p-space-4 hover:bg-surface-container rounded text-on-surface-variant transition-colors" onclick="navigator.clipboard.writeText('SHA256:9f8a3c01be2409f872ed084e4f01'); alert('Cryptographic Hash copied!');" title="Copy Checksum">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+</div>
+<!-- Live Sample KPI Metric Card Specimen -->
+<div class="p-space-16 rounded bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase">Compliance Density Rate</span>
+<div class="flex items-baseline gap-space-8 mt-space-4">
+<span class="font-display-lg text-headline-lg font-bold text-on-surface">99.4%</span>
+<span class="font-code-sm text-code-sm text-tertiary font-semibold">+1.8% vs benchmark</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant mt-space-2">GovSafe Target: &gt;98.0%</span>
+</div>
+<!-- Micro SVG Sparkline (Under 2KB, semantic colors) -->
+<div class="w-24 h-10 shrink-0">
+<svg class="w-full h-full" fill="none" preserveaspectratio="none" viewbox="0 0 100 40">
+<path d="M0 32 L20 28 L40 30 L60 18 L80 12 L100 6" stroke="#006948" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<path d="M0 32 L20 28 L40 30 L60 18 L80 12 L100 6 L100 40 L0 40 Z" fill="#006948" fill-opacity="0.1"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 5: Multi-Tier Architecture Pipeline (M1-M4) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-24 shadow-sm flex flex-col gap-space-24">
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-space-16 bg-surface-container-low p-space-16 rounded-lg">
+<div class="flex items-center gap-space-12">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold text-label-md">05</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">System Generation Pipeline &amp; Audit Architecture</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Deterministic flow from Enterprise Context ingestion down to cryptographic release.</p>
+</div>
+</div>
+<div class="flex items-center gap-space-8 mt-space-8 md:mt-0">
+<span class="px-space-8 py-space-2 rounded bg-tertiary-container/10 text-tertiary font-code-sm text-code-sm font-semibold">Stage M1 through M4 Active</span>
+</div>
+</div>
+<!-- Pipeline Step Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-16">
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12 relative overflow-hidden">
+<div class="space-y-space-4">
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm px-space-8 py-space-2 rounded bg-surface-container font-semibold text-primary">TIER M1</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">database</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold pt-space-8">Context Engine</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Ingests raw company positioning, verified product datasheets, GovTech accreditation proofs, and persona constraints.
+            </p>
+</div>
+<div class="bg-surface-container-lowest p-space-8 rounded font-code-sm text-code-sm text-secondary">
+            Output: Immutable Vector Graph
+          </div>
+</div>
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12 relative overflow-hidden">
+<div class="space-y-space-4">
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm px-space-8 py-space-2 rounded bg-surface-container font-semibold text-primary">TIER M2</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">alt_route</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold pt-space-8">Angle Generator</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Synthesizes 12 deterministic marketing vectors without creative hallucination, bound to sovereign strategic intents.
+            </p>
+</div>
+<div class="bg-surface-container-lowest p-space-8 rounded font-code-sm text-code-sm text-secondary">
+            Output: Evaluated Angle Vectors
+          </div>
+</div>
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12 relative overflow-hidden">
+<div class="space-y-space-4">
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm px-space-8 py-space-2 rounded bg-surface-container font-semibold text-primary">TIER M3</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">auto_stories</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold pt-space-8">Composer Core</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Drafts high-density content blocks across LinkedIn, GovBriefings, Press Kits, and Technical Memos using tone tokens.
+            </p>
+</div>
+<div class="bg-surface-container-lowest p-space-8 rounded font-code-sm text-code-sm text-secondary">
+            Output: Markdown Draft Candidates
+          </div>
+</div>
+<div class="p-space-16 rounded-lg bg-surface-container-low flex flex-col justify-between gap-space-12 relative overflow-hidden">
+<div class="space-y-space-4">
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm px-space-8 py-space-2 rounded bg-tertiary-container/20 font-semibold text-tertiary">TIER M4</span>
+<span class="material-symbols-outlined text-[18px] text-tertiary">fact_check</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold pt-space-8">Sovereign Auditor</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Runs AST checks for forbidden consumer fluff, validates NIST compliance, and signs candidate drafts with an RSA key.
+            </p>
+</div>
+<div class="bg-surface-container-lowest p-space-8 rounded font-code-sm text-code-sm text-tertiary font-medium">
+            Output: RSA Signed Audit Bundle
+          </div>
+</div>
+</div>
+</div>
+<!-- Section 6: Asset Bundles & Certification Seal Footer -->
+<div class="p-space-24 rounded-xl bg-surface-container-high flex flex-col lg:flex-row items-center justify-between gap-space-24 shadow-sm">
+<div class="flex items-center gap-space-20">
+<div class="w-16 h-16 rounded-xl bg-surface-container-lowest p-space-12 flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[32px] text-primary">verified</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-8">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">Brand Safety &amp; Integrity Attestation</span>
+<span class="px-space-8 py-space-2 rounded bg-tertiary/10 text-tertiary font-code-sm text-code-sm font-semibold">TIER-1 AUDITED</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-4 max-w-2xl">
+            This workspace specification is certified compliant with Shifd Labs Enterprise Governance Directive 2025.4. No external stylesheet overrides permitted outside Tailwind design tokens.
+          </p>
+</div>
+</div>
+<div class="flex items-center gap-space-12 shrink-0">
+<div class="flex flex-col text-right font-code-sm text-code-sm text-on-surface-variant">
+<span>SPEC HASH: e47b...9a12</span>
+<span class="text-tertiary font-medium">STATUS: ENFORCED</span>
+</div>
+<button class="px-space-16 py-space-8 rounded bg-surface-container-lowest hover:bg-surface text-on-surface font-label-md text-label-md transition-colors shadow-sm" onclick="alert('Specification verification complete. All 48 design tokens match production distribution.');">
+          Verify Integrity
+        </button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

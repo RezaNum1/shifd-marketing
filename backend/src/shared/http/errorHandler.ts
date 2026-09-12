@@ -16,8 +16,8 @@ export function registerErrorHandler(app: FastifyInstance) {
     const statusCode = appError?.statusCode ?? (error.statusCode && error.statusCode >= 400 ? error.statusCode : 500)
     const body: ErrorBody = {
       error: {
-        code: appError?.code ?? (statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR'),
-        message: appError?.message ?? (statusCode === 404 ? 'The requested route was not found.' : 'An unexpected error occurred.'),
+        code: appError?.code ?? (statusCode === 404 ? 'NOT_FOUND' : statusCode === 429 ? 'RATE_LIMITED' : 'INTERNAL_ERROR'),
+        message: appError?.message ?? (statusCode === 404 ? 'The requested route was not found.' : statusCode === 429 ? 'Too many requests.' : 'An unexpected error occurred.'),
         ...(appError?.fields ? { fields: appError.fields } : {}),
         requestId: request.id,
       },
