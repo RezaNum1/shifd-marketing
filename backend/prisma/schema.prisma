@@ -29,6 +29,10 @@ model Company {
   updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   version             Int           @default(1)
   users               User[]
+  brandProfile        BrandProfile?
+  bmcBlocks           BmcBlock[]
+  products            Product[]
+  idempotencyRecords  RequestIdempotency[]
 
   @@map("companies")
 }
@@ -67,4 +71,112 @@ model AuthSession {
   @@index([expiresAt])
   @@index([absoluteExpiresAt])
   @@map("auth_sessions")
+}
+
+model BrandProfile {
+  companyId                 String   @id @map("company_id") @db.Uuid
+  brandVoice                String?  @map("brand_voice")
+  toneDescription           String?  @map("tone_description")
+  preferredLanguage         String   @default("English") @map("preferred_language")
+  communicationGuidelines   String[] @default([]) @map("communication_guidelines")
+  preferredTerms            String[] @default([]) @map("preferred_terms")
+  thingsToAvoid             String[] @default([]) @map("things_to_avoid")
+  ctaStyle                  String?  @map("cta_style")
+  brandKeywords             String[] @default([]) @map("brand_keywords")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                   Int      @default(1)
+  company                   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@map("brand_profiles")
+}
+
+model BmcBlock {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  type        String
+  entries     String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version     Int      @default(1)
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, type])
+  @@index([companyId])
+  @@map("bmc_blocks")
+}
+
+model Product {
+  id          String         @id @default(uuid()) @db.Uuid
+  companyId   String         @map("company_id") @db.Uuid
+  name        String
+  slug        String
+  description String
+  category    String?
+  status      String
+  url         String?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version     Int            @default(1)
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profile     ProductProfile?
+
+  @@unique([companyId, slug])
+  @@unique([companyId, id])
+  @@index([companyId, status])
+  @@map("products")
+}
+
+model ProductProfile {
+  productId             String   @id @map("product_id") @db.Uuid
+  targetUsers           String[] @default([]) @map("target_users")
+  targetOrganizations   String[] @default([]) @map("target_organizations")
+  decisionMakers        String[] @default([]) @map("decision_makers")
+  problemsAddressed     String[] @default([]) @map("problems_addressed")
+  valueProposition      String?  @map("value_proposition")
+  features              String[] @default([])
+  benefits              String[] @default([])
+  differentiators       String[] @default([])
+  useCases              String[] @default([]) @map("use_cases")
+  campaignObjective     String?  @map("campaign_objective")
+  positioning           String?
+  keyMessages           String[] @default([]) @map("key_messages")
+  proofPoints           String[] @default([]) @map("proof_points")
+  defaultCta            String?  @map("default_cta")
+  inheritCompanyTone    Boolean  @default(true) @map("inherit_company_tone")
+  toneOverride          String?  @map("tone_override")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version               Int      @default(1)
+  product               Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("product_profiles")
+}
+
+model ContentPillar {
+  code      String  @id
+  label     String
+  sortOrder Int     @unique @map("sort_order")
+  active    Boolean @default(true)
+
+  @@unique([label])
+  @@map("content_pillars")
+}
+
+model RequestIdempotency {
+  id             String   @id @default(uuid()) @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  operation      String
+  key            String
+  requestHash    String   @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  resourceId     String   @map("resource_id") @db.Uuid
+  responseEtag   String?  @map("response_etag")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, operation, key])
+  @@index([companyId, createdAt])
+  @@map("request_idempotency")
 }
