@@ -15,11 +15,15 @@ import { contentRoutes } from './modules/content/routes.js'
 import multipart from '@fastify/multipart'
 import { assetRoutes } from './modules/assets/routes.js'
 import { LocalAssetStorage } from './modules/assets/storage.js'
+import { AnthropicAiProvider } from './modules/ai/anthropic.js'
+import { aiRoutes } from './modules/ai/routes.js'
+import type { AiProvider } from './modules/ai/provider.js'
 
 export interface BuildAppOptions {
   config: AppConfig
   logger?: boolean
   connectDatabase?: boolean
+  aiProvider?: AiProvider
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -45,7 +49,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(authPlugin, { config: options.config })
   await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
-  await app.register(contentRoutes, { config: options.config, prefix: '/api' })
+  const aiProvider = options.aiProvider ?? new AnthropicAiProvider(options.config)
+  await app.register(contentRoutes, { config: options.config, aiProvider, prefix: '/api' })
+  await app.register(aiRoutes, { config: options.config, prefix: '/api' })
   await app.register(assetRoutes, { config: options.config, storage: assetStorage, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })
   return app

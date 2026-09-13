@@ -12,6 +12,8 @@ import {
   updateIdea, updateVariantCopy,
 } from './service.js'
 import { decodeCursor, etag } from '../context/service.js'
+import type { AiProvider } from '../ai/provider.js'
+import { generateContent } from '../ai/service.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -19,7 +21,7 @@ const masterKeys = ['title', 'coreMessage', 'hook', 'body', 'cta'] as const
 const visualDirectionKeys = ['format', 'concept', 'structure', 'notes'] as const
 const variantCopyKeys = ['copy', 'cta', 'hashtags', 'visualRecommendation'] as const
 
-export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig }) {
+export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider }) {
   app.get('/content-ideas', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = queryObject(request)
@@ -110,6 +112,26 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     const result = await createContent(app.prisma, auth.user.companyId, auth.user.id, parseContentCreate(request.body), idempotencyKey(request), request.id)
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
+  app.post('/contents/:id/generate', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    requireEmptyBody(request.body)
+    const result = await generateContent(
+      app.prisma,
+      options.config,
+      options.aiProvider,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      idempotencyKey(request),
+      request.id,
+    )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
   })

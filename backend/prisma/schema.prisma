@@ -36,6 +36,8 @@ model Company {
   contents             Content[]
   idempotencyRecords   RequestIdempotency[]
   assets               CreativeAsset[]
+  aiSettings           AiSettings?
+  aiRequests           AiRequestLog[]
 
   @@map("companies")
 }
@@ -57,6 +59,7 @@ model User {
   contents       Content[]
   contentEvents  ContentEvent[]
   uploadedAssets CreativeAsset[]
+  aiRequests     AiRequestLog[]
 
   @@index([companyId])
   @@map("users")
@@ -228,6 +231,7 @@ model Content {
   brief             ContentBrief?
   variants          PlatformVariant[]
   events            ContentEvent[]
+  aiRequests        AiRequestLog[]
 
   @@unique([companyId, id])
   @@index([companyId, updatedAt, id])
@@ -272,6 +276,7 @@ model PlatformVariant {
   updatedAt                  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   content                    Content           @relation(fields: [contentId], references: [id], onDelete: Restrict)
   events                     ContentEvent[]
+  aiRequests                 AiRequestLog[]
   assetLinks                 VariantAsset[]
   reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
   reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
@@ -349,10 +354,102 @@ model RequestIdempotency {
   responseBody   Json     @map("response_body")
   resourceId     String   @map("resource_id") @db.Uuid
   responseEtag   String?  @map("response_etag")
+  aiRequestId    String?  @unique @map("ai_request_id") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  aiRequest      AiRequestLog? @relation("RequestIdempotencyAiRequest", fields: [aiRequestId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, operation, key])
   @@index([companyId, createdAt])
   @@map("request_idempotency")
+}
+
+model AiSettings {
+  companyId          String   @id @map("company_id") @db.Uuid
+  provider           String
+  modelId            String?  @map("model_id")
+  modelDisplayName   String   @map("model_display_name")
+  generationLanguage String   @default("English") @map("generation_language")
+  mode               String   @default("real")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version            Int      @default(1)
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@map("ai_settings")
+}
+
+model PromptVersion {
+  id                 String         @id @default(uuid()) @db.Uuid
+  module             String
+  operation          String
+  version            String
+  status             String
+  templateReference  String         @map("template_reference")
+  templateDigest     String         @map("template_digest")
+  outputSchemaVersion String        @map("output_schema_version")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  aiRequests         AiRequestLog[]
+
+  @@unique([module, version])
+  @@index([module, status])
+  @@map("prompt_versions")
+}
+
+model AiRequestLog {
+  id                 String          @id @default(uuid()) @db.Uuid
+  companyId          String          @map("company_id") @db.Uuid
+  contentId          String?         @map("content_id") @db.Uuid
+  variantId          String?         @map("variant_id") @db.Uuid
+  requestedBy        String          @map("requested_by") @db.Uuid
+  promptVersionId    String          @map("prompt_version_id") @db.Uuid
+  module             String
+  operation          String
+  provider           String
+  model              String
+  mode               String
+  language           String
+  editorialRevision  Int?            @map("editorial_revision")
+  variantRevision    Int?            @map("variant_revision")
+  inputHash          String          @map("input_hash")
+  inputSnapshot      Json            @map("input_snapshot")
+  inputTokens        BigInt?         @map("input_tokens")
+  outputTokens       BigInt?         @map("output_tokens")
+  estimatedCostUsd   Decimal?        @map("estimated_cost_usd") @db.Decimal(18, 8)
+  costBasis          Json?           @map("cost_basis")
+  latencyMs          Int?            @map("latency_ms")
+  status             String
+  errorCode          String?         @map("error_code")
+  errorMessage       String?         @map("error_message")
+  providerRequestId  String?         @map("provider_request_id")
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt        DateTime?       @map("completed_at") @db.Timestamptz(3)
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  content            Content?        @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  variant            PlatformVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  requester          User            @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  promptVersion      PromptVersion   @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  idempotency        RequestIdempotency? @relation("RequestIdempotencyAiRequest")
+
+  @@index([companyId, createdAt, id])
+  @@index([contentId, createdAt])
+  @@index([status])
+  @@map("ai_request_logs")
+}
+
+model AiRateVersion {
+  id                 String   @id @default(uuid()) @db.Uuid
+  provider           String
+  model              String
+  version            String
+  inputUsdPerMillion  Decimal  @map("input_usd_per_million") @db.Decimal(18, 8)
+  outputUsdPerMillion Decimal  @map("output_usd_per_million") @db.Decimal(18, 8)
+  effectiveFrom      DateTime @map("effective_from") @db.Timestamptz(3)
+  sourceReference    String   @map("source_reference")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([provider, model, version])
+  @@index([provider, model, effectiveFrom])
+  @@map("ai_rate_versions")
 }

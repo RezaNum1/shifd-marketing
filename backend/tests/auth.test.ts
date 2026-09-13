@@ -44,10 +44,12 @@ runIntegration('Phase 2 authentication', () => {
     if (userId) await prisma.user.delete({ where: { id: userId } })
     if (companyId) {
       await prisma.requestIdempotency.deleteMany({ where: { companyId } })
+      await prisma.aiRequestLog.deleteMany({ where: { companyId } })
       await prisma.productProfile.deleteMany({ where: { product: { companyId } } })
       await prisma.product.deleteMany({ where: { companyId } })
       await prisma.bmcBlock.deleteMany({ where: { companyId } })
       await prisma.brandProfile.deleteMany({ where: { companyId } })
+      await prisma.aiSettings.deleteMany({ where: { companyId } })
       await prisma.company.delete({ where: { id: companyId } })
     }
     await prisma.$disconnect()

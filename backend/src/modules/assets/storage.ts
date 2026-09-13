@@ -23,6 +23,13 @@ export interface InspectedImage {
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
 
+// Asset validation only loads the two formats accepted by the domain. Sharp's
+// documented libvips operation controls provide a process-wide decoder
+// allowlist; keep it next to the storage boundary so future image consumers do
+// not accidentally broaden this untrusted-upload surface.
+sharp.block({ operation: ['VipsForeignLoad'] })
+sharp.unblock({ operation: ['VipsForeignLoadJpegFile', 'VipsForeignLoadPngFile'] })
+
 export class AssetTooLargeError extends Error {
   constructor() {
     super('The uploaded file is too large.')

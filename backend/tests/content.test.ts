@@ -91,11 +91,13 @@ async function removeCompany(company: string) {
   await prisma.content.deleteMany({ where: { companyId: company } })
   await prisma.contentIdea.deleteMany({ where: { companyId: company } })
   await prisma.requestIdempotency.deleteMany({ where: { companyId: company } })
+  await prisma.aiRequestLog.deleteMany({ where: { companyId: company } })
   await prisma.productProfile.deleteMany({ where: { product: { companyId: company } } })
   await prisma.product.deleteMany({ where: { companyId: company } })
   await prisma.authSession.deleteMany({ where: { user: { companyId: company } } })
   await prisma.bmcBlock.deleteMany({ where: { companyId: company } })
   await prisma.brandProfile.deleteMany({ where: { companyId: company } })
+  await prisma.aiSettings.deleteMany({ where: { companyId: company } })
   await prisma.user.deleteMany({ where: { companyId: company } })
   await prisma.company.deleteMany({ where: { id: company } })
 }

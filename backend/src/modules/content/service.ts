@@ -262,7 +262,11 @@ export async function createContent(prisma: PrismaClient, companyId: string, act
 }
 
 export async function readContent(prisma: PrismaClient, companyId: string, contentId: string) {
-  return mapContent(await getContentAggregate(prisma, companyId, contentId))
+  return readContentFromDb(prisma, companyId, contentId)
+}
+
+export async function readContentFromDb(db: Db, companyId: string, contentId: string) {
+  return mapContent(await getContentAggregate(db, companyId, contentId))
 }
 
 export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions) {
@@ -623,7 +627,7 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
   }
 }
 
-function mapContent(content: CompleteContentRow) {
+export function mapContent(content: CompleteContentRow) {
   const master = decodeMaster(content.masterContent)
   const direction = decodeVisualDirection(content.visualDirection)
   return {

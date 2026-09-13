@@ -3,7 +3,8 @@ import { conflict, idempotencyConflict, notFound, revisionConflict, validationEr
 import { BMC_TITLES, BMC_TYPES, type BmcType } from './constants.js'
 import { requestHash } from './normalize.js'
 
-type Db = PrismaClient | Prisma.TransactionClient
+export type ContextDb = PrismaClient | Prisma.TransactionClient
+type Db = ContextDb
 type ProductWithProfile = Prisma.ProductGetPayload<{ include: { profile: true } }> & {
   profile: NonNullable<Prisma.ProductGetPayload<{ include: { profile: true } }>['profile']>
 }
@@ -82,6 +83,11 @@ export async function provisionCompanyContext(db: Db, companyId: string) {
     data: BMC_TYPES.map((type) => ({ companyId, type })),
     skipDuplicates: true,
   })
+  await db.aiSettings.upsert({
+    where: { companyId },
+    create: { companyId, provider: 'anthropic', modelDisplayName: 'Claude', generationLanguage: 'English', mode: 'real' },
+    update: {},
+  })
 }
 
 export async function readCompanyContext(db: Db, companyId: string) {
@@ -151,7 +157,7 @@ export async function updateCompanyContext(prisma: PrismaClient, companyId: stri
   })
 }
 
-export async function readProduct(prisma: PrismaClient, companyId: string, productId: string) {
+export async function readProduct(prisma: ContextDb, companyId: string, productId: string) {
   const product = await prisma.product.findFirst({ where: { id: productId, companyId }, include: { profile: true } })
   if (!product || !product.profile) throw notFound()
   return mapProduct(product)
@@ -254,27 +260,25 @@ export async function updateProduct(prisma: PrismaClient, companyId: string, pro
 }
 
 export async function readResolvedContext(prisma: PrismaClient, companyId: string, productId?: string) {
-  return prisma.$transaction(async (tx) => {
-    const company = await readCompanyContext(tx, companyId)
-    let product: ReturnType<typeof mapProduct> | null = null
-    if (productId) {
-      const row = await tx.product.findFirst({ where: { id: productId, companyId }, include: { profile: true } })
-      if (!row || !row.profile) throw notFound()
-      product = mapProduct(row)
-    }
-    const override = product && !product.profile.inheritCompanyTone && Boolean(product.profile.toneOverride?.trim())
-    return {
-      company,
-      product,
-      resolvedBrand: {
-        brandVoice: override ? product!.profile.toneOverride : company.brand.brandVoice,
-        ctaStyle: company.brand.ctaStyle,
-        preferredLanguage: company.brand.preferredLanguage,
-      },
-      toneSource: override ? 'product_override' as const : 'company' as const,
-      versions: { company: company.contextVersion, product: product?.version ?? null },
-    }
-  })
+  return prisma.$transaction((tx) => readResolvedContextFromDb(tx, companyId, productId))
+}
+
+export async function readResolvedContextFromDb(db: ContextDb, companyId: string, productId?: string) {
+  const company = await readCompanyContext(db, companyId)
+  let product: ReturnType<typeof mapProduct> | null = null
+  if (productId) product = await readProduct(db, companyId, productId)
+  const override = product && !product.profile.inheritCompanyTone && Boolean(product.profile.toneOverride?.trim())
+  return {
+    company,
+    product,
+    resolvedBrand: {
+      brandVoice: override ? product!.profile.toneOverride : company.brand.brandVoice,
+      ctaStyle: company.brand.ctaStyle,
+      preferredLanguage: company.brand.preferredLanguage,
+    },
+    toneSource: override ? 'product_override' as const : 'company' as const,
+    versions: { company: company.contextVersion, product: product?.version ?? null },
+  }
 }
 
 export async function readTaxonomy(prisma: PrismaClient) {
@@ -342,7 +346,7 @@ function mapCompanyContext(company: CompanyWithContext) {
   }
 }
 
-function mapProduct(product: { id: string; companyId: string; name: string; slug: string; description: string; category: string | null; status: string; url: string | null; createdAt: Date; updatedAt: Date; version: number; profile: { targetUsers: string[]; targetOrganizations: string[]; decisionMakers: string[]; problemsAddressed: string[]; valueProposition: string | null; features: string[]; benefits: string[]; differentiators: string[]; useCases: string[]; campaignObjective: string | null; positioning: string | null; keyMessages: string[]; proofPoints: string[]; defaultCta: string | null; inheritCompanyTone: boolean; toneOverride: string | null } | null }) {
+export function mapProduct(product: { id: string; companyId: string; name: string; slug: string; description: string; category: string | null; status: string; url: string | null; createdAt: Date; updatedAt: Date; version: number; profile: { targetUsers: string[]; targetOrganizations: string[]; decisionMakers: string[]; problemsAddressed: string[]; valueProposition: string | null; features: string[]; benefits: string[]; differentiators: string[]; useCases: string[]; campaignObjective: string | null; positioning: string | null; keyMessages: string[]; proofPoints: string[]; defaultCta: string | null; inheritCompanyTone: boolean; toneOverride: string | null } | null }) {
   if (!product.profile) throw notFound()
   return {
     id: product.id, companyId: product.companyId, name: product.name, slug: product.slug, description: product.description,

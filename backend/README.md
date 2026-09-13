@@ -1,6 +1,9 @@
 # Shifd Marketing Backend
 
-Phase 5 adds the private local Asset boundary and creative reuse to the Phase 4 Ideas and editorial Content foundation. It does not call AI, upload to a cloud provider, integrate Canva, or include Claude or any later assessment, review, scheduling, publication, or performance domain.
+Phase 6 adds the M2 Claude Guided Content Generator to the Phase 1–5
+foundations. M2 is server-controlled, produces Master Content and Visual
+Direction only, and does not generate platform variants, approve Content, or
+create images.
 
 ## Prerequisites
 
@@ -21,6 +24,13 @@ Set `DATABASE_URL` to a PostgreSQL database and keep `ALLOWED_ORIGIN` explicit. 
 
 Phase 5 asset configuration is validated at startup. `ASSET_STORAGE_ROOT` selects a private persistent local filesystem directory (default `./data/assets`); it is never returned to clients or served statically. The D-05 prototype defaults are `ASSET_MAX_BYTES=10485760`, `ASSET_MAX_WIDTH=8192`, `ASSET_MAX_HEIGHT=8192`, and `ASSET_UNATTACHED_GRACE_HOURS=168`.
 
+Phase 6 AI configuration is server-only. `ANTHROPIC_API_KEY` and
+`ANTHROPIC_MODEL` are optional at startup and are never accepted from HTTP
+requests or stored in PostgreSQL. `AI_REQUEST_TIMEOUT_MS` defaults to `60000`
+and `AI_MAX_OUTPUT_TOKENS` defaults to `2048`; both are validated at startup.
+The company AI setting stores only generation language for the user. Provider,
+model, and mode remain operator-controlled.
+
 ## Local PostgreSQL
 
 Start the PostgreSQL-only development service with Docker Compose:
@@ -39,7 +49,7 @@ npm run db:generate
 npm run dev
 ```
 
-Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, and Phase 5 asset constraints are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
+Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
 
 For explicit local database verification, run this sequence after PostgreSQL is up and `.env` exists:
 
@@ -56,6 +66,8 @@ npm run test:auth
 npm run test:context
 npm run test:content
 npm run test:assets
+npm run ai:seed
+npm run test:ai
 npm run test:unit
 npm run build
 ```
@@ -73,7 +85,10 @@ npm run build
 - `npm run test:context` — required database-backed Phase 3 Company/Product Context integration tests
 - `npm run test:content` — required database-backed Phase 4 Ideas and Content integration tests
 - `npm run test:assets` — required real PostgreSQL plus private-filesystem Phase 5 Asset integration tests
+- `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; it never calls Anthropic
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
+- `npm run ai:seed` — idempotently registers and verifies the immutable M2 v1 prompt metadata/digest
+- `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
 
@@ -90,6 +105,7 @@ src/modules/auth           password, session, CSRF, bootstrap and auth routes
 src/modules/context        Company/Product Context and taxonomy
 src/modules/content        Ideas, Content, Briefs, Variants and Events
 src/modules/assets         private AssetStorage, upload/read/attach/reuse/delete/cleanup
+src/modules/ai             M2 provider, prompt, settings, generation, logs and usage
 src/shared/errors          focused application errors
 src/shared/http            sanitized error/not-found handlers
 src/modules/health         liveness route
@@ -124,7 +140,7 @@ Brief context and Product ownership live on Content. Product and Company names r
 
 Idea creation/duplication and Content creation/duplication require `Idempotency-Key`. The bounded Phase 3 `request_idempotency` table scopes keys by authenticated Company and operation, hashes normalized request data including duplicate preconditions, and stores the original response only after the domain transaction commits. Same-key retries replay the original resource; a different request returns `IDEMPOTENCY_CONFLICT`. This is command replay, not an AI request lifecycle.
 
-Content Events are append-only audit records for accepted user commands: `brief_created`, `content_updated`, `variant_updated`, `progress_changed`, `content_duplicated`, and `content_archived`. They never determine current state and carry concise metadata only. Content duplication creates new Content/Brief/Variant IDs, stays Draft, copies available editorial data and `sourceIdeaId` provenance, and does not consume the source Idea. Archive is soft and preserves Briefs, Variants, Events, and Idea links.
+Content Events are append-only audit records for accepted user commands: `brief_created`, `content_updated`, `variant_updated`, `progress_changed`, `content_duplicated`, and `content_archived`. Phase 6 also records successful M2 generation as `ai_generated`. They never determine current state and carry concise metadata only. Content duplication creates new Content/Brief/Variant IDs, stays Draft, copies available editorial data and `sourceIdeaId` provenance, and does not consume the source Idea. Archive is soft and preserves Briefs, Variants, Events, and Idea links.
 
 ## Phase 5 Assets and creative reuse
 
@@ -137,6 +153,57 @@ Asset attachment and reuse commands use the parent Content ETag/`If-Match`, incr
 `GET /api/assets/:id` and the authenticated content endpoint are Company scoped. `DELETE /api/assets/:id` is allowed only for unreferenced Assets, marks pending deletion before removing private bytes, and does not detach anything automatically. Failed physical deletion remains retryable as `pending_delete` and is not reported as successful. `npm run assets:cleanup` is the bounded operator maintenance command; it lock/rechecks references, respects the seven-day grace period, supports `--dry-run`, and removes only expired unattached Assets. It also cleans stale temporary upload files and expired UUID-named final files left by a process crash before database commit, after comparing them with all known metadata keys. Local storage is persistent only while `ASSET_STORAGE_ROOT` is preserved; deployments should mount that directory as a private volume.
 
 Phase 5 completes the approved D-03 compatibility gate without inventing Human Review: when `designStatus` is not `ready`, asset absence does not block `ready_for_review`; when it is `ready`, each enabled Variant needs at least one effective creative Asset, and reuse counts. Master and current enabled Variant adaptations remain required. Approval, assessment, and asset-specific future workflow remain deferred.
+
+## Phase 6 M2 Claude generation
+
+M2 is the only AI execution implemented. `POST /api/contents/:id/generate`
+accepts `{}` only and requires the authenticated session, valid Origin, CSRF,
+current Content `If-Match`, and `Idempotency-Key`. It resolves live Company and
+Product context, the saved Brief, server-side AI settings, and the active M2
+prompt version. It writes one validated Master and Visual Direction document;
+it does not generate platform variants, call M3/M4, approve Content, or create
+images. Saving a Content or reading context does not call AI.
+
+The production boundary is `AiProvider`; `AnthropicAiProvider` uses the
+official `@anthropic-ai/sdk` with server-only credentials, a bounded timeout,
+the configured output-token limit, and retries disabled. The provider receives
+only a prompt composed from a canonical input snapshot. Company/Product/Brief
+text is placed in explicit DATA sections, with no browsing, tools, URL fetches,
+or external enrichment. An injected deterministic provider is used only by
+`tests/ai.test.ts`; normal tests never incur Claude cost.
+
+`POST /api/contents/:id/generate` uses a short Phase A transaction to lock and
+validate Content, resolve context/settings/prompt, hash and store the protected
+input snapshot, and create a pending `ai_request_logs` row plus idempotency
+link. The database lock is released before the external call. A Phase D
+transaction re-locks Content and compares Content/editorial revisions,
+Company `contextVersion`, Product version, settings version, and context
+identity. Changed input marks the request `stale` and returns `409 INPUT_CHANGED`
+without overwriting Content. Provider failures, timeouts, and invalid
+structured results are logged honestly and do not partially write Master or
+Visual Direction. Pending requests are never automatically retried;
+`npm run ai:recover` marks pending requests older than 15 minutes as
+`AI_INTERRUPTED` failures without making a provider call.
+
+The canonical output is exactly `master` (`title`, `coreMessage`, `hook`,
+`body`, `cta`) plus `visualDirection` (`format`, `concept`, `structure`,
+`notes`). Application validation rejects malformed JSON, unknown fields, blank
+values, and oversized output rather than truncating it. Regeneration replaces
+only Master/Visual Direction, increments Content `version`, `editorialRevision`,
+and `masterRevision` once, sets stage `generated`, and preserves existing
+platform copy, Assets, and adaptation history.
+
+`GET/PUT /api/settings/ai` exposes only the user-editable generation language;
+provider/model/mode are server/operator configuration. Read-only prompt
+metadata is available through `GET /api/prompt-versions` and its detail route;
+prompt text is never returned. `npm run ai:seed` registers M2 `v1` from the
+canonical server resource, verifies its SHA-256 digest, and refuses to mutate
+an existing immutable version. `GET /api/ai-requests` and its detail route
+expose sanitized execution metadata without input snapshots, hashes, raw
+prompts, or secrets. `GET /api/ai-usage` is Company scoped, separates `real`
+and `demo`, uses a half-open period, sums only known token/cost values, and
+reports unknown coverage; no unverified Claude pricing is seeded, so runtime
+cost remains null until a verified rate is configured.
 
 ## Operator bootstrap
 

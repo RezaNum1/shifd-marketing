@@ -92,10 +92,12 @@ runIntegration('Phase 3 Company, Product and Context', () => {
       if (!id) continue
       await prisma.authSession.deleteMany({ where: { user: { companyId: id } } })
       await prisma.requestIdempotency.deleteMany({ where: { companyId: id } })
+      await prisma.aiRequestLog.deleteMany({ where: { companyId: id } })
       await prisma.productProfile.deleteMany({ where: { product: { companyId: id } } })
       await prisma.product.deleteMany({ where: { companyId: id } })
       await prisma.bmcBlock.deleteMany({ where: { companyId: id } })
       await prisma.brandProfile.deleteMany({ where: { companyId: id } })
+      await prisma.aiSettings.deleteMany({ where: { companyId: id } })
       await prisma.user.deleteMany({ where: { companyId: id } })
       await prisma.company.delete({ where: { id } })
     }
