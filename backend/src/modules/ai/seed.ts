@@ -2,15 +2,21 @@ import { Prisma, PrismaClient } from '@prisma/client'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadConfig } from '../../config/env.js'
-import { M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, m3PromptDigest, promptDigest } from './prompt.js'
+import {
+  M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, M4_PROMPT_METADATA,
+  M4_PROMPT_REFERENCE,
+  m3PromptDigest, m4PromptDigest, promptDigest,
+} from './prompt.js'
 
 export async function seedM2Prompt(prisma: PrismaClient) {
   const digest = promptDigest()
   const m3Digest = m3PromptDigest()
+  const m4Digest = m4PromptDigest()
   return prisma.$transaction(async (tx) => {
     const m2 = await ensurePrompt(tx, M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, digest)
     const m3 = await ensurePrompt(tx, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, m3Digest)
-    return { id: m2.id, digest: m2.digest, m3Id: m3.id, m3Digest: m3.digest }
+    const m4 = await ensurePrompt(tx, M4_PROMPT_METADATA, M4_PROMPT_REFERENCE, m4Digest)
+    return { id: m2.id, digest: m2.digest, m3Id: m3.id, m3Digest: m3.digest, m4Id: m4.id, m4Digest: m4.digest }
   })
 }
 
@@ -39,7 +45,7 @@ async function main() {
   try {
     await prisma.$connect()
     const result = await seedM2Prompt(prisma)
-    console.log(`M2/M3 prompt seed verified: ${M2_PROMPT_REFERENCE} ${result.digest}; ${M3_PROMPT_REFERENCE} ${result.m3Digest}`)
+    console.log(`M2/M3/M4 prompt seed verified: ${M2_PROMPT_REFERENCE} ${result.digest}; ${M3_PROMPT_REFERENCE} ${result.m3Digest}; ${M4_PROMPT_REFERENCE} ${result.m4Digest}`)
   } finally {
     await prisma.$disconnect()
   }

@@ -193,8 +193,7 @@ runIntegration('Phase 6 M2 Claude guided generation', () => {
     expect((await app.inject({ method: 'POST', url: `/api/contents/${contentId}/generate`, headers: mutationHeaders(auth), payload: {} })).statusCode).toBe(428)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${contentId}/generate`, headers: { ...mutationHeaders(auth, 1) }, payload: {} })).statusCode).toBe(400)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${contentId}/generate`, headers: { ...mutationHeaders(other, 1), 'idempotency-key': 'wrong-company' }, payload: {} })).statusCode).toBe(404)
-    // M3 owns the adaptation route after Phase 7; M4 remains outside scope.
-    expect((await app.inject({ method: 'POST', url: `/api/contents/${contentId}/brand-check`, headers: { ...mutationHeaders(auth, 1), 'idempotency-key': 'future-check' }, payload: {} })).statusCode).toBe(404)
+    // M3/M4 own their operation-specific routes; Human Review remains outside scope.
   })
 
   it('AI14-AI30/AI37/AI44-AI48/AI51-AI53: writes validated Master evidence exactly once and replays safely', async () => {

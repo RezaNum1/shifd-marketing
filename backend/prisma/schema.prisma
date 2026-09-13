@@ -278,6 +278,9 @@ model PlatformVariant {
   events                     ContentEvent[]
   aiRequests                 AiRequestLog[]
   assetLinks                 VariantAsset[]
+  assessments                BrandAssessment[] @relation("VariantAssessments")
+  currentAssessmentId       String?           @map("current_assessment_id") @db.Uuid
+  currentAssessment          BrandAssessment?  @relation("VariantCurrentAssessment", fields: [id, currentAssessmentId], references: [variantId, id], onDelete: Restrict)
   reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
   reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
 
@@ -285,6 +288,26 @@ model PlatformVariant {
   @@unique([contentId, id])
   @@index([contentId])
   @@map("platform_variants")
+}
+
+model BrandAssessment {
+  id                    String           @id @default(uuid()) @db.Uuid
+  variantId             String           @map("variant_id") @db.Uuid
+  variantRevision       Int              @map("variant_revision")
+  inputHash             String           @map("input_hash")
+  aiRequestId           String           @unique @map("ai_request_id") @db.Uuid
+  score                 Int
+  result                String
+  recommendation        String
+  checks                Json
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  variant               PlatformVariant  @relation("VariantAssessments", fields: [variantId], references: [id], onDelete: Restrict)
+  aiRequest             AiRequestLog     @relation(fields: [aiRequestId], references: [id], onDelete: Restrict)
+  currentForVariants    PlatformVariant[] @relation("VariantCurrentAssessment")
+
+  @@unique([variantId, id])
+  @@index([variantId, createdAt])
+  @@map("brand_assessments")
 }
 
 model CreativeAsset {
@@ -431,6 +454,7 @@ model AiRequestLog {
   requester          User            @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
   promptVersion      PromptVersion   @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
   idempotency        RequestIdempotency? @relation("RequestIdempotencyAiRequest")
+  brandAssessment    BrandAssessment?
 
   @@index([companyId, createdAt, id])
   @@index([contentId, createdAt])

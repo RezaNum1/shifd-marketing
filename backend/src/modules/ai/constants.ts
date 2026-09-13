@@ -4,6 +4,9 @@ export const AI_PROVIDER = 'anthropic' as const
 export const M3_MODULE = 'M3' as const
 export const M3_OPERATION = 'adapt' as const
 export const M3_ADAPT_OPERATION = 'content.adapt' as const
+export const M4_MODULE = 'M4' as const
+export const M4_OPERATION = 'brand_check' as const
+export const M4_BRAND_CHECK_OPERATION = 'content.brand-check' as const
 export const AI_LANGUAGES = ['English', 'Indonesian'] as const
 export type AiLanguage = (typeof AI_LANGUAGES)[number]
 export const AI_MODES = ['real', 'demo'] as const
@@ -14,6 +17,7 @@ export const PROMPT_STATUSES = ['active', 'retired'] as const
 export type PromptStatus = (typeof PROMPT_STATUSES)[number]
 export const OUTPUT_SCHEMA_VERSION = 'm2.generate.v1' as const
 export const M3_OUTPUT_SCHEMA_VERSION = 'm3.adapt.v1' as const
+export const M4_OUTPUT_SCHEMA_VERSION = 'm4.brand_check.v1' as const
 export const PROMPT_VERSION = 'v1' as const
 
 export const AI_SETTINGS_OPERATION = 'ai-settings.update'

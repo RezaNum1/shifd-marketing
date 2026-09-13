@@ -15,6 +15,7 @@ import { decodeCursor, etag } from '../context/service.js'
 import type { AiProvider } from '../ai/provider.js'
 import { generateContent } from '../ai/service.js'
 import { adaptContent } from '../ai/adapt.js'
+import { brandCheckContent } from '../ai/brand.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -112,7 +113,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
-    const result = await createContent(app.prisma, auth.user.companyId, auth.user.id, parseContentCreate(request.body), idempotencyKey(request), request.id)
+    const result = await createContent(app.prisma, auth.user.companyId, auth.user.id, parseContentCreate(request.body), idempotencyKey(request), request.id, options.config)
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
   })
@@ -157,9 +158,29 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     return reply.status(result.status).send(result.body)
   })
 
+  app.post('/contents/:id/brand-check', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const result = await brandCheckContent(
+      app.prisma,
+      options.config,
+      options.aiProvider,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      parseAdapt(request.body).platform,
+      idempotencyKey(request),
+      request.id,
+    )
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
   app.get('/contents/:id', async (request, reply) => {
     const auth = await requireAuth(request, reply)
-    const content = await readContent(app.prisma, auth.user.companyId, routeId(request))
+    const content = await readContent(app.prisma, auth.user.companyId, routeId(request), options.config)
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })
@@ -168,7 +189,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
-    const content = await updateContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), parseContentPatch(request.body), auth.user.id, request.id)
+    const content = await updateContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), parseContentPatch(request.body), auth.user.id, request.id, options.config)
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })
@@ -177,7 +198,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
-    const content = await updateVariantCopy(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), parsePlatform((request.params as { platform?: unknown }).platform, 'platform'), parseVariantCopy(request.body), auth.user.id, request.id)
+    const content = await updateVariantCopy(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), parsePlatform((request.params as { platform?: unknown }).platform, 'platform'), parseVariantCopy(request.body), auth.user.id, request.id, options.config)
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })
@@ -189,7 +210,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const body = object(request.body, 'Progress request')
     allowedKeys(body, ['stage'], 'body')
     const stage = enumValue(body.stage, PROGRESS_STAGES, 'stage') as ProgressStage
-    const content = await progressContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), stage, auth.user.id, request.id)
+    const content = await progressContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), stage, auth.user.id, request.id, options.config)
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })
@@ -199,7 +220,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     requireEmptyBody(request.body)
-    const result = await duplicateContent(app.prisma, auth.user.companyId, auth.user.id, routeId(request), ifMatch(request), idempotencyKey(request), request.id)
+    const result = await duplicateContent(app.prisma, auth.user.companyId, auth.user.id, routeId(request), ifMatch(request), idempotencyKey(request), request.id, options.config)
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
   })
@@ -209,7 +230,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     requireEmptyBody(request.body)
-    const content = await archiveContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), auth.user.id, request.id)
+    const content = await archiveContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request), auth.user.id, request.id, options.config)
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })

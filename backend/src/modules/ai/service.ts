@@ -231,7 +231,7 @@ export async function generateContent(
     throw failure
   }
 
-  const final = await finalizeSuccessfulRequest(prisma, prepared, output, providerResult, latencyMs, companyId, actorId, requestId, idempotencyKey)
+  const final = await finalizeSuccessfulRequest(prisma, prepared, output, providerResult, latencyMs, companyId, actorId, requestId, idempotencyKey, config)
   if (final.stale) throw inputChanged(prepared.aiRequestId)
   return final.result
 }
@@ -368,6 +368,7 @@ async function finalizeSuccessfulRequest(
   actorId: string,
   requestId: string,
   idempotencyKey: string,
+  config: AppConfig,
 ) {
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<Array<{ version: number; editorialRevision: number; masterRevision: number; contextType: string; productId: string | null }>>`
@@ -417,7 +418,7 @@ async function finalizeSuccessfulRequest(
       estimatedCostUsd: estimatedCost,
       providerRequestId: providerResult.providerRequestId,
     } })
-    const content = await readContentFromDb(tx, companyId, prepared.contentId)
+    const content = await readContentFromDb(tx, companyId, prepared.contentId, { anthropicModel: config.anthropicModel })
     const log = await tx.aiRequestLog.findUnique({ where: { id: prepared.aiRequestId }, include: { promptVersion: true } })
     if (!log) throw conflict('AI request evidence could not be finalized.')
     const request = mapAiRequest(log)

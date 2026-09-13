@@ -4,6 +4,9 @@ import { encodeCursor, etag } from '../context/service.js'
 import { executeIdempotent } from './idempotency.js'
 import { deriveAdaptationState, deriveLifecycleStatus, deriveResumeStep, hasCompleteVariantCopy } from './lifecycle.js'
 import type { ContentStage, DesignStatus, IdeaContextType, IdeaStatus, ObjectiveCode, PlatformCode, ProgressStage } from './constants.js'
+import { readResolvedContextFromDb } from '../context/service.js'
+import { brandRelevantInputHash } from '../ai/brand-hash.js'
+import { M4_MODULE, M4_OPERATION, M4_OUTPUT_SCHEMA_VERSION, AI_PROVIDER } from '../ai/constants.js'
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -96,6 +99,7 @@ const contentInclude = {
     include: {
       assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } },
       reuseCreativeFromVariant: true,
+      currentAssessment: true,
     },
   },
 } satisfies Prisma.ContentInclude
@@ -222,7 +226,7 @@ export async function restoreIdea(prisma: PrismaClient, companyId: string, ideaI
   })
 }
 
-export async function createContent(prisma: PrismaClient, companyId: string, actorId: string, input: ContentCreateInput, idempotencyKey: string, requestId: string) {
+export async function createContent(prisma: PrismaClient, companyId: string, actorId: string, input: ContentCreateInput, idempotencyKey: string, requestId: string, config?: { anthropicModel: string | null }) {
   return executeIdempotent(prisma, {
     companyId,
     operation: 'content.create',
@@ -255,18 +259,19 @@ export async function createContent(prisma: PrismaClient, companyId: string, act
         await tx.contentIdea.update({ where: { id: input.sourceIdeaId }, data: { status: 'used', version: { increment: 1 } } })
       }
       await appendEvent(tx, { contentId: content.id, actorId, eventType: 'brief_created', metadata: { sourceIdeaId: input.sourceIdeaId, enabledPlatforms: input.enabledPlatforms }, requestId })
-      const mapped = mapContent(await getContentAggregate(tx, companyId, content.id))
+      const mapped = await readContentFromDb(tx, companyId, content.id, config)
       return { resourceId: content.id, status: 201, body: { data: mapped }, etag: etag(mapped.version) }
     },
   })
 }
 
-export async function readContent(prisma: PrismaClient, companyId: string, contentId: string) {
-  return readContentFromDb(prisma, companyId, contentId)
+export async function readContent(prisma: PrismaClient, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
+  return readContentFromDb(prisma, companyId, contentId, config)
 }
 
-export async function readContentFromDb(db: Db, companyId: string, contentId: string) {
-  return mapContent(await getContentAggregate(db, companyId, contentId))
+export async function readContentFromDb(db: Db, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
+  const aggregate = await getContentAggregate(db, companyId, contentId)
+  return mapContent(aggregate, await assessmentFreshness(db, companyId, aggregate, config))
 }
 
 export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions) {
@@ -304,7 +309,7 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   }
 }
 
-export async function updateContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, input: ContentPatchInput, actorId: string, requestId: string) {
+export async function updateContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, input: ContentPatchInput, actorId: string, requestId: string, config?: { anthropicModel: string | null }) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const current = await getContentAggregate(tx, companyId, contentId)
@@ -347,11 +352,11 @@ export async function updateContent(prisma: PrismaClient, companyId: string, con
       metadata: { sections: Object.keys(input), masterRevisionChanged: masterChanged, stageRegressed: nextStage !== current.editorialStage },
       requestId,
     })
-    return mapContent(await getContentAggregate(tx, companyId, contentId))
+    return readContentFromDb(tx, companyId, contentId, config)
   })
 }
 
-export async function updateVariantCopy(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, platform: PlatformCode, input: VariantCopyInput, actorId: string, requestId: string) {
+export async function updateVariantCopy(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, platform: PlatformCode, input: VariantCopyInput, actorId: string, requestId: string, config?: { anthropicModel: string | null }) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -371,11 +376,11 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
       ...(copyChanged && content.editorialStage !== 'draft' ? { editorialStage: 'draft' } : {}),
     } })
     await appendEvent(tx, { contentId, variantId: variant.id, actorId, eventType: 'variant_updated', metadata: { platform, masterRevision: content.masterRevision, stageRegressed: copyChanged && content.editorialStage !== 'draft' }, requestId })
-    return mapContent(await getContentAggregate(tx, companyId, contentId))
+    return readContentFromDb(tx, companyId, contentId, config)
   })
 }
 
-export async function progressContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, stage: ProgressStage, actorId: string, requestId: string) {
+export async function progressContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, stage: ProgressStage, actorId: string, requestId: string, config?: { anthropicModel: string | null }) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -386,11 +391,11 @@ export async function progressContent(prisma: PrismaClient, companyId: string, c
     // assets; other design states do not add an asset gate.
     await tx.content.update({ where: { id: contentId }, data: { editorialStage: stage, version: { increment: 1 } } })
     await appendEvent(tx, { contentId, actorId, eventType: 'progress_changed', metadata: { stage }, requestId })
-    return mapContent(await getContentAggregate(tx, companyId, contentId))
+    return readContentFromDb(tx, companyId, contentId, config)
   })
 }
 
-export async function duplicateContent(prisma: PrismaClient, companyId: string, actorId: string, contentId: string, expectedVersion: number, idempotencyKey: string, requestId: string) {
+export async function duplicateContent(prisma: PrismaClient, companyId: string, actorId: string, contentId: string, expectedVersion: number, idempotencyKey: string, requestId: string, config?: { anthropicModel: string | null }) {
   return executeIdempotent(prisma, {
     companyId,
     operation: `content.duplicate:${contentId}`,
@@ -451,13 +456,13 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
         }
       }
       await appendEvent(tx, { contentId: duplicate.id, actorId, eventType: 'content_duplicated', metadata: { sourceContentId: contentId }, requestId })
-      const mapped = mapContent(await getContentAggregate(tx, companyId, duplicate.id))
+      const mapped = await readContentFromDb(tx, companyId, duplicate.id, config)
       return { resourceId: duplicate.id, status: 201, body: { data: mapped }, etag: etag(mapped.version) }
     },
   })
 }
 
-export async function archiveContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, actorId: string, requestId: string) {
+export async function archiveContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, actorId: string, requestId: string, config?: { anthropicModel: string | null }) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -465,7 +470,7 @@ export async function archiveContent(prisma: PrismaClient, companyId: string, co
       await tx.content.update({ where: { id: contentId }, data: { archivedAt: new Date(), version: { increment: 1 } } })
       await appendEvent(tx, { contentId, actorId, eventType: 'content_archived', metadata: {}, requestId })
     }
-    return mapContent(await getContentAggregate(tx, companyId, contentId))
+    return readContentFromDb(tx, companyId, contentId, config)
   })
 }
 
@@ -567,6 +572,85 @@ async function getContentAggregate(db: Db, companyId: string, contentId: string)
   return content as CompleteContentRow
 }
 
+/**
+ * Assessment freshness is a read projection. It deliberately reconstructs
+ * the M4 input hash from live context and never changes the assessment row or
+ * the current pointer while serving a Content read.
+ */
+async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { anthropicModel: string | null }) {
+  const result = new Map<string, 'current' | 'stale'>()
+  const assessed = content.variants.filter((variant) => Boolean(variant.currentAssessment))
+  if (assessed.length === 0) return result
+  try {
+    const resolved = await readResolvedContextFromDb(db, companyId, content.productId ?? undefined)
+    const settings = await db.aiSettings.findUnique({ where: { companyId } })
+    const prompt = await db.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
+    if (!settings || !prompt) throw new Error('M4 projection inputs are incomplete.')
+    const model = settings.modelId ?? config?.anthropicModel ?? settings.modelDisplayName
+    const execution = {
+      provider: AI_PROVIDER,
+      model,
+      mode: settings.mode,
+      generationLanguage: settings.generationLanguage,
+      settingsVersion: settings.version,
+      promptVersion: {
+        id: prompt.id,
+        module: prompt.module,
+        operation: prompt.operation,
+        version: prompt.version,
+        status: prompt.status,
+        templateReference: prompt.templateReference,
+        templateDigest: prompt.templateDigest,
+        outputSchemaVersion: prompt.outputSchemaVersion,
+        createdAt: prompt.createdAt.toISOString(),
+        updatedAt: prompt.updatedAt.toISOString(),
+      },
+      outputSchemaVersion: M4_OUTPUT_SCHEMA_VERSION,
+    }
+    const master = decodeMaster(content.masterContent)
+    const visualDirection = decodeVisualDirection(content.visualDirection)
+    for (const variant of assessed) {
+      const assessment = variant.currentAssessment!
+      const brief = {
+        contextType: content.contextType,
+        productId: content.productId,
+        pillarCode: content.brief.pillarCode,
+        objective: content.brief.objective,
+        targetAudience: content.brief.targetAudience,
+        topic: content.brief.topic,
+        angle: content.brief.angle,
+        additionalInstructions: content.brief.additionalInstructions,
+      }
+      const target = {
+        id: variant.id,
+        platform: variant.platform,
+        enabled: variant.enabled,
+        revision: variant.revision,
+        copy: variant.copy,
+        cta: variant.cta,
+        hashtags: variant.hashtags,
+        visualRecommendation: variant.visualRecommendation,
+        adaptedFromMasterRevision: variant.adaptedFromMasterRevision,
+      }
+      const hash = brandRelevantInputHash({
+        content: { id: content.id, contextType: content.contextType, productId: content.productId, masterRevision: content.masterRevision, master, visualDirection },
+        brief,
+        variant: target,
+        company: resolved.company,
+        product: resolved.product,
+        brand: resolved.company.brand,
+        resolvedBrand: resolved.resolvedBrand,
+        contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
+        ai: execution,
+      })
+      result.set(variant.id, !content.archivedAt && assessment.variantRevision === variant.revision && assessment.inputHash === hash ? 'current' : 'stale')
+    }
+  } catch {
+    for (const variant of assessed) result.set(variant.id, 'stale')
+  }
+  return result
+}
+
 async function setEnabledPlatforms(tx: Prisma.TransactionClient, contentId: string, platforms: PlatformCode[]) {
   const existing = await tx.platformVariant.findMany({ where: { contentId }, select: { id: true, platform: true } })
   for (const platform of platforms) {
@@ -627,7 +711,7 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
   }
 }
 
-export function mapContent(content: CompleteContentRow) {
+export function mapContent(content: CompleteContentRow, freshness?: Map<string, 'current' | 'stale'>) {
   const master = decodeMaster(content.masterContent)
   const direction = decodeVisualDirection(content.visualDirection)
   return {
@@ -648,7 +732,7 @@ export function mapContent(content: CompleteContentRow) {
     master,
     visualDirection: direction,
     designStatus: content.designStatus,
-    variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master))),
+    variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master), freshness)),
     editorialStage: content.editorialStage,
     editorialRevision: content.editorialRevision,
     lifecycleStatus: deriveLifecycleStatus(content),
@@ -680,7 +764,7 @@ function mapContentSummary(content: CompleteContentRow) {
   }
 }
 
-function mapVariant(variant: ContentRow['variants'][number], allVariants: ContentRow['variants'], masterRevision: number, hasMaster: boolean) {
+function mapVariant(variant: ContentRow['variants'][number], allVariants: ContentRow['variants'], masterRevision: number, hasMaster: boolean, freshness?: Map<string, 'current' | 'stale'>) {
   const ownAssets = variant.assetLinks.map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
   const effectiveAssets = effectiveAssetLinks(variant, allVariants).map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
   return {
@@ -696,7 +780,17 @@ function mapVariant(variant: ContentRow['variants'][number], allVariants: Conten
     reuseCreativeFromVariantId: variant.reuseCreativeFromVariant?.id ?? null,
     ownAssets,
     effectiveAssets,
-    assessment: null,
+    assessment: variant.currentAssessment ? {
+      id: variant.currentAssessment.id,
+      variantId: variant.currentAssessment.variantId,
+      variantRevision: variant.currentAssessment.variantRevision,
+      score: variant.currentAssessment.score,
+      status: variant.currentAssessment.result,
+      recommendation: variant.currentAssessment.recommendation,
+      checks: variant.currentAssessment.checks,
+      createdAt: variant.currentAssessment.createdAt.toISOString(),
+      freshness: freshness?.get(variant.id) ?? (variant.currentAssessment.variantRevision === variant.revision ? 'current' : 'stale'),
+    } : null,
     schedule: null,
     publication: null,
   }

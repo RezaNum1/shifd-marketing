@@ -49,7 +49,7 @@ npm run db:generate
 npm run dev
 ```
 
-Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type; Phase 7 adds only the `ai_adapted` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6–7 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
+Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type; Phase 7 adds only the `ai_adapted` event type; Phase 8 adds only `brand_assessments`, `platform_variants.current_assessment_id`, the same-Variant assessment constraint, and the `ai_brand_checked` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6–8 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
 
 For explicit local database verification, run this sequence after PostgreSQL is up and `.env` exists:
 
@@ -69,6 +69,7 @@ npm run test:assets
 npm run ai:seed
 npm run test:ai
 npm run test:adapt
+npm run test:brand
 npm run test:unit
 npm run build
 ```
@@ -88,13 +89,14 @@ npm run build
 - `npm run test:assets` — required real PostgreSQL plus private-filesystem Phase 5 Asset integration tests
 - `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; it never calls Anthropic
 - `npm run test:adapt` — required real PostgreSQL M3 integration tests using the same test-only injected provider; it never calls Anthropic
+- `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; it never calls Anthropic
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
-- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1 and M3 v1 prompt metadata/digests
+- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v1 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
 
-Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Phase 6 adds settings, prompt metadata, AI request, usage, and M2 generation routes; Phase 7 adds `POST /api/contents/:id/adapt` for one-platform M3 adaptation. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
+Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Phase 6 adds settings, prompt metadata, AI request, usage, and M2 generation routes; Phase 7 adds `POST /api/contents/:id/adapt` for one-platform M3 adaptation; Phase 8 adds `POST /api/contents/:id/brand-check` for one-platform advisory assessment. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
 
 ## Structure
 
@@ -254,5 +256,46 @@ no unverified rates invented. M3 does not create Master Content, Assets, Brand
 Assessments, Human Approval, schedules, publications, or performance records.
 
 ## Operator bootstrap
+
+## Phase 8 M4 brand consistency assessment
+
+M4 is an advisory-only check for one enabled, current platform Variant. `POST
+/api/contents/:id/brand-check` accepts `{ "platform": "instagram" | "linkedin" }`
+and requires the authenticated session, Origin, CSRF token, the parent Content
+ETag, and an `Idempotency-Key`. The server resolves the current Company, Brand,
+Product, Brief, Master, Visual Direction, AI settings, and immutable M4 `v1`
+prompt metadata. The browser cannot provide a score, checks, model, prompt,
+provider, context, or approval decision.
+
+M4 validates and persists only the exact advisory result: an integer score from
+0 to 100, `aligned` or `needs_attention`, a bounded recommendation, and
+non-empty pass/warning checks. Every check must pass for `aligned`; any warning
+requires `needs_attention`. No numeric threshold is treated as authorization.
+The `brand_assessments` rows are append-only and bind each result to one exact
+Variant revision and captured input hash. `platform_variants.current_assessment_id`
+points to the latest assessment for that Variant using a same-Variant composite
+foreign key; public Content reads expose safe fields and recompute
+`freshness` against current context and Variant inputs. Historic assessments
+are not rewritten or used as current state when context changes.
+
+M4 increments only the parent Content `version` once to record the current
+assessment pointer. It does not change Variant copy/revision, Master,
+editorialRevision, Assets, creative reuse, design status, or editorial stage.
+It appends one `ai_brand_checked` event and never creates approval records.
+Aligned does not mean Approved. M4 checks textual copy and
+`visualRecommendation`; it never sends Asset bytes or URLs to Claude and does
+not inspect Canva artwork, use OCR, or perform vision analysis.
+
+The M4 prompt uses explicit server-instruction and DATA sections, has no tools,
+browsing, or URL fetching, and requires grounded evaluation across Tone / Brand
+Voice, Messaging Alignment, Audience Fit, Claim Grounding, CTA Alignment,
+Company/Product Context Alignment, and Platform Appropriateness. `npm run
+ai:seed` verifies immutable M2, M3, and M4 `v1` digests. M4 shares the Phase 6/7
+pending/success/failure/stale AI request log and paid-call-safe idempotency
+boundary; provider calls occur outside database locks, stale relevant inputs
+return `409 INPUT_CHANGED`, and retries require a new key after failure.
+
+This phase does not implement Human Approval, overrides, schedules,
+publication, performance, M3 changes, or any image inspection.
 
 Set `BOOTSTRAP_COMPANY_NAME`, `BOOTSTRAP_COMPANY_DESCRIPTION`, `BOOTSTRAP_USER_NAME`, `BOOTSTRAP_USER_EMAIL`, and `BOOTSTRAP_USER_PASSWORD` only in the local environment, then run `npm run auth:bootstrap`. The command creates one founder user with an Argon2id password hash and refuses duplicate email creation. It never logs or stores the plaintext password. No HTTP bootstrap or public signup endpoint exists.
