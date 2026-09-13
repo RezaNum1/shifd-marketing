@@ -92,7 +92,7 @@ interface PreparedGeneration {
   rate: RateSelection | null
 }
 
-interface RateSelection {
+export interface RateSelection {
   id: string
   version: string
   inputUsdPerMillion: string
@@ -215,7 +215,7 @@ export async function generateContent(
       timeoutMs: config.aiRequestTimeoutMs,
     })
   } catch (error) {
-    const failure = providerFailure(error)
+    const failure = mapProviderFailure(error)
     const latencyMs = elapsedMs(startedAt)
     await finalizeFailedRequest(prisma, prepared.aiRequestId, failure, latencyMs, null, error instanceof AiProviderFailure ? error.providerRequestId : null)
     throw failure
@@ -440,7 +440,7 @@ async function finalizeFailedRequest(prisma: PrismaClient, aiRequestId: string, 
   } })
 }
 
-function providerFailure(error: unknown): AppError {
+export function mapProviderFailure(error: unknown): AppError {
   if (error instanceof AiProviderFailure) {
     if (error.kind === 'not_configured') return aiNotConfigured()
     if (error.kind === 'timeout') return aiTimeout()
@@ -505,14 +505,14 @@ async function selectRate(tx: Prisma.TransactionClient, model: string): Promise<
   return { id: row.id, version: row.version, inputUsdPerMillion: row.inputUsdPerMillion.toString(), outputUsdPerMillion: row.outputUsdPerMillion.toString() }
 }
 
-function usageForDb(result: AiProviderResult) {
+export function usageForDb(result: AiProviderResult) {
   return {
     inputTokens: Number.isSafeInteger(result.inputTokens) && result.inputTokens !== null ? BigInt(result.inputTokens) : null,
     outputTokens: Number.isSafeInteger(result.outputTokens) && result.outputTokens !== null ? BigInt(result.outputTokens) : null,
   }
 }
 
-function calculateCost(usage: { inputTokens: bigint | null; outputTokens: bigint | null }, rate: RateSelection | null): string | null {
+export function calculateCost(usage: { inputTokens: bigint | null; outputTokens: bigint | null }, rate: RateSelection | null): string | null {
   if (!rate || usage.inputTokens === null || usage.outputTokens === null) return null
   const input = Number(usage.inputTokens) / 1_000_000 * Number(rate.inputUsdPerMillion)
   const output = Number(usage.outputTokens) / 1_000_000 * Number(rate.outputUsdPerMillion)
@@ -627,7 +627,7 @@ export async function readAiUsage(prisma: PrismaClient, companyId: string, mode:
   }
 }
 
-function mapPromptVersion(row: { id: string; module: string; operation: string; version: string; status: string; templateReference: string; templateDigest: string; outputSchemaVersion: string; createdAt: Date; updatedAt: Date }): PromptVersionDto {
+export function mapPromptVersion(row: { id: string; module: string; operation: string; version: string; status: string; templateReference: string; templateDigest: string; outputSchemaVersion: string; createdAt: Date; updatedAt: Date }): PromptVersionDto {
   return {
     id: row.id, module: row.module, operation: row.operation, version: row.version, status: row.status,
     templateReference: row.templateReference, templateDigest: row.templateDigest, outputSchemaVersion: row.outputSchemaVersion,
@@ -635,7 +635,7 @@ function mapPromptVersion(row: { id: string; module: string; operation: string; 
   }
 }
 
-function mapAiRequest(row: {
+export function mapAiRequest(row: {
   id: string; module: string; operation: string; contentId: string | null; variantId: string | null; provider: string; model: string;
   language: string; mode: string; inputTokens: bigint | null; outputTokens: bigint | null; estimatedCostUsd: Prisma.Decimal | null;
   latencyMs: number | null; status: string; errorCode: string | null; errorMessage: string | null; createdAt: Date; completedAt: Date | null;

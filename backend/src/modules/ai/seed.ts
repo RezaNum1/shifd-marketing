@@ -1,28 +1,36 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadConfig } from '../../config/env.js'
-import { M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, promptDigest } from './prompt.js'
+import { M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, m3PromptDigest, promptDigest } from './prompt.js'
 
 export async function seedM2Prompt(prisma: PrismaClient) {
   const digest = promptDigest()
+  const m3Digest = m3PromptDigest()
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.promptVersion.findUnique({ where: { module_version: { module: M2_PROMPT_METADATA.module, version: M2_PROMPT_METADATA.version } } })
-    if (existing && (existing.templateDigest !== digest || existing.templateReference !== M2_PROMPT_REFERENCE || existing.outputSchemaVersion !== M2_PROMPT_METADATA.outputSchemaVersion || existing.operation !== M2_PROMPT_METADATA.operation)) {
-      throw new Error('The existing M2 v1 prompt digest or metadata does not match the canonical server resource; refusing to mutate immutable prompt metadata.')
-    }
-    await tx.promptVersion.updateMany({ where: { module: 'M2', status: 'active', ...(existing ? { id: { not: existing.id } } : {}) }, data: { status: 'retired' } })
-    if (!existing) {
-      await tx.promptVersion.create({ data: {
-        ...M2_PROMPT_METADATA,
-        templateReference: M2_PROMPT_REFERENCE,
-        templateDigest: digest,
-      } })
-    } else if (existing.status !== 'active') {
-      await tx.promptVersion.update({ where: { id: existing.id }, data: { status: 'active' } })
-    }
-    return { id: existing?.id ?? null, digest }
+    const m2 = await ensurePrompt(tx, M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, digest)
+    const m3 = await ensurePrompt(tx, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, m3Digest)
+    return { id: m2.id, digest: m2.digest, m3Id: m3.id, m3Digest: m3.digest }
   })
+}
+
+async function ensurePrompt(
+  tx: Prisma.TransactionClient,
+  metadata: { module: string; operation: string; version: string; status: 'active'; templateReference: string; outputSchemaVersion: string },
+  reference: string,
+  digest: string,
+) {
+  const existing = await tx.promptVersion.findUnique({ where: { module_version: { module: metadata.module, version: metadata.version } } })
+  if (existing && (existing.templateDigest !== digest || existing.templateReference !== reference || existing.outputSchemaVersion !== metadata.outputSchemaVersion || existing.operation !== metadata.operation || existing.module !== metadata.module || existing.version !== metadata.version)) {
+    throw new Error(`The existing ${metadata.module} ${metadata.version} prompt digest or immutable metadata does not match the canonical server resource; refusing to mutate immutable prompt metadata.`)
+  }
+  await tx.promptVersion.updateMany({ where: { module: metadata.module, status: 'active', ...(existing ? { id: { not: existing.id } } : {}) }, data: { status: 'retired' } })
+  if (!existing) {
+    const created = await tx.promptVersion.create({ data: { ...metadata, templateReference: reference, templateDigest: digest } })
+    return { id: created.id, digest }
+  }
+  if (existing.status !== 'active') await tx.promptVersion.update({ where: { id: existing.id }, data: { status: 'active' } })
+  return { id: existing.id, digest }
 }
 
 async function main() {
@@ -31,7 +39,7 @@ async function main() {
   try {
     await prisma.$connect()
     const result = await seedM2Prompt(prisma)
-    console.log(`M2 prompt seed verified: ${M2_PROMPT_REFERENCE}; digest ${result.digest}`)
+    console.log(`M2/M3 prompt seed verified: ${M2_PROMPT_REFERENCE} ${result.digest}; ${M3_PROMPT_REFERENCE} ${result.m3Digest}`)
   } finally {
     await prisma.$disconnect()
   }

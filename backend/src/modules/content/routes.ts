@@ -14,6 +14,7 @@ import {
 import { decodeCursor, etag } from '../context/service.js'
 import type { AiProvider } from '../ai/provider.js'
 import { generateContent } from '../ai/service.js'
+import { adaptContent } from '../ai/adapt.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -136,6 +137,26 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     return reply.status(result.status).send(result.body)
   })
 
+  app.post('/contents/:id/adapt', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const result = await adaptContent(
+      app.prisma,
+      options.config,
+      options.aiProvider,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      parseAdapt(request.body).platform,
+      idempotencyKey(request),
+      request.id,
+    )
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
   app.get('/contents/:id', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const content = await readContent(app.prisma, auth.user.companyId, routeId(request))
@@ -242,6 +263,12 @@ function parseContentCreate(value: unknown): ContentCreateInput {
     brief: parseBrief(input.brief),
     enabledPlatforms: parseEnabledPlatforms(input.enabledPlatforms, 'enabledPlatforms'),
   }
+}
+
+function parseAdapt(value: unknown): { platform: PlatformCode } {
+  const input = object(value, 'Adapt request')
+  allowedKeys(input, ['platform'], 'body')
+  return { platform: parsePlatform(input.platform, 'platform') }
 }
 
 function parseContentPatch(value: unknown): ContentPatchInput {

@@ -1,9 +1,9 @@
 # Shifd Marketing Backend
 
-Phase 6 adds the M2 Claude Guided Content Generator to the Phase 1–5
-foundations. M2 is server-controlled, produces Master Content and Visual
-Direction only, and does not generate platform variants, approve Content, or
-create images.
+Phase 7 adds M3 Cross-Platform Adaptation to the Phase 1–6 foundations. M2 and
+M3 are server-controlled AI operations. M2 produces Master Content and Visual
+Direction; M3 adapts one enabled platform Variant at a time. Neither operation
+approves Content or creates images.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ npm run db:generate
 npm run dev
 ```
 
-Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
+Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type; Phase 7 adds only the `ai_adapted` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6–7 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
 
 For explicit local database verification, run this sequence after PostgreSQL is up and `.env` exists:
 
@@ -68,6 +68,7 @@ npm run test:content
 npm run test:assets
 npm run ai:seed
 npm run test:ai
+npm run test:adapt
 npm run test:unit
 npm run build
 ```
@@ -86,13 +87,14 @@ npm run build
 - `npm run test:content` — required database-backed Phase 4 Ideas and Content integration tests
 - `npm run test:assets` — required real PostgreSQL plus private-filesystem Phase 5 Asset integration tests
 - `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; it never calls Anthropic
+- `npm run test:adapt` — required real PostgreSQL M3 integration tests using the same test-only injected provider; it never calls Anthropic
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
-- `npm run ai:seed` — idempotently registers and verifies the immutable M2 v1 prompt metadata/digest
+- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1 and M3 v1 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
 
-Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
+Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Phase 6 adds settings, prompt metadata, AI request, usage, and M2 generation routes; Phase 7 adds `POST /api/contents/:id/adapt` for one-platform M3 adaptation. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
 
 ## Structure
 
@@ -105,7 +107,7 @@ src/modules/auth           password, session, CSRF, bootstrap and auth routes
 src/modules/context        Company/Product Context and taxonomy
 src/modules/content        Ideas, Content, Briefs, Variants and Events
 src/modules/assets         private AssetStorage, upload/read/attach/reuse/delete/cleanup
-src/modules/ai             M2 provider, prompt, settings, generation, logs and usage
+src/modules/ai             M2/M3 provider, prompts, settings, generation, adaptation, logs and usage
 src/shared/errors          focused application errors
 src/shared/http            sanitized error/not-found handlers
 src/modules/health         liveness route
@@ -204,6 +206,52 @@ prompts, or secrets. `GET /api/ai-usage` is Company scoped, separates `real`
 and `demo`, uses a half-open period, sums only known token/cost values, and
 reports unknown coverage; no unverified Claude pricing is seeded, so runtime
 cost remains null until a verified rate is configured.
+
+## Phase 7 M3 cross-platform adaptation
+
+`POST /api/contents/:id/adapt` accepts `{ "platform": "instagram" | "linkedin" }`
+only. It requires the authenticated session, valid Origin, CSRF, the current
+parent Content ETag through `If-Match`, and `Idempotency-Key`. The browser cannot
+select the provider, model, prompt, token limit, or submit copy/context
+overrides.
+
+M3 reads the current Master, Visual Direction, Brief, live Company/Product
+context, resolved Brand context, target enabled Variant, AI settings, and active
+M3 `v1` prompt. Its exact output is `{ copy, cta, hashtags,
+visualRecommendation }`, all nonblank strings. Instagram uses concise,
+caption-oriented and engaging framing; LinkedIn uses professional,
+consultative, problem-led framing. Both remain grounded in the same canonical
+Master and context and do not add unsupported claims.
+
+One M3 request changes only its target Variant. It increments that Variant's
+revision, `Content.version`, and `editorialRevision` once, sets
+`adaptedFromMasterRevision` to the current Master revision, and never changes
+`masterRevision`. The other Variant, Master, Visual Direction, Assets, and
+creative-reuse pointer remain untouched. When every enabled Variant has current
+complete copy, the editorial stage becomes `adapted`; otherwise it becomes or
+remains `generated`. M3 never requires Assets and never changes creative reuse.
+
+M3 stores a protected canonical input snapshot and deterministic hash in the
+shared AI request log. Only relevant platform inputs participate in final stale
+comparison, so an unrelated other-platform edit does not invalidate the
+request. Relevant drift marks the request `stale` and returns
+`409 INPUT_CHANGED` without overwriting the Variant. An initially stale ETag
+still returns `412 REVISION_CONFLICT`. Provider calls happen outside the Content
+transaction, with the existing bounded timeout, no transparent paid retry, and
+safe provider-error mappings.
+
+M3 reuses the Phase 6 paid-call-safe idempotency boundary. Pending retries return
+`REQUEST_IN_PROGRESS`; completed retries replay the original response without a
+second provider call, Variant revision, or `ai_adapted` event. Failed/stale
+requests require a new key. The append-only `ai_adapted` event records concise
+request, prompt, platform, and Variant identifiers only; it never contains the
+prompt, snapshot, provider response, storage data, or secrets.
+
+`npm run ai:seed` verifies both immutable M2 `v1` and M3 `v1` prompt resources;
+prompt APIs return metadata only. M3 usage appears in the existing Company-scoped
+AI request and usage APIs, with unknown token/cost values remaining unknown and
+no unverified rates invented. M3 does not create Master Content, Assets, Brand
+Assessments, Human Approval, schedules, publications, or performance records.
 
 ## Operator bootstrap
 

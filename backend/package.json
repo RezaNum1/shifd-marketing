@@ -18,6 +18,7 @@
     "test:content": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:content'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/content.test.ts",
     "test:assets": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:assets'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/assets.test.ts",
     "test:ai": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:ai'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/ai.test.ts",
+    "test:adapt": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:adapt'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/adapt.test.ts",
     "assets:cleanup": "tsx src/modules/assets/cleanup.ts",
     "ai:seed": "node --import tsx src/modules/ai/seed.ts",
     "ai:recover": "node --import tsx src/modules/ai/recover.ts",

@@ -16,6 +16,13 @@ export interface M2Output {
   }
 }
 
+export interface M3Output {
+  copy: string
+  cta: string
+  hashtags: string
+  visualRecommendation: string
+}
+
 const MASTER_KEYS = ['title', 'coreMessage', 'hook', 'body', 'cta']
 const VISUAL_KEYS = ['format', 'concept', 'structure', 'notes']
 
@@ -37,6 +44,24 @@ export function parseM2Output(text: string): M2Output {
     notes: requiredField(direction.notes, 4_000),
   }
   return { master, visualDirection }
+}
+
+const M3_KEYS = ['copy', 'cta', 'hashtags', 'visualRecommendation']
+
+export function parseM3Output(text: string): M3Output {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw aiOutputInvalid()
+  }
+  if (!isRecord(value) || !exactKeys(value, M3_KEYS)) throw aiOutputInvalid('The AI platform adaptation has an unsupported shape.')
+  return {
+    copy: requiredField(value.copy, 16_000),
+    cta: requiredField(value.cta, 2_000),
+    hashtags: requiredField(value.hashtags, 2_000),
+    visualRecommendation: requiredField(value.visualRecommendation, 4_000),
+  }
 }
 
 function parseTextObject(value: unknown, keys: readonly string[], path: string) {
@@ -68,4 +93,3 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]) {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
-
