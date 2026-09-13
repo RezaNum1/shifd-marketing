@@ -91,7 +91,13 @@ const contentInclude = {
   product: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
   brief: true,
-  variants: { orderBy: { platform: 'asc' } },
+  variants: {
+    orderBy: { platform: 'asc' },
+    include: {
+      assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } },
+      reuseCreativeFromVariant: true,
+    },
+  },
 } satisfies Prisma.ContentInclude
 
 type ContentRow = Prisma.ContentGetPayload<{ include: typeof contentInclude }>
@@ -371,8 +377,9 @@ export async function progressContent(prisma: PrismaClient, companyId: string, c
     const content = await getContentAggregate(tx, companyId, contentId)
     if (content.archivedAt) throw conflict('Archived Content cannot progress through the editorial workflow.')
     assertAdaptedPrerequisites(content)
-    // D-03 is intentionally preserved: Phase 4 has no asset domain, so the
-    // ready-for-review transition verifies editorial readiness only.
+    if (stage === 'ready_for_review' && content.designStatus === 'ready') assertCreativePrerequisites(content)
+    // D-03 remains conditional: designStatus=ready requires effective creative
+    // assets; other design states do not add an asset gate.
     await tx.content.update({ where: { id: contentId }, data: { editorialStage: stage, version: { increment: 1 } } })
     await appendEvent(tx, { contentId, actorId, eventType: 'progress_changed', metadata: { stage }, requestId })
     return mapContent(await getContentAggregate(tx, companyId, contentId))
@@ -411,7 +418,13 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
             angle: source.brief.angle,
             additionalInstructions: source.brief.additionalInstructions,
           } },
-          variants: { create: source.variants.map((variant) => ({
+        },
+      })
+      const duplicatedVariants = new Map<string, string>()
+      for (const variant of source.variants) {
+        const createdVariant = await tx.platformVariant.create({
+          data: {
+            contentId: duplicate.id,
             platform: variant.platform,
             enabled: variant.enabled,
             copy: variant.copy,
@@ -420,9 +433,19 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
             visualRecommendation: variant.visualRecommendation,
             revision: 1,
             adaptedFromMasterRevision: master ? variant.adaptedFromMasterRevision : null,
-          })) },
-        },
-      })
+            assetLinks: { create: variant.assetLinks.map((link) => ({ assetId: link.assetId, sortOrder: link.sortOrder })) },
+          },
+        })
+        duplicatedVariants.set(variant.platform, createdVariant.id)
+      }
+      const sourceLinkedIn = source.variants.find((variant) => variant.platform === 'linkedin')
+      if (sourceLinkedIn?.reuseCreativeFromVariantId) {
+        const duplicatedInstagramId = duplicatedVariants.get('instagram')
+        const duplicatedLinkedInId = duplicatedVariants.get('linkedin')
+        if (duplicatedInstagramId && duplicatedLinkedInId) {
+          await tx.platformVariant.update({ where: { id: duplicatedLinkedInId }, data: { reuseCreativeFromVariantId: duplicatedInstagramId } })
+        }
+      }
       await appendEvent(tx, { contentId: duplicate.id, actorId, eventType: 'content_duplicated', metadata: { sourceContentId: contentId }, requestId })
       const mapped = mapContent(await getContentAggregate(tx, companyId, duplicate.id))
       return { resourceId: duplicate.id, status: 201, body: { data: mapped }, etag: etag(mapped.version) }
@@ -621,7 +644,7 @@ function mapContent(content: CompleteContentRow) {
     master,
     visualDirection: direction,
     designStatus: content.designStatus,
-    variants: content.variants.map((variant) => mapVariant(variant, content.masterRevision, Boolean(master))),
+    variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master))),
     editorialStage: content.editorialStage,
     editorialRevision: content.editorialRevision,
     lifecycleStatus: deriveLifecycleStatus(content),
@@ -653,7 +676,9 @@ function mapContentSummary(content: CompleteContentRow) {
   }
 }
 
-function mapVariant(variant: ContentRow['variants'][number], masterRevision: number, hasMaster: boolean) {
+function mapVariant(variant: ContentRow['variants'][number], allVariants: ContentRow['variants'], masterRevision: number, hasMaster: boolean) {
+  const ownAssets = variant.assetLinks.map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
+  const effectiveAssets = effectiveAssetLinks(variant, allVariants).map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
   return {
     id: variant.id,
     platform: variant.platform,
@@ -664,12 +689,26 @@ function mapVariant(variant: ContentRow['variants'][number], masterRevision: num
     visualRecommendation: variant.visualRecommendation,
     revision: variant.revision,
     adaptationState: deriveAdaptationState({ ...variant, masterRevision, hasMaster }),
-    reuseCreativeFromVariantId: null,
-    ownAssets: [],
-    effectiveAssets: [],
+    reuseCreativeFromVariantId: variant.reuseCreativeFromVariant?.id ?? null,
+    ownAssets,
+    effectiveAssets,
     assessment: null,
     schedule: null,
     publication: null,
+  }
+}
+
+function mapAsset(asset: ContentRow['variants'][number]['assetLinks'][number]['asset']) {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    sizeBytes: Number(asset.sizeBytes),
+    width: asset.width,
+    height: asset.height,
+    purpose: asset.purpose,
+    contentUrl: `/api/assets/${asset.id}/content`,
+    createdAt: asset.createdAt.toISOString(),
   }
 }
 
@@ -678,6 +717,18 @@ function assertAdaptedPrerequisites(content: CompleteContentRow) {
   if (!master) throw conflict('Master Content is required before editorial progress can continue.')
   const blocked = content.variants.filter((variant) => variant.enabled).find((variant) => deriveAdaptationState({ ...variant, masterRevision: content.masterRevision, hasMaster: true }) !== 'current')
   if (blocked) throw conflict('Every enabled platform needs a current complete adaptation before editorial progress can continue.')
+}
+
+function assertCreativePrerequisites(content: CompleteContentRow) {
+  const blocked = content.variants.filter((variant) => variant.enabled).find((variant) => effectiveAssetLinks(variant, content.variants).length === 0)
+  if (blocked) throw conflict('Every enabled platform needs an effective creative Asset before review can begin.')
+}
+
+function effectiveAssetLinks(variant: ContentRow['variants'][number], allVariants: ContentRow['variants']) {
+  if (variant.platform === 'linkedin' && variant.reuseCreativeFromVariant) {
+    return allVariants.find((candidate) => candidate.id === variant.reuseCreativeFromVariant?.id)?.assetLinks ?? []
+  }
+  return variant.assetLinks
 }
 
 function lifecycleFilter(value: string): Prisma.ContentWhereInput {

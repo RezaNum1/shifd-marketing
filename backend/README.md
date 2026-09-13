@@ -1,12 +1,12 @@
 # Shifd Marketing Backend
 
-Phase 4 adds the persistent Ideas and editorial Content foundation to the Phase 3 Company/Product Context and Phase 2 authentication foundation. It does not call AI, upload files, or include Claude or any later review, scheduling, publication, or performance domain.
+Phase 5 adds the private local Asset boundary and creative reuse to the Phase 4 Ideas and editorial Content foundation. It does not call AI, upload to a cloud provider, integrate Canva, or include Claude or any later assessment, review, scheduling, publication, or performance domain.
 
 ## Prerequisites
 
 - Node.js 22 LTS (22.11.0 or newer, below Node 23)
 - npm
-- PostgreSQL 14+ for database work
+- PostgreSQL 16 for the approved local integration environment
 
 Docker is used only for the PostgreSQL development service; application processes are not containerized.
 
@@ -18,6 +18,8 @@ cp .env.example .env
 ```
 
 Set `DATABASE_URL` to a PostgreSQL database and keep `ALLOWED_ORIGIN` explicit. `NODE_ENV`, `PORT`, and `HOST` have safe local defaults; startup rejects malformed values. Authentication defaults are configurable with `SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS`, `LOGIN_RATE_LIMIT_MAX`, and `LOGIN_RATE_LIMIT_WINDOW_MINUTES`. Never commit `.env`.
+
+Phase 5 asset configuration is validated at startup. `ASSET_STORAGE_ROOT` selects a private persistent local filesystem directory (default `./data/assets`); it is never returned to clients or served statically. The D-05 prototype defaults are `ASSET_MAX_BYTES=10485760`, `ASSET_MAX_WIDTH=8192`, `ASSET_MAX_HEIGHT=8192`, and `ASSET_UNATTACHED_GRACE_HOURS=168`.
 
 ## Local PostgreSQL
 
@@ -37,7 +39,7 @@ npm run db:generate
 npm run dev
 ```
 
-Phase 4 adds only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events` to the Phase 3 schema. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, and Phase 4 ownership/lifecycle checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
+Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, and Phase 5 asset constraints are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
 
 For explicit local database verification, run this sequence after PostgreSQL is up and `.env` exists:
 
@@ -53,6 +55,7 @@ npm run test:db
 npm run test:auth
 npm run test:context
 npm run test:content
+npm run test:assets
 npm run test:unit
 npm run build
 ```
@@ -69,6 +72,8 @@ npm run build
 - `npm run test:auth` — database-backed Phase 2 authentication integration tests
 - `npm run test:context` — required database-backed Phase 3 Company/Product Context integration tests
 - `npm run test:content` — required database-backed Phase 4 Ideas and Content integration tests
+- `npm run test:assets` — required real PostgreSQL plus private-filesystem Phase 5 Asset integration tests
+- `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
 
@@ -84,11 +89,13 @@ src/plugins/prisma.ts      one PrismaClient application boundary
 src/modules/auth           password, session, CSRF, bootstrap and auth routes
 src/modules/context        Company/Product Context and taxonomy
 src/modules/content        Ideas, Content, Briefs, Variants and Events
+src/modules/assets         private AssetStorage, upload/read/attach/reuse/delete/cleanup
 src/shared/errors          focused application errors
 src/shared/http            sanitized error/not-found handlers
 src/modules/health         liveness route
 prisma/schema.prisma       PostgreSQL companies/users/session models
 tests/                     HTTP/config/database/authentication/context/content tests
+tests/assets.test.ts       PostgreSQL and temporary-private-filesystem Asset tests
 ```
 
 ## Scope and limitations
@@ -118,6 +125,18 @@ Brief context and Product ownership live on Content. Product and Company names r
 Idea creation/duplication and Content creation/duplication require `Idempotency-Key`. The bounded Phase 3 `request_idempotency` table scopes keys by authenticated Company and operation, hashes normalized request data including duplicate preconditions, and stores the original response only after the domain transaction commits. Same-key retries replay the original resource; a different request returns `IDEMPOTENCY_CONFLICT`. This is command replay, not an AI request lifecycle.
 
 Content Events are append-only audit records for accepted user commands: `brief_created`, `content_updated`, `variant_updated`, `progress_changed`, `content_duplicated`, and `content_archived`. They never determine current state and carry concise metadata only. Content duplication creates new Content/Brief/Variant IDs, stays Draft, copies available editorial data and `sourceIdeaId` provenance, and does not consume the source Idea. Archive is soft and preserves Briefs, Variants, Events, and Idea links.
+
+## Phase 5 Assets and creative reuse
+
+`POST /api/assets` accepts a multipart `file` and `purpose` (`creative` or `metric_evidence`) with an authenticated session, valid Origin, CSRF token, and `Idempotency-Key`. The server streams to a private temporary file, enforces the configured byte limit, verifies actual PNG/JPEG bytes with Sharp, extracts dimensions, hashes the bytes, and stores immutable metadata beside a server-generated UUID storage key. Browser MIME types, extensions, filenames, paths, and URLs are never used as storage identity. Supported uploads are PNG and JPEG only; the API returns the approved Asset projection and an authenticated `/api/assets/:id/content` URL. Content reads use private/no-store responses and never expose filesystem paths, storage keys, or checksums. Canva remains an external manual tool; no Canva integration or AI image generation exists.
+
+Content exposes ordered `ownAssets` and derived `effectiveAssets` for each Variant. `PUT /api/contents/:id/variants/:platform/assets` atomically replaces ordered own attachment links, accepts only ready `creative` Assets from the authenticated Company, and preserves detached Asset rows. `PUT /api/contents/:id/variants/linkedin/creative-reuse` can point LinkedIn at the same Content's Instagram Variant. Reuse changes effective LinkedIn Assets without deleting LinkedIn own attachments; turning it off restores them. Metric-evidence Assets are stored for later Performance work but cannot attach to Variants.
+
+Asset attachment and reuse commands use the parent Content ETag/`If-Match`, increment Content `version` and `editorialRevision` once for a real change, leave Master and Variant copy revisions unchanged, regress non-Draft editorial progress to Draft using the Phase 4 rule, and append a concise `content_updated` event. Uploading an unattached Asset does not change Content. Content duplication creates fresh Content/Brief/Variant IDs, reuses immutable Asset IDs and ordering, and remaps LinkedIn reuse to the duplicated Instagram Variant; it does not copy file bytes or consume a source Idea.
+
+`GET /api/assets/:id` and the authenticated content endpoint are Company scoped. `DELETE /api/assets/:id` is allowed only for unreferenced Assets, marks pending deletion before removing private bytes, and does not detach anything automatically. Failed physical deletion remains retryable as `pending_delete` and is not reported as successful. `npm run assets:cleanup` is the bounded operator maintenance command; it lock/rechecks references, respects the seven-day grace period, supports `--dry-run`, and removes only expired unattached Assets. It also cleans stale temporary upload files and expired UUID-named final files left by a process crash before database commit, after comparing them with all known metadata keys. Local storage is persistent only while `ASSET_STORAGE_ROOT` is preserved; deployments should mount that directory as a private volume.
+
+Phase 5 completes the approved D-03 compatibility gate without inventing Human Review: when `designStatus` is not `ready`, asset absence does not block `ready_for_review`; when it is `ready`, each enabled Variant needs at least one effective creative Asset, and reuse counts. Master and current enabled Variant adaptations remain required. Approval, assessment, and asset-specific future workflow remain deferred.
 
 ## Operator bootstrap
 

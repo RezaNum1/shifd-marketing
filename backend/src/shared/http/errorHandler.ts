@@ -16,8 +16,8 @@ export function registerErrorHandler(app: FastifyInstance) {
     const statusCode = appError?.statusCode ?? (error.statusCode && error.statusCode >= 400 ? error.statusCode : 500)
     const body: ErrorBody = {
       error: {
-        code: appError?.code ?? (statusCode === 404 ? 'NOT_FOUND' : statusCode === 429 ? 'RATE_LIMITED' : 'INTERNAL_ERROR'),
-        message: appError?.message ?? (statusCode === 404 ? 'The requested route was not found.' : statusCode === 429 ? 'Too many requests.' : 'An unexpected error occurred.'),
+        code: appError?.code ?? (statusCode === 404 ? 'NOT_FOUND' : statusCode === 413 ? 'PAYLOAD_TOO_LARGE' : statusCode === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : statusCode === 429 ? 'RATE_LIMITED' : 'INTERNAL_ERROR'),
+        message: appError?.message ?? (statusCode === 404 ? 'The requested route was not found.' : statusCode === 413 ? 'The uploaded file is too large.' : statusCode === 415 ? 'The uploaded media type is not supported.' : statusCode === 429 ? 'Too many requests.' : 'An unexpected error occurred.'),
         ...(appError?.fields ? { fields: appError.fields } : {}),
         requestId: request.id,
       },

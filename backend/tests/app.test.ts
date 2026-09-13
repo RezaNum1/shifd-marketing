@@ -13,6 +13,11 @@ const config: AppConfig = {
   sessionAbsoluteHours: 24,
   loginRateLimitMax: 5,
   loginRateLimitWindowMinutes: 15,
+  assetStorageRoot: './data/test-assets',
+  assetMaxBytes: 10_485_760,
+  assetMaxWidth: 8_192,
+  assetMaxHeight: 8_192,
+  assetUnattachedGraceHours: 168,
 }
 const apps: FastifyInstance[] = []
 

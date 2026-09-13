@@ -8,69 +8,71 @@ datasource db {
 }
 
 model Company {
-  id                  String        @id @default(uuid()) @db.Uuid
-  name                String
-  description         String
-  industry            String?
-  businessTypes       String[]      @default([]) @map("business_types")
-  primaryMarket       String?       @map("primary_market")
-  website             String?
-  mission             String?
-  vision              String?
-  positioning         String?
-  coreValueProposition String?       @map("core_value_proposition")
-  differentiators     String[]      @default([])
-  customerSegments    String[]      @default([]) @map("customer_segments")
-  decisionMakers      String[]      @default([]) @map("decision_makers")
-  painPoints          String[]      @default([]) @map("pain_points")
-  reportingTimezone   String        @default("Asia/Jakarta") @map("reporting_timezone")
-  contextVersion      Int           @default(1) @map("context_version")
-  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version             Int           @default(1)
-  users               User[]
-  brandProfile        BrandProfile?
-  bmcBlocks           BmcBlock[]
-  products            Product[]
-  contentIdeas        ContentIdea[]
-  contents            Content[]
-  idempotencyRecords  RequestIdempotency[]
+  id                   String               @id @default(uuid()) @db.Uuid
+  name                 String
+  description          String
+  industry             String?
+  businessTypes        String[]             @default([]) @map("business_types")
+  primaryMarket        String?              @map("primary_market")
+  website              String?
+  mission              String?
+  vision               String?
+  positioning          String?
+  coreValueProposition String?              @map("core_value_proposition")
+  differentiators      String[]             @default([])
+  customerSegments     String[]             @default([]) @map("customer_segments")
+  decisionMakers       String[]             @default([]) @map("decision_makers")
+  painPoints           String[]             @default([]) @map("pain_points")
+  reportingTimezone    String               @default("Asia/Jakarta") @map("reporting_timezone")
+  contextVersion       Int                  @default(1) @map("context_version")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version              Int                  @default(1)
+  users                User[]
+  brandProfile         BrandProfile?
+  bmcBlocks            BmcBlock[]
+  products             Product[]
+  contentIdeas         ContentIdea[]
+  contents             Content[]
+  idempotencyRecords   RequestIdempotency[]
+  assets               CreativeAsset[]
 
   @@map("companies")
 }
 
 model User {
-  id           String        @id @default(uuid()) @db.Uuid
-  companyId    String        @map("company_id") @db.Uuid
-  name         String
-  email        String
-  passwordHash String        @map("password_hash")
-  role         String        @default("founder")
-  active       Boolean       @default(true)
-  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version      Int           @default(1)
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sessions     AuthSession[]
-  contentIdeas ContentIdea[]
-  contents     Content[]
-  contentEvents ContentEvent[]
+  id             String          @id @default(uuid()) @db.Uuid
+  companyId      String          @map("company_id") @db.Uuid
+  name           String
+  email          String
+  passwordHash   String          @map("password_hash")
+  role           String          @default("founder")
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version        Int             @default(1)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sessions       AuthSession[]
+  contentIdeas   ContentIdea[]
+  contents       Content[]
+  contentEvents  ContentEvent[]
+  uploadedAssets CreativeAsset[]
 
   @@index([companyId])
   @@map("users")
 }
 
 model AuthSession {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  tokenHash        String    @unique @map("token_hash")
-  csrfSecretHash   String    @map("csrf_secret_hash")
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  absoluteExpiresAt DateTime @map("absolute_expires_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  tokenHash         String    @unique @map("token_hash")
+  csrfSecretHash    String    @map("csrf_secret_hash")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -79,32 +81,32 @@ model AuthSession {
 }
 
 model BrandProfile {
-  companyId                 String   @id @map("company_id") @db.Uuid
-  brandVoice                String?  @map("brand_voice")
-  toneDescription           String?  @map("tone_description")
-  preferredLanguage         String   @default("English") @map("preferred_language")
-  communicationGuidelines   String[] @default([]) @map("communication_guidelines")
-  preferredTerms            String[] @default([]) @map("preferred_terms")
-  thingsToAvoid             String[] @default([]) @map("things_to_avoid")
-  ctaStyle                  String?  @map("cta_style")
-  brandKeywords             String[] @default([]) @map("brand_keywords")
-  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version                   Int      @default(1)
-  company                   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId               String   @id @map("company_id") @db.Uuid
+  brandVoice              String?  @map("brand_voice")
+  toneDescription         String?  @map("tone_description")
+  preferredLanguage       String   @default("English") @map("preferred_language")
+  communicationGuidelines String[] @default([]) @map("communication_guidelines")
+  preferredTerms          String[] @default([]) @map("preferred_terms")
+  thingsToAvoid           String[] @default([]) @map("things_to_avoid")
+  ctaStyle                String?  @map("cta_style")
+  brandKeywords           String[] @default([]) @map("brand_keywords")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                 Int      @default(1)
+  company                 Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@map("brand_profiles")
 }
 
 model BmcBlock {
-  id          String   @id @default(uuid()) @db.Uuid
-  companyId   String   @map("company_id") @db.Uuid
-  type        String
-  entries     String[] @default([])
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version     Int      @default(1)
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  type      String
+  entries   String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version   Int      @default(1)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, type])
   @@index([companyId])
@@ -112,21 +114,21 @@ model BmcBlock {
 }
 
 model Product {
-  id          String         @id @default(uuid()) @db.Uuid
-  companyId   String         @map("company_id") @db.Uuid
-  name        String
-  slug        String
-  description String
-  category    String?
-  status      String
-  url         String?
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version     Int            @default(1)
-  company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  profile     ProductProfile?
+  id           String          @id @default(uuid()) @db.Uuid
+  companyId    String          @map("company_id") @db.Uuid
+  name         String
+  slug         String
+  description  String
+  category     String?
+  status       String
+  url          String?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version      Int             @default(1)
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profile      ProductProfile?
   contentIdeas ContentIdea[]
-  contents    Content[]
+  contents     Content[]
 
   @@unique([companyId, slug])
   @@unique([companyId, id])
@@ -135,37 +137,37 @@ model Product {
 }
 
 model ProductProfile {
-  productId             String   @id @map("product_id") @db.Uuid
-  targetUsers           String[] @default([]) @map("target_users")
-  targetOrganizations   String[] @default([]) @map("target_organizations")
-  decisionMakers        String[] @default([]) @map("decision_makers")
-  problemsAddressed     String[] @default([]) @map("problems_addressed")
-  valueProposition      String?  @map("value_proposition")
-  features              String[] @default([])
-  benefits              String[] @default([])
-  differentiators       String[] @default([])
-  useCases              String[] @default([]) @map("use_cases")
-  campaignObjective     String?  @map("campaign_objective")
-  positioning           String?
-  keyMessages           String[] @default([]) @map("key_messages")
-  proofPoints           String[] @default([]) @map("proof_points")
-  defaultCta            String?  @map("default_cta")
-  inheritCompanyTone    Boolean  @default(true) @map("inherit_company_tone")
-  toneOverride          String?  @map("tone_override")
-  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version               Int      @default(1)
-  product               Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId           String   @id @map("product_id") @db.Uuid
+  targetUsers         String[] @default([]) @map("target_users")
+  targetOrganizations String[] @default([]) @map("target_organizations")
+  decisionMakers      String[] @default([]) @map("decision_makers")
+  problemsAddressed   String[] @default([]) @map("problems_addressed")
+  valueProposition    String?  @map("value_proposition")
+  features            String[] @default([])
+  benefits            String[] @default([])
+  differentiators     String[] @default([])
+  useCases            String[] @default([]) @map("use_cases")
+  campaignObjective   String?  @map("campaign_objective")
+  positioning         String?
+  keyMessages         String[] @default([]) @map("key_messages")
+  proofPoints         String[] @default([]) @map("proof_points")
+  defaultCta          String?  @map("default_cta")
+  inheritCompanyTone  Boolean  @default(true) @map("inherit_company_tone")
+  toneOverride        String?  @map("tone_override")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version             Int      @default(1)
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@map("product_profiles")
 }
 
 model ContentPillar {
-  code      String  @id
-  label     String
-  sortOrder Int     @unique @map("sort_order")
-  active    Boolean @default(true)
-  contentIdeas ContentIdea[]
+  code          String         @id
+  label         String
+  sortOrder     Int            @unique @map("sort_order")
+  active        Boolean        @default(true)
+  contentIdeas  ContentIdea[]
   contentBriefs ContentBrief[]
 
   @@unique([label])
@@ -173,25 +175,25 @@ model ContentPillar {
 }
 
 model ContentIdea {
-  id             String   @id @default(uuid()) @db.Uuid
-  companyId      String   @map("company_id") @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
+  companyId      String        @map("company_id") @db.Uuid
   title          String
-  contextType    String   @map("context_type")
-  productId      String?  @map("product_id") @db.Uuid
-  pillarCode     String   @map("pillar_code")
+  contextType    String        @map("context_type")
+  productId      String?       @map("product_id") @db.Uuid
+  pillarCode     String        @map("pillar_code")
   objective      String
-  targetAudience String?  @map("target_audience")
+  targetAudience String?       @map("target_audience")
   notes          String?
-  status         String   @default("ready")
-  createdBy      String   @map("created_by") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version        Int      @default(1)
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  product        Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  status         String        @default("ready")
+  createdBy      String        @map("created_by") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version        Int           @default(1)
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product        Product?      @relation(fields: [productId], references: [id], onDelete: Restrict)
   pillar         ContentPillar @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
-  creator        User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
-  sourceContents Content[] @relation("ContentSourceIdea")
+  creator        User          @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  sourceContents Content[]     @relation("ContentSourceIdea")
 
   @@unique([companyId, id])
   @@index([companyId, updatedAt, id])
@@ -203,26 +205,26 @@ model ContentIdea {
 }
 
 model Content {
-  id                String   @id @default(uuid()) @db.Uuid
-  companyId         String   @map("company_id") @db.Uuid
-  sourceIdeaId      String?  @map("source_idea_id") @db.Uuid
-  contextType       String   @map("context_type")
-  productId         String?  @map("product_id") @db.Uuid
-  editorialStage    String   @default("draft") @map("editorial_stage")
-  editorialRevision Int      @default(1) @map("editorial_revision")
-  masterRevision    Int      @default(0) @map("master_revision")
-  designStatus      String   @default("not_started") @map("design_status")
-  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(3)
-  createdBy         String   @map("created_by") @db.Uuid
-  masterContent     Json?    @map("master_content")
-  visualDirection   Json?    @map("visual_direction")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version           Int      @default(1)
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sourceIdea        ContentIdea? @relation("ContentSourceIdea", fields: [sourceIdeaId], references: [id], onDelete: Restrict)
-  product           Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
-  creator           User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  id                String            @id @default(uuid()) @db.Uuid
+  companyId         String            @map("company_id") @db.Uuid
+  sourceIdeaId      String?           @map("source_idea_id") @db.Uuid
+  contextType       String            @map("context_type")
+  productId         String?           @map("product_id") @db.Uuid
+  editorialStage    String            @default("draft") @map("editorial_stage")
+  editorialRevision Int               @default(1) @map("editorial_revision")
+  masterRevision    Int               @default(0) @map("master_revision")
+  designStatus      String            @default("not_started") @map("design_status")
+  archivedAt        DateTime?         @map("archived_at") @db.Timestamptz(3)
+  createdBy         String            @map("created_by") @db.Uuid
+  masterContent     Json?             @map("master_content")
+  visualDirection   Json?             @map("visual_direction")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version           Int               @default(1)
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sourceIdea        ContentIdea?      @relation("ContentSourceIdea", fields: [sourceIdeaId], references: [id], onDelete: Restrict)
+  product           Product?          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  creator           User              @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   brief             ContentBrief?
   variants          PlatformVariant[]
   events            ContentEvent[]
@@ -237,17 +239,17 @@ model Content {
 }
 
 model ContentBrief {
-  contentId              String   @id @map("content_id") @db.Uuid
-  pillarCode             String   @map("pillar_code")
+  contentId              String        @id @map("content_id") @db.Uuid
+  pillarCode             String        @map("pillar_code")
   objective              String
-  targetAudience         String   @map("target_audience")
+  targetAudience         String        @map("target_audience")
   topic                  String
   angle                  String?
-  additionalInstructions String?  @map("additional_instructions")
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version                Int      @default(1)
-  content                Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  additionalInstructions String?       @map("additional_instructions")
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                Int           @default(1)
+  content                Content       @relation(fields: [contentId], references: [id], onDelete: Restrict)
   pillar                 ContentPillar @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
 
   @@index([pillarCode])
@@ -255,20 +257,24 @@ model ContentBrief {
 }
 
 model PlatformVariant {
-  id                       String   @id @default(uuid()) @db.Uuid
-  contentId                String   @map("content_id") @db.Uuid
-  platform                 String
-  enabled                  Boolean  @default(true)
-  copy                     String?
-  cta                      String?
-  hashtags                 String?
-  visualRecommendation     String?  @map("visual_recommendation")
-  revision                 Int      @default(1)
-  adaptedFromMasterRevision Int?    @map("adapted_from_master_revision")
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  content                  Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
-  events                   ContentEvent[]
+  id                         String            @id @default(uuid()) @db.Uuid
+  contentId                  String            @map("content_id") @db.Uuid
+  platform                   String
+  enabled                    Boolean           @default(true)
+  copy                       String?
+  cta                        String?
+  hashtags                   String?
+  visualRecommendation       String?           @map("visual_recommendation")
+  revision                   Int               @default(1)
+  adaptedFromMasterRevision  Int?              @map("adapted_from_master_revision")
+  reuseCreativeFromVariantId String?           @map("reuse_creative_from_variant_id") @db.Uuid
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  content                    Content           @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  events                     ContentEvent[]
+  assetLinks                 VariantAsset[]
+  reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
+  reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
 
   @@unique([contentId, platform])
   @@unique([contentId, id])
@@ -276,19 +282,56 @@ model PlatformVariant {
   @@map("platform_variants")
 }
 
+model CreativeAsset {
+  id             String         @id @default(uuid()) @db.Uuid
+  companyId      String         @map("company_id") @db.Uuid
+  uploadedBy     String         @map("uploaded_by") @db.Uuid
+  purpose        String
+  fileName       String         @map("file_name")
+  storageKey     String         @unique @map("storage_key")
+  mimeType       String         @map("mime_type")
+  sizeBytes      BigInt         @map("size_bytes")
+  width          Int
+  height         Int
+  checksumSha256 String         @map("checksum_sha256")
+  state          String         @default("ready")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  uploader       User           @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+  variantLinks   VariantAsset[]
+
+  @@index([companyId, createdAt])
+  @@map("creative_assets")
+}
+
+model VariantAsset {
+  id        String          @id @default(uuid()) @db.Uuid
+  variantId String          @map("variant_id") @db.Uuid
+  assetId   String          @map("asset_id") @db.Uuid
+  sortOrder Int             @map("sort_order")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  variant   PlatformVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  asset     CreativeAsset   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([variantId, assetId])
+  @@unique([variantId, sortOrder])
+  @@index([assetId])
+  @@map("variant_assets")
+}
+
 model ContentEvent {
-  id        String   @id @default(uuid()) @db.Uuid
-  contentId String   @map("content_id") @db.Uuid
-  variantId String?  @map("variant_id") @db.Uuid
-  actorId   String?  @map("actor_id") @db.Uuid
-  actorKind String   @map("actor_kind")
-  eventType String   @map("event_type")
+  id        String           @id @default(uuid()) @db.Uuid
+  contentId String           @map("content_id") @db.Uuid
+  variantId String?          @map("variant_id") @db.Uuid
+  actorId   String?          @map("actor_id") @db.Uuid
+  actorKind String           @map("actor_kind")
+  eventType String           @map("event_type")
   metadata  Json
-  requestId String   @map("request_id")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  content   Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  requestId String           @map("request_id")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  content   Content          @relation(fields: [contentId], references: [id], onDelete: Restrict)
   variant   PlatformVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  actor     User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actor     User?            @relation(fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([contentId, createdAt, id])
   @@index([variantId])

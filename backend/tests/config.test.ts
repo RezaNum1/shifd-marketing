@@ -22,4 +22,9 @@ describe('configuration validation', () => {
   it('fails fast for invalid authentication settings', () => {
     expect(() => loadConfig({ ...valid, SESSION_IDLE_MINUTES: '0', LOGIN_RATE_LIMIT_MAX: '-1' })).toThrow(ConfigError)
   })
+
+  it('loads and validates the Phase 5 asset limits', () => {
+    expect(loadConfig(valid)).toMatchObject({ assetStorageRoot: './data/assets', assetMaxBytes: 10_485_760, assetMaxWidth: 8_192, assetMaxHeight: 8_192, assetUnattachedGraceHours: 168 })
+    expect(() => loadConfig({ ...valid, ASSET_MAX_BYTES: '0', ASSET_MAX_WIDTH: 'nope', ASSET_UNATTACHED_GRACE_HOURS: '-1' })).toThrow(ConfigError)
+  })
 })
