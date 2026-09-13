@@ -11,6 +11,7 @@ import { registerErrorHandler } from './shared/http/errorHandler.js'
 import { registerNotFoundHandler } from './shared/http/notFoundHandler.js'
 import { healthRoutes } from './modules/health/routes.js'
 import { contextRoutes } from './modules/context/routes.js'
+import { contentRoutes } from './modules/content/routes.js'
 
 export interface BuildAppOptions {
   config: AppConfig
@@ -38,6 +39,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(authPlugin, { config: options.config })
   await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
+  await app.register(contentRoutes, { config: options.config, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })
   return app
 }

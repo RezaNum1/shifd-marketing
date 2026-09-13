@@ -15,6 +15,7 @@
     "test:db": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:db'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/database.test.ts",
     "test:auth": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:auth'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/auth.test.ts",
     "test:context": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:context'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/context.test.ts",
+    "test:content": "node -r dotenv/config -e \"if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for test:content'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/content.test.ts",
     "auth:bootstrap": "tsx src/modules/auth/bootstrap.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

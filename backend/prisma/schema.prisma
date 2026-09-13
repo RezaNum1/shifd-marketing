@@ -32,6 +32,8 @@ model Company {
   brandProfile        BrandProfile?
   bmcBlocks           BmcBlock[]
   products            Product[]
+  contentIdeas        ContentIdea[]
+  contents            Content[]
   idempotencyRecords  RequestIdempotency[]
 
   @@map("companies")
@@ -50,6 +52,9 @@ model User {
   version      Int           @default(1)
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   sessions     AuthSession[]
+  contentIdeas ContentIdea[]
+  contents     Content[]
+  contentEvents ContentEvent[]
 
   @@index([companyId])
   @@map("users")
@@ -120,6 +125,8 @@ model Product {
   version     Int            @default(1)
   company     Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
   profile     ProductProfile?
+  contentIdeas ContentIdea[]
+  contents    Content[]
 
   @@unique([companyId, slug])
   @@unique([companyId, id])
@@ -158,9 +165,135 @@ model ContentPillar {
   label     String
   sortOrder Int     @unique @map("sort_order")
   active    Boolean @default(true)
+  contentIdeas ContentIdea[]
+  contentBriefs ContentBrief[]
 
   @@unique([label])
   @@map("content_pillars")
+}
+
+model ContentIdea {
+  id             String   @id @default(uuid()) @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  title          String
+  contextType    String   @map("context_type")
+  productId      String?  @map("product_id") @db.Uuid
+  pillarCode     String   @map("pillar_code")
+  objective      String
+  targetAudience String?  @map("target_audience")
+  notes          String?
+  status         String   @default("ready")
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version        Int      @default(1)
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product        Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  pillar         ContentPillar @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
+  creator        User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  sourceContents Content[] @relation("ContentSourceIdea")
+
+  @@unique([companyId, id])
+  @@index([companyId, updatedAt, id])
+  @@index([companyId, status, updatedAt, id])
+  @@index([productId])
+  @@index([pillarCode])
+  @@index([createdBy])
+  @@map("content_ideas")
+}
+
+model Content {
+  id                String   @id @default(uuid()) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  sourceIdeaId      String?  @map("source_idea_id") @db.Uuid
+  contextType       String   @map("context_type")
+  productId         String?  @map("product_id") @db.Uuid
+  editorialStage    String   @default("draft") @map("editorial_stage")
+  editorialRevision Int      @default(1) @map("editorial_revision")
+  masterRevision    Int      @default(0) @map("master_revision")
+  designStatus      String   @default("not_started") @map("design_status")
+  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdBy         String   @map("created_by") @db.Uuid
+  masterContent     Json?    @map("master_content")
+  visualDirection   Json?    @map("visual_direction")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version           Int      @default(1)
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sourceIdea        ContentIdea? @relation("ContentSourceIdea", fields: [sourceIdeaId], references: [id], onDelete: Restrict)
+  product           Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  creator           User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  brief             ContentBrief?
+  variants          PlatformVariant[]
+  events            ContentEvent[]
+
+  @@unique([companyId, id])
+  @@index([companyId, updatedAt, id])
+  @@index([companyId, editorialStage, updatedAt, id])
+  @@index([productId])
+  @@index([sourceIdeaId])
+  @@index([createdBy])
+  @@map("contents")
+}
+
+model ContentBrief {
+  contentId              String   @id @map("content_id") @db.Uuid
+  pillarCode             String   @map("pillar_code")
+  objective              String
+  targetAudience         String   @map("target_audience")
+  topic                  String
+  angle                  String?
+  additionalInstructions String?  @map("additional_instructions")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                Int      @default(1)
+  content                Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  pillar                 ContentPillar @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
+
+  @@index([pillarCode])
+  @@map("content_briefs")
+}
+
+model PlatformVariant {
+  id                       String   @id @default(uuid()) @db.Uuid
+  contentId                String   @map("content_id") @db.Uuid
+  platform                 String
+  enabled                  Boolean  @default(true)
+  copy                     String?
+  cta                      String?
+  hashtags                 String?
+  visualRecommendation     String?  @map("visual_recommendation")
+  revision                 Int      @default(1)
+  adaptedFromMasterRevision Int?    @map("adapted_from_master_revision")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  content                  Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  events                   ContentEvent[]
+
+  @@unique([contentId, platform])
+  @@unique([contentId, id])
+  @@index([contentId])
+  @@map("platform_variants")
+}
+
+model ContentEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  contentId String   @map("content_id") @db.Uuid
+  variantId String?  @map("variant_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  actorKind String   @map("actor_kind")
+  eventType String   @map("event_type")
+  metadata  Json
+  requestId String   @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  variant   PlatformVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([contentId, createdAt, id])
+  @@index([variantId])
+  @@index([actorId])
+  @@map("content_events")
 }
 
 model RequestIdempotency {
