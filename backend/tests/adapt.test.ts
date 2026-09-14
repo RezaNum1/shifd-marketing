@@ -117,6 +117,9 @@ async function createPreparedContent(auth: { cookie: string; csrf: string }, key
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.socialAccount.deleteMany({ where: { companyId: id } })
   await prisma.requestIdempotency.deleteMany({ where: { companyId: id } })
   await prisma.aiRequestLog.deleteMany({ where: { companyId: id } })
   await prisma.contentEvent.deleteMany({ where: { content: { companyId: id } } })

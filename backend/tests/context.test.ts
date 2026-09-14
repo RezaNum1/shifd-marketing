@@ -90,6 +90,9 @@ runIntegration('Phase 3 Company, Product and Context', () => {
   afterAll(async () => {
     for (const id of [companyId, otherCompanyId]) {
       if (!id) continue
+      await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+      await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+      await prisma.socialAccount.deleteMany({ where: { companyId: id } })
       await prisma.authSession.deleteMany({ where: { user: { companyId: id } } })
       await prisma.requestIdempotency.deleteMany({ where: { companyId: id } })
       await prisma.aiRequestLog.deleteMany({ where: { companyId: id } })

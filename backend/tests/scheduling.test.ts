@@ -202,6 +202,9 @@ function variant(content: AnyRecord, platform: string): AnyRecord {
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.socialAccount.deleteMany({ where: { companyId: id } })
   await prisma.publicationRecord.deleteMany({ where: { variant: { content: { companyId: id } } } })
   await prisma.contentSchedule.deleteMany({ where: { variant: { content: { companyId: id } } } })
   await prisma.content.updateMany({ where: { companyId: id }, data: { currentApprovalId: null } })
@@ -392,6 +395,7 @@ runIntegration('Phase 10 Scheduling, Calendar, and Manual Publication', () => {
 
   it('P100-P106/P108-P112/P115: manual publication is explicit, early-safe, idempotent, correctable, and metric-free', async () => {
     const auth = await session(email)
+    const metricRowsBefore = await prisma.weeklyMetric.count({ where: { socialAccount: { companyId } } })
     const fixture = await createApprovedContent(auth, 'p100', { platforms: ['instagram'] })
     const scheduled = await app.inject({ method: 'POST', url: `/api/contents/${fixture.id}/schedules`, headers: headers(auth, fixture.content.version, 'p100-schedule'), payload: { schedules: [{ platform: 'instagram', scheduledAt: at(5), timezone: 'Asia/Jakarta' }] } })
     const scheduledContent = scheduled.json().data as AnyRecord
@@ -426,7 +430,7 @@ runIntegration('Phase 10 Scheduling, Calendar, and Manual Publication', () => {
     expect((await app.inject({ method: 'POST', url: `/api/schedules/${invalidSchedule.id}/publish`, headers: headers(auth, invalidScheduleResponse.json().data.version, 'p102-future'), payload: { publishedAt: at(1), postUrl: null } })).statusCode).toBe(422)
     expect((await app.inject({ method: 'POST', url: `/api/schedules/${invalidSchedule.id}/publish`, headers: headers(auth, invalidScheduleResponse.json().data.version, 'p105-url'), payload: { publishedAt: fixedNow.toISOString(), postUrl: 'ftp://invalid.example/post' } })).statusCode).toBe(422)
     expect(await prisma.publicationRecord.count({ where: { variant: { contentId: invalid.id } } })).toBe(0)
-    expect(await prisma.$queryRaw<Array<{ exists: string | null }>>`SELECT to_regclass('weekly_metrics')::text AS "exists"`).toEqual([{ exists: null }])
+    expect(await prisma.weeklyMetric.count({ where: { socialAccount: { companyId } } })).toBe(metricRowsBefore)
     expect((await app.inject({ method: 'DELETE', url: `/api/publications/${publicationId}`, headers: headers(auth, corrected.content.version) })).statusCode).toBe(404)
   })
 

@@ -106,6 +106,9 @@ async function createReviewableContent(auth: { cookie: string; csrf: string }, k
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.socialAccount.deleteMany({ where: { companyId: id } })
   await prisma.content.updateMany({ where: { companyId: id }, data: { currentApprovalId: null } })
   await prisma.approvalAction.deleteMany({ where: { content: { companyId: id } } })
   await prisma.platformVariant.updateMany({ where: { content: { companyId: id } }, data: { currentAssessmentId: null } })

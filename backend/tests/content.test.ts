@@ -115,6 +115,9 @@ async function readState() {
 
 async function removeCompany(company: string) {
   if (!company) return
+  await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: company } } })
+  await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: company } } })
+  await prisma.socialAccount.deleteMany({ where: { companyId: company } })
   await prisma.contentEvent.deleteMany({ where: { content: { companyId: company } } })
   await prisma.platformVariant.deleteMany({ where: { content: { companyId: company } } })
   await prisma.contentBrief.deleteMany({ where: { content: { companyId: company } } })

@@ -41,8 +41,10 @@ runIntegration('Phase 2 authentication', () => {
 
   afterAll(async () => {
     await prisma.authSession.deleteMany({ where: { userId } })
-    if (userId) await prisma.user.delete({ where: { id: userId } })
     if (companyId) {
+      await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId } } })
+      await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId } } })
+      await prisma.socialAccount.deleteMany({ where: { companyId } })
       await prisma.requestIdempotency.deleteMany({ where: { companyId } })
       await prisma.aiRequestLog.deleteMany({ where: { companyId } })
       await prisma.productProfile.deleteMany({ where: { product: { companyId } } })
@@ -50,6 +52,7 @@ runIntegration('Phase 2 authentication', () => {
       await prisma.bmcBlock.deleteMany({ where: { companyId } })
       await prisma.brandProfile.deleteMany({ where: { companyId } })
       await prisma.aiSettings.deleteMany({ where: { companyId } })
+      if (userId) await prisma.user.delete({ where: { id: userId } })
       await prisma.company.delete({ where: { id: companyId } })
     }
     await prisma.$disconnect()

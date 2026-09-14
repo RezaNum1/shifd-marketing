@@ -38,6 +38,7 @@ model Company {
   assets               CreativeAsset[]
   aiSettings           AiSettings?
   aiRequests           AiRequestLog[]
+  socialAccounts       SocialAccount[]
 
   @@map("companies")
 }
@@ -63,6 +64,8 @@ model User {
   approvalActions ApprovalAction[]
   createdSchedules   ContentSchedule[] @relation("ScheduleCreatedBy")
   markedPublications PublicationRecord[] @relation("PublicationMarkedBy")
+  recordedMetrics    WeeklyMetric[] @relation("MetricRecordedBy")
+  recordedInquiries  InboundInquiryMetric[] @relation("InquiryRecordedBy")
 
   @@index([companyId])
   @@map("users")
@@ -341,6 +344,7 @@ model CreativeAsset {
   company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
   uploader       User           @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
   variantLinks   VariantAsset[]
+  metricEvidence WeeklyMetric[]
 
   @@index([companyId, createdAt])
   @@map("creative_assets")
@@ -531,6 +535,77 @@ model AiRateVersion {
   @@unique([provider, model, version])
   @@index([provider, model, effectiveFrom])
   @@map("ai_rate_versions")
+}
+
+model SocialAccount {
+  id                    String       @id @default(uuid()) @db.Uuid
+  companyId             String       @map("company_id") @db.Uuid
+  platform              String
+  accountName           String?      @map("account_name")
+  externalAccountId     String?      @map("external_account_id")
+  mode                  String
+  connectionStatus      String       @map("connection_status")
+  reportingTimezone     String       @map("reporting_timezone")
+  lastSuccessfulSyncAt  DateTime?    @map("last_successful_sync_at") @db.Timestamptz(3)
+  credentialReference   String?      @map("credential_reference")
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version               Int          @default(1)
+  company               Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  weeklyMetrics         WeeklyMetric[]
+  inquiryMetrics        InboundInquiryMetric[]
+
+  @@unique([companyId, platform])
+  @@index([companyId, platform])
+  @@map("social_accounts")
+}
+
+model WeeklyMetric {
+  id                    String        @id @default(uuid()) @db.Uuid
+  socialAccountId      String        @map("social_account_id") @db.Uuid
+  weekStart             DateTime      @map("week_start") @db.Date
+  weekEnd               DateTime      @map("week_end") @db.Date
+  followers             BigInt
+  reach                 BigInt?
+  impressions           BigInt
+  likes                 BigInt         @default(0)
+  comments              BigInt         @default(0)
+  saves                 BigInt         @default(0)
+  reportedPublishedPosts Int          @map("reported_published_posts")
+  source                String
+  evidenceAssetId       String?       @map("evidence_asset_id") @db.Uuid
+  notes                 String?
+  recordedBy            String?       @map("recorded_by") @db.Uuid
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version               Int           @default(1)
+  socialAccount         SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  evidenceAsset         CreativeAsset? @relation(fields: [evidenceAssetId], references: [id], onDelete: Restrict)
+  recorder              User?         @relation("MetricRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  @@unique([socialAccountId, weekStart, weekEnd])
+  @@index([socialAccountId, weekStart])
+  @@index([evidenceAssetId])
+  @@map("weekly_metrics")
+}
+
+model InboundInquiryMetric {
+  id               String        @id @default(uuid()) @db.Uuid
+  socialAccountId String        @map("social_account_id") @db.Uuid
+  weekStart        DateTime      @map("week_start") @db.Date
+  weekEnd          DateTime      @map("week_end") @db.Date
+  count            Int
+  source           String
+  recordedBy       String?       @map("recorded_by") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version          Int           @default(1)
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  recorder         User?         @relation("InquiryRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  @@unique([socialAccountId, weekStart, weekEnd])
+  @@index([socialAccountId, weekStart])
+  @@map("inbound_inquiry_metrics")
 }
 
 model ApprovalAction {

@@ -80,6 +80,9 @@ async function contentDetail(app: Awaited<ReturnType<typeof buildApp>>, auth: { 
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
+  await prisma.socialAccount.deleteMany({ where: { companyId: id } })
   await prisma.variantAsset.deleteMany({ where: { variant: { content: { companyId: id } } } })
   await prisma.contentEvent.deleteMany({ where: { content: { companyId: id } } })
   await prisma.platformVariant.updateMany({ where: { content: { companyId: id } }, data: { reuseCreativeFromVariantId: null } })

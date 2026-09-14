@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { loadConfig } from '../../config/env.js'
 import { hashPassword } from './password.js'
 import { provisionCompanyContext } from '../context/service.js'
+import { provisionSocialAccounts } from '../performance/accounts.js'
 
 const required = (name: string): string => {
   const value = process.env[name]?.trim()
@@ -29,12 +30,14 @@ export async function bootstrapOperator(prisma: PrismaClient, input: BootstrapIn
   const existing = await prisma.user.findFirst({ where: { email: userEmail } })
   if (existing) {
     await provisionCompanyContext(prisma, existing.companyId)
+    await provisionSocialAccounts(prisma, existing.companyId)
     return { created: false as const, user: existing }
   }
   const passwordHash = await hashPassword(userPassword)
   return prisma.$transaction(async (tx) => {
     const company = await tx.company.create({ data: { name: input.companyName, description: input.companyDescription } })
     await provisionCompanyContext(tx, company.id)
+    await provisionSocialAccounts(tx, company.id)
     const user = await tx.user.create({ data: { companyId: company.id, name: input.userName, email: userEmail, passwordHash, role: 'founder' } })
     return { created: true as const, company, user }
   })
