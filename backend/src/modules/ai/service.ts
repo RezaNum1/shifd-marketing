@@ -9,7 +9,7 @@ import {
 import { readCompanyContext, readProduct, readResolvedContextFromDb, type ContextDb } from '../context/service.js'
 import { companyContextReadiness, productContextReadiness } from '../context/readiness.js'
 import { requestHash } from '../context/normalize.js'
-import { assertReviewUnlocked, readContentFromDb, mapContent } from '../content/service.js'
+import { assertNoPublishedVariants, assertReviewUnlocked, getContentAggregate, readContentFromDb, mapContent } from '../content/service.js'
 import { encodeCursor, etag } from '../context/service.js'
 import type { AiMode, AiRequestStatus } from './constants.js'
 import { AI_GENERATE_OPERATION, AI_LANGUAGES, AI_MODULE, AI_OPERATION, AI_PROVIDER, OUTPUT_SCHEMA_VERSION } from './constants.js'
@@ -127,7 +127,8 @@ export async function generateContent(
   try {
     prepared = await prisma.$transaction(async (tx) => {
       const locked = await lockContentForGeneration(tx, companyId, contentId, expectedVersion)
-      await assertReviewUnlocked(tx, companyId, contentId, config)
+      const unlocked = await assertReviewUnlocked(tx, companyId, contentId, config)
+      assertNoPublishedVariants(unlocked)
       const input = await buildGenerationInput(tx, config, provider, companyId, actorId, contentId, expectedVersion, idempotencyKey, locked)
       const raced = await tx.requestIdempotency.findUnique({
         where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } },
@@ -377,11 +378,12 @@ async function finalizeSuccessfulRequest(
       FROM "contents" WHERE "id" = CAST(${prepared.contentId} AS UUID) AND "company_id" = CAST(${companyId} AS UUID) FOR UPDATE
     `
     const current = rows[0]
+    const aggregate = current ? await getContentAggregate(tx, companyId, prepared.contentId) : null
     const company = await tx.company.findUnique({ where: { id: companyId }, select: { contextVersion: true } })
     const product = prepared.productId ? await tx.product.findFirst({ where: { id: prepared.productId, companyId }, select: { id: true, version: true } }) : null
     const settings = await tx.aiSettings.findUnique({ where: { companyId }, select: { version: true } })
     const prompt = await tx.promptVersion.findFirst({ where: { module: AI_MODULE, operation: AI_OPERATION, status: 'active' }, select: { id: true } })
-    const stale = !current || !company || current.version !== prepared.contentVersion || current.editorialRevision !== prepared.editorialRevision || current.masterRevision !== prepared.masterRevision || current.contextType !== (prepared.productId ? 'product' : 'company') || current.productId !== prepared.productId || company.contextVersion !== prepared.companyContextVersion || (prepared.productId !== null && (!product || product.version !== prepared.productVersion)) || !settings || settings.version !== prepared.settingsVersion || !prompt || prompt.id !== prepared.promptVersionId
+    const stale = !current || !aggregate || aggregate.variants.some((variant) => variant.publication) || !company || current.version !== prepared.contentVersion || current.editorialRevision !== prepared.editorialRevision || current.masterRevision !== prepared.masterRevision || current.contextType !== (prepared.productId ? 'product' : 'company') || current.productId !== prepared.productId || company.contextVersion !== prepared.companyContextVersion || (prepared.productId !== null && (!product || product.version !== prepared.productVersion)) || !settings || settings.version !== prepared.settingsVersion || !prompt || prompt.id !== prepared.promptVersionId
     const usage = usageForDb(providerResult)
     if (stale) {
       await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {

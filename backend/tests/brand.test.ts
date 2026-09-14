@@ -108,6 +108,13 @@ async function session(address: string) {
   return { cookie: cookieFrom(response), csrf: body.data.csrfToken }
 }
 
+async function waitForProviderCalls(expected: number) {
+  const deadline = Date.now() + 1_000
+  while (fake.calls < expected && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
 function headers(auth: { cookie: string; csrf: string }, version?: number, key?: string) {
   return {
     origin, cookie: auth.cookie, 'x-csrf-token': auth.csrf,
@@ -301,7 +308,7 @@ runIntegration('Phase 8 M4 Brand Consistency Checker', () => {
 
     fake.blocked = true
     const pendingPromise = app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: headers(auth, prepared.version, 'relevant-drift'), payload: { platform: 'instagram' } })
-    await new Promise((resolve) => setTimeout(resolve, 15))
+    await waitForProviderCalls(1)
     expect(fake.calls).toBe(1)
     const changed = await app.inject({ method: 'PATCH', url: `/api/contents/${prepared.id}`, headers: headers(auth, prepared.version), payload: { master: { ...master, title: 'Changed while checking' } } })
     expect(changed.statusCode).toBe(200)

@@ -1,11 +1,18 @@
 import type { ContentStage } from './constants.js'
 
-export type LifecycleStatus = 'Draft' | 'Generated' | 'Adapted' | 'Creative In Progress' | 'Ready for Review' | 'Needs Revision' | 'Approved' | 'Archived'
+export type LifecycleStatus = 'Draft' | 'Generated' | 'Adapted' | 'Creative In Progress' | 'Ready for Review' | 'Needs Revision' | 'Approved' | 'Scheduled' | 'Published' | 'Archived'
 export type ResumeStep = 'brief' | 'generate' | 'adapt' | 'creative' | 'review' | 'schedule' | null
 export type AdaptationState = 'missing' | 'current' | 'needs_adaptation'
 
-export function deriveLifecycleStatus(input: { archivedAt: Date | string | null; editorialStage: string }, approvalValid = false): LifecycleStatus {
+export function deriveLifecycleStatus(input: {
+  archivedAt: Date | string | null
+  editorialStage: string
+  allEnabledVariantsPublished?: boolean
+  hasActiveUnpublishedSchedule?: boolean
+}, approvalValid = false): LifecycleStatus {
   if (input.archivedAt) return 'Archived'
+  if (input.allEnabledVariantsPublished) return 'Published'
+  if (input.hasActiveUnpublishedSchedule) return 'Scheduled'
   if (approvalValid) return 'Approved'
   const stages: Record<ContentStage, LifecycleStatus> = {
     draft: 'Draft',
@@ -18,8 +25,15 @@ export function deriveLifecycleStatus(input: { archivedAt: Date | string | null;
   return stages[input.editorialStage as ContentStage] ?? 'Draft'
 }
 
-export function deriveResumeStep(input: { archivedAt: Date | string | null; editorialStage: string }, approvalValid = false): ResumeStep {
+export function deriveResumeStep(input: {
+  archivedAt: Date | string | null
+  editorialStage: string
+  allEnabledVariantsPublished?: boolean
+  hasActiveUnpublishedSchedule?: boolean
+}, approvalValid = false): ResumeStep {
   if (input.archivedAt) return null
+  if (input.allEnabledVariantsPublished) return null
+  if (input.hasActiveUnpublishedSchedule) return 'schedule'
   if (approvalValid) return 'schedule'
   const steps: Record<ContentStage, Exclude<ResumeStep, null>> = {
     draft: 'brief',

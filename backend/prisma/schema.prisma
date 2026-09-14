@@ -61,6 +61,8 @@ model User {
   uploadedAssets CreativeAsset[]
   aiRequests     AiRequestLog[]
   approvalActions ApprovalAction[]
+  createdSchedules   ContentSchedule[] @relation("ScheduleCreatedBy")
+  markedPublications PublicationRecord[] @relation("PublicationMarkedBy")
 
   @@index([companyId])
   @@map("users")
@@ -289,6 +291,8 @@ model PlatformVariant {
   // Keep Prisma's client-side relation scalar-only; the Phase 8 migration's
   // composite FK still enforces that the pointed assessment belongs to this Variant.
   currentAssessment          BrandAssessment?  @relation("VariantCurrentAssessment", fields: [currentAssessmentId], references: [id], onDelete: Restrict)
+  schedule                   ContentSchedule?
+  publication                PublicationRecord?
   reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
   reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
   approvalActions            ApprovalAction[]
@@ -340,6 +344,47 @@ model CreativeAsset {
 
   @@index([companyId, createdAt])
   @@map("creative_assets")
+}
+
+model ContentSchedule {
+  id                 String           @id @default(uuid()) @db.Uuid
+  variantId          String           @unique @map("variant_id") @db.Uuid
+  scheduledAt        DateTime         @map("scheduled_at") @db.Timestamptz(3)
+  timezone           String
+  approvalActionId   String           @map("approval_action_id") @db.Uuid
+  createdBy          String           @map("created_by") @db.Uuid
+  cancelledAt        DateTime?        @map("cancelled_at") @db.Timestamptz(3)
+  cancellationReason String?          @map("cancellation_reason")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version            Int              @default(1)
+  variant            PlatformVariant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  approvalAction     ApprovalAction   @relation(fields: [approvalActionId], references: [id], onDelete: Restrict)
+  creator            User             @relation("ScheduleCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  publication        PublicationRecord?
+
+  @@unique([id, variantId])
+  @@index([scheduledAt])
+  @@map("content_schedules")
+}
+
+model PublicationRecord {
+  id                  String          @id @default(uuid()) @db.Uuid
+  variantId           String          @unique @map("variant_id") @db.Uuid
+  scheduleId          String          @unique @map("schedule_id") @db.Uuid
+  scheduledAtSnapshot DateTime        @map("scheduled_at_snapshot") @db.Timestamptz(3)
+  publishedAt         DateTime        @map("published_at") @db.Timestamptz(3)
+  postUrl             String?         @map("post_url")
+  markedBy            String          @map("marked_by") @db.Uuid
+  recordedAt          DateTime        @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version             Int             @default(1)
+  variant             PlatformVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  schedule            ContentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  marker              User            @relation("PublicationMarkedBy", fields: [markedBy], references: [id], onDelete: Restrict)
+
+  @@index([publishedAt])
+  @@map("publication_records")
 }
 
 model VariantAsset {
@@ -502,6 +547,7 @@ model ApprovalAction {
   createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   content           Content           @relation("ContentApprovalActions", fields: [contentId], references: [id], onDelete: Restrict)
   currentForContent Content[]         @relation("ContentCurrentApproval")
+  schedules         ContentSchedule[]
   variant           PlatformVariant?  @relation(fields: [contentId, variantId], references: [contentId, id], onDelete: Restrict)
   assessment        BrandAssessment?  @relation(fields: [variantId, assessmentId], references: [variantId, id], onDelete: Restrict)
   actor             User              @relation(fields: [actorId], references: [id], onDelete: Restrict)

@@ -12,6 +12,7 @@ import {
 } from '../content/service.js'
 import { hasCompleteVariantCopy } from '../content/lifecycle.js'
 import type { PlatformCode } from '../content/constants.js'
+import { systemClock, type Clock } from '../../shared/time/clock.js'
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -201,6 +202,7 @@ export async function requestRevision(
   idempotencyKey: string,
   requestId: string,
   config: { anthropicModel: string | null },
+  clock: Clock = systemClock,
 ) {
   return executeIdempotent(prisma, {
     companyId,
@@ -209,12 +211,34 @@ export async function requestRevision(
     normalizedRequest: { actorId, contentId, expectedVersion, reason },
     execute: async (tx) => {
       await lockReviewContent(tx, companyId, contentId, expectedVersion)
+      await lockReviewVariants(tx, contentId)
+      await lockReviewSchedules(tx, contentId)
       const content = await getContentAggregate(tx, companyId, contentId)
       if (content.archivedAt) throw conflict('Archived Content cannot request revision.')
       if (!reason.trim() || reason.length > 4_000) throw validationError('A revision reason is required.', { reason: 'Use a nonblank reason of at most 4000 characters.' })
       const freshness = await assessmentFreshness(tx, companyId, content, config)
       const approved = await approvalIsCurrent(tx, companyId, content, freshness)
       if (!approved && !['ready_for_review', 'needs_revision'].includes(content.editorialStage)) throw conflict('Content is not in a review workflow.')
+      const enabled = content.variants.filter((variant) => variant.enabled)
+      if (enabled.length > 0 && enabled.every((variant) => variant.publication)) throw conflict('Fully published Content cannot request revision.')
+
+      const cancelledAt = clock.now()
+      for (const variant of content.variants) {
+        const schedule = variant.schedule
+        if (!schedule || schedule.cancelledAt || variant.publication) continue
+        await tx.contentSchedule.update({
+          where: { id: schedule.id },
+          data: { cancelledAt, cancellationReason: 'request_revision', version: { increment: 1 } },
+        })
+        await appendReviewEvent(tx, {
+          contentId,
+          variantId: variant.id,
+          actorId,
+          eventType: 'schedule_cancelled',
+          metadata: { scheduleId: schedule.id, variantId: variant.id, platform: variant.platform, reason: 'request_revision' },
+          requestId,
+        })
+      }
 
       const action = await tx.approvalAction.create({
         data: {
@@ -283,6 +307,17 @@ async function lockReviewVariants(tx: Prisma.TransactionClient, contentId: strin
     WHERE "content_id" = CAST(${contentId} AS UUID) AND "enabled" = TRUE
     ORDER BY "id"
     FOR UPDATE
+  `
+}
+
+async function lockReviewSchedules(tx: Prisma.TransactionClient, contentId: string) {
+  await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT schedules."id"
+    FROM "content_schedules" AS schedules
+    INNER JOIN "platform_variants" AS variants ON variants."id" = schedules."variant_id"
+    WHERE variants."content_id" = CAST(${contentId} AS UUID)
+    ORDER BY schedules."id"
+    FOR UPDATE OF schedules
   `
 }
 

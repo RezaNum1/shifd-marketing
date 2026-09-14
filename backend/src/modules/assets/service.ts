@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { assetInUse, conflict, notFound, revisionConflict, storageFailure, validationError } from '../../shared/errors/AppError.js'
-import { assertReviewUnlocked, readContent } from '../content/service.js'
+import { assertReviewUnlocked, assertVariantNotPublished, readContent } from '../content/service.js'
 import { executeIdempotent } from '../content/idempotency.js'
 import type { PlatformCode } from '../content/constants.js'
 import { etag } from '../context/service.js'
@@ -32,6 +32,7 @@ export interface AssetDto {
 const variantAssetInclude = {
   assetLinks: { orderBy: { sortOrder: 'asc' as const }, include: { asset: true } },
   reuseCreativeFromVariant: true,
+  publication: { select: { id: true } },
 } satisfies Prisma.PlatformVariantInclude
 
 const contentVariantInclude = {
@@ -140,6 +141,7 @@ export async function replaceVariantAssets(
     await assertReviewUnlocked(tx, companyId, contentId)
     const variant = content.variants.find((item) => item.platform === platform)
     if (!variant) throw notFound()
+    assertVariantNotPublished(variant)
     if (new Set(assetIds).size !== assetIds.length) throw validationError('Asset IDs must be unique.', { assetIds: 'Do not repeat an Asset.' })
 
     await lockAssets(tx, companyId, assetIds)
@@ -181,6 +183,7 @@ export async function setCreativeReuse(
     const linkedin = content.variants.find((item) => item.platform === 'linkedin')
     const instagram = content.variants.find((item) => item.platform === 'instagram')
     if (!linkedin || !instagram) throw conflict('Instagram and LinkedIn Variants are required for creative reuse.')
+    assertVariantNotPublished(linkedin)
     const nextSource = reuseInstagramCreative ? instagram.id : null
     if (linkedin.reuseCreativeFromVariantId === nextSource) return
     await tx.platformVariant.update({ where: { id: linkedin.id }, data: { reuseCreativeFromVariantId: nextSource } })

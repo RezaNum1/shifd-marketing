@@ -19,8 +19,6 @@ let companyId = ''
 let otherCompanyId = ''
 let activeProductId = ''
 let inactiveProductId = ''
-let contentId = ''
-let sourceIdeaId = ''
 
 function cookieFrom(response: { headers: { 'set-cookie'?: unknown } }) {
   const value = response.headers['set-cookie']
@@ -69,6 +67,38 @@ function variantCopy(platform: 'instagram' | 'linkedin') {
     hashtags: '#workflow #operations',
     visualRecommendation: 'Use a simple handoff diagram.',
   }
+}
+
+async function createDraftContent(app: Awaited<ReturnType<typeof buildApp>>, auth: { cookie: string; csrf: string }, key: string, enabledPlatforms: Array<'instagram' | 'linkedin'> = ['instagram', 'linkedin'], sourceIdeaId?: string) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/contents',
+    headers: { ...mutationHeaders(auth), 'idempotency-key': `${key}-create` },
+    payload: { ...(sourceIdeaId ? { sourceIdeaId } : {}), brief: companyBrief(`${key} topic`), enabledPlatforms },
+  })
+  expect(response.statusCode, `POST /api/contents failed: ${response.statusCode} ${response.body}`).toBe(201)
+  return { id: response.json().data.id as string, content: response.json().data }
+}
+
+async function createSourceBackedContent(app: Awaited<ReturnType<typeof buildApp>>, auth: { cookie: string; csrf: string }, key: string) {
+  const source = await app.inject({
+    method: 'POST',
+    url: '/api/content-ideas',
+    headers: { ...mutationHeaders(auth), 'idempotency-key': `${key}-idea` },
+    payload: companyIdea(`${key} source idea`),
+  })
+  expect(source.statusCode).toBe(201)
+  const sourceIdeaId = source.json().data.id as string
+  const content = await createDraftContent(app, auth, key, ['instagram', 'linkedin'], sourceIdeaId)
+  return { ...content, sourceIdeaId }
+}
+
+async function createAdaptedContent(app: Awaited<ReturnType<typeof buildApp>>, auth: { cookie: string; csrf: string }, key: string) {
+  const draft = await createDraftContent(app, auth, key)
+  const saved = await app.inject({ method: 'PATCH', url: `/api/contents/${draft.id}`, headers: mutationHeaders(auth, 1), payload: { master: master(), visualDirection: direction() } })
+  expect(saved.statusCode).toBe(200)
+  await prisma.platformVariant.updateMany({ where: { contentId: draft.id }, data: { copy: 'A complete adaptation.', cta: 'Review the handoff.', hashtags: '#workflow', visualRecommendation: 'Use a simple diagram.', adaptedFromMasterRevision: 1 } })
+  return { id: draft.id, content: saved.json().data }
 }
 
 async function readState() {
@@ -131,7 +161,7 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
     expect(unauthenticated.statusCode).toBe(401)
     const created = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-primary' }, payload: companyIdea() })
     expect(created.statusCode).toBe(201)
-    sourceIdeaId = created.json().data.id
+    const sourceIdeaId = created.json().data.id as string
     expect(created.headers.etag).toBe('"1"')
     const replay = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-primary' }, payload: companyIdea() })
     expect(replay.statusCode).toBe(201)
@@ -169,14 +199,14 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
     const auth = await session(app)
     const source = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': `idea-content-source-${suffix}` }, payload: companyIdea('A source idea for content creation') })
     expect(source.statusCode).toBe(201)
-    sourceIdeaId = source.json().data.id
+    const sourceIdeaId = source.json().data.id as string
     const rejected = await app.inject({ method: 'POST', url: '/api/contents', headers: { ...mutationHeaders(auth), 'idempotency-key': 'content-invalid' }, payload: { sourceIdeaId, brief: { ...companyBrief(), topic: '   ' }, enabledPlatforms: ['instagram'] } })
     expect(rejected.statusCode).toBe(422)
     expect((await prisma.contentIdea.findUnique({ where: { id: sourceIdeaId } }))?.status).toBe('ready')
     expect(await prisma.content.count({ where: { companyId } })).toBe(0)
     const created = await app.inject({ method: 'POST', url: '/api/contents', headers: { ...mutationHeaders(auth), 'idempotency-key': 'content-primary' }, payload: { sourceIdeaId, brief: companyBrief(), enabledPlatforms: ['instagram', 'linkedin'] } })
     expect(created.statusCode, `POST /api/contents failed: ${created.statusCode} ${created.body}`).toBe(201)
-    contentId = created.json().data.id
+    const contentId = created.json().data.id as string
     expect(created.json().data).toMatchObject({ sourceIdeaId, editorialStage: 'draft', editorialRevision: 1, designStatus: 'not_started', master: null, visualDirection: null, lifecycleStatus: 'Draft', resumeStep: 'brief' })
     expect(created.json().data.title).toBe(companyBrief().topic)
     expect(created.json().data.variants).toHaveLength(2)
@@ -209,6 +239,9 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
   it('C10-C13/C19-C24: scopes content, derives live names/title/adaptation, and performs aggregate editorial updates', async () => {
     const app = await buildApp({ config, logger: false })
     const auth = await session(app)
+    const fixture = await createDraftContent(app, auth, 'content-c10')
+    const contentId = fixture.id
+    const candidateFixture = await createDraftContent(app, auth, 'content-c10-candidate', ['instagram'])
     const detail = await app.inject({ method: 'GET', url: `/api/contents/${contentId}`, headers: { cookie: auth.cookie } })
     expect(detail.headers.etag).toBe('"1"')
     const before = await readState()
@@ -237,7 +270,7 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
     expect(changedMaster.json().data.variants.find((item: { platform: string }) => item.platform === 'instagram').adaptationState).toBe('needs_adaptation')
     const listed = await app.inject({ method: 'GET', url: '/api/contents?search=revised&limit=1', headers: { cookie: auth.cookie } })
     expect(listed.json().data[0].id).toBe(contentId)
-    const candidate = await prisma.content.findFirst({ where: { companyId, id: { not: contentId } } })
+    const candidate = await prisma.content.findUnique({ where: { id: candidateFixture.id } })
     if (!candidate) throw new Error('Expected an interleaved Content fixture.')
     await prisma.content.update({ where: { id: candidate.id }, data: { editorialStage: 'generated' } })
     const draftIds: string[] = []
@@ -276,6 +309,8 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
   it('C25-C27/C37-C39: validates progress, emits append-only events, and keeps progress out of editorial revision', async () => {
     const app = await buildApp({ config, logger: false })
     const auth = await session(app)
+    const fixture = await createAdaptedContent(app, auth, 'content-c25')
+    const contentId = fixture.id
     const stale = await app.inject({ method: 'POST', url: `/api/contents/${contentId}/progress`, headers: mutationHeaders(auth, 4), payload: { stage: 'adapted' } })
     expect(stale.statusCode).toBe(412)
     const current = await app.inject({ method: 'GET', url: `/api/contents/${contentId}`, headers: { cookie: auth.cookie } })
@@ -297,6 +332,9 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
   it('C28-C36/C40: duplicates and archives Content without re-consuming its source, with protected side-effect-free reads', async () => {
     const app = await buildApp({ config, logger: false })
     const auth = await session(app)
+    const fixture = await createSourceBackedContent(app, auth, 'content-c28')
+    const contentId = fixture.id
+    const sourceIdeaId = fixture.sourceIdeaId
     const original = await app.inject({ method: 'GET', url: `/api/contents/${contentId}`, headers: { cookie: auth.cookie } })
     const originalVersion = original.json().data.version as number
     const duplicate = await app.inject({ method: 'POST', url: `/api/contents/${contentId}/duplicate`, headers: { ...mutationHeaders(auth, originalVersion), 'idempotency-key': 'content-duplicate' }, payload: {} })

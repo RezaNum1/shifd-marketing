@@ -9,7 +9,7 @@ import {
 import { requestHash } from '../context/normalize.js'
 import { readResolvedContextFromDb } from '../context/service.js'
 import { companyContextReadiness, productContextReadiness } from '../context/readiness.js'
-import { approvalIsCurrent, assessmentFreshness, assertReviewUnlocked, getContentAggregate, readContentFromDb } from '../content/service.js'
+import { approvalIsCurrent, assessmentFreshness, assertReviewUnlocked, assertVariantNotPublished, getContentAggregate, readContentFromDb } from '../content/service.js'
 import { hasCompleteVariantCopy } from '../content/lifecycle.js'
 import type { PlatformCode } from '../content/constants.js'
 import { brandRelevantInputHash, type BrandHashParts } from './brand-hash.js'
@@ -96,7 +96,9 @@ export async function brandCheckContent(
   try {
     prepared = await prisma.$transaction(async (tx) => {
       await lockContent(tx, companyId, contentId, expectedVersion)
-      await assertReviewUnlocked(tx, companyId, contentId, config)
+      const unlocked = await assertReviewUnlocked(tx, companyId, contentId, config)
+      const unlockedTarget = unlocked.variants.find((variant) => variant.platform === platform)
+      if (unlockedTarget) assertVariantNotPublished(unlockedTarget)
       const input = await buildBrandCheckInput(tx, config, provider, companyId, actorId, contentId, expectedVersion, platform, false)
       const raced = await tx.requestIdempotency.findUnique({
         where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } },
@@ -407,13 +409,14 @@ async function finalizeBrandCheck(
     const reviewFreshness = await assessmentFreshness(tx, companyId, aggregate, config)
     const reviewLocked = await approvalIsCurrent(tx, companyId, aggregate, reviewFreshness)
     const target = await tx.platformVariant.findFirst({ where: { id: prepared.targetVariantId, contentId: prepared.contentId } })
+    const aggregateTarget = aggregate.variants.find((variant) => variant.id === prepared.targetVariantId)
     const currentInput = target
       ? await buildBrandCheckInput(tx, config, provider, companyId, actorId, prepared.contentId, prepared.contentVersion, prepared.platform, true).catch(() => null)
       : null
     // Approval can be accepted while an already-prepared M4 call is in flight.
     // Treat that review lock as input drift so the late assessment cannot
     // replace the evidence the approval was bound to.
-    const stale = reviewLocked || !target || !currentInput || currentInput.inputHash !== prepared.inputHash
+    const stale = reviewLocked || Boolean(aggregateTarget?.publication) || !target || !currentInput || currentInput.inputHash !== prepared.inputHash
     const usage = usageForDb(providerResult)
     if (stale) {
       await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {

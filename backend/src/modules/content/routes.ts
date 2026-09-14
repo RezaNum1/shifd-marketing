@@ -17,6 +17,7 @@ import { generateContent } from '../ai/service.js'
 import { adaptContent } from '../ai/adapt.js'
 import { brandCheckContent } from '../ai/brand.js'
 import { approveContent, listReviewActions, recordOverride, requestRevision, type ReviewChecklist } from '../review/service.js'
+import type { Clock } from '../../shared/time/clock.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -24,7 +25,7 @@ const masterKeys = ['title', 'coreMessage', 'hook', 'body', 'cta'] as const
 const visualDirectionKeys = ['format', 'concept', 'structure', 'notes'] as const
 const variantCopyKeys = ['copy', 'cta', 'hashtags', 'visualRecommendation'] as const
 
-export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider }) {
+export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider; clock: Clock }) {
   app.get('/content-ideas', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = queryObject(request)
@@ -235,6 +236,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
       idempotencyKey(request),
       request.id,
       options.config,
+      options.clock,
     )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
@@ -242,7 +244,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
 
   app.get('/contents/:id', async (request, reply) => {
     const auth = await requireAuth(request, reply)
-    const content = await readContent(app.prisma, auth.user.companyId, routeId(request), options.config)
+    const content = await readContent(app.prisma, auth.user.companyId, routeId(request), options.config, options.clock.now())
     reply.header('ETag', etag(content.version))
     return reply.send({ data: content })
   })
@@ -480,7 +482,7 @@ function parsePillarCode(value: unknown, path: string): string {
 }
 
 function parseLifecycleStatus(value: string): string {
-  const valid = ['Draft', 'Generated', 'Adapted', 'Creative In Progress', 'Ready for Review', 'Needs Revision', 'Approved', 'Archived']
+  const valid = ['Draft', 'Generated', 'Adapted', 'Creative In Progress', 'Ready for Review', 'Needs Revision', 'Approved', 'Scheduled', 'Published', 'Archived']
   if (!valid.includes(value)) throw validationError('The lifecycle filter is invalid.', { lifecycleStatus: 'Choose an approved lifecycle status.' })
   return value
 }

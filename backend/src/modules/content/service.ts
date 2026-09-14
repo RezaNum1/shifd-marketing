@@ -89,6 +89,11 @@ interface ContentListOptions {
   cursor?: { createdAt: Date; id: string } | undefined
 }
 
+export interface ContentReadConfig {
+  anthropicModel: string | null
+  asOf?: Date
+}
+
 const contentInclude = {
   company: { select: { id: true, name: true } },
   product: { select: { id: true, name: true } },
@@ -101,6 +106,8 @@ const contentInclude = {
       assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } },
       reuseCreativeFromVariant: true,
       currentAssessment: true,
+      schedule: true,
+      publication: { include: { marker: { select: { id: true, name: true } } } },
     },
   },
 } satisfies Prisma.ContentInclude
@@ -227,7 +234,7 @@ export async function restoreIdea(prisma: PrismaClient, companyId: string, ideaI
   })
 }
 
-export async function createContent(prisma: PrismaClient, companyId: string, actorId: string, input: ContentCreateInput, idempotencyKey: string, requestId: string, config?: { anthropicModel: string | null }) {
+export async function createContent(prisma: PrismaClient, companyId: string, actorId: string, input: ContentCreateInput, idempotencyKey: string, requestId: string, config?: ContentReadConfig) {
   return executeIdempotent(prisma, {
     companyId,
     operation: 'content.create',
@@ -266,15 +273,15 @@ export async function createContent(prisma: PrismaClient, companyId: string, act
   })
 }
 
-export async function readContent(prisma: PrismaClient, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
-  return readContentFromDb(prisma, companyId, contentId, config)
+export async function readContent(prisma: PrismaClient, companyId: string, contentId: string, config?: ContentReadConfig, asOf?: Date) {
+  return readContentFromDb(prisma, companyId, contentId, config, asOf)
 }
 
-export async function readContentFromDb(db: Db, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
+export async function readContentFromDb(db: Db, companyId: string, contentId: string, config?: ContentReadConfig, asOf = config?.asOf ?? new Date()) {
   const aggregate = await getContentAggregate(db, companyId, contentId)
   const freshness = await assessmentFreshness(db, companyId, aggregate, config)
   const approval = await currentApprovalProjection(db, companyId, aggregate, freshness)
-  return mapContent(aggregate, freshness, approval)
+  return mapContent(aggregate, freshness, approval, asOf)
 }
 
 export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions) {
@@ -284,7 +291,8 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   if (options.productId) filters.push({ productId: options.productId })
   if (options.platform) filters.push({ variants: { some: { platform: options.platform, enabled: true } } })
   if (options.pillarCode) filters.push({ brief: { is: { pillarCode: options.pillarCode } } })
-  if (options.lifecycleStatus) filters.push(lifecycleFilter(options.lifecycleStatus))
+  if (options.lifecycleStatus === 'Archived') filters.push({ archivedAt: { not: null } })
+  else if (options.lifecycleStatus) filters.push({ archivedAt: null })
   if (options.search) {
     filters.push({ OR: [
       { brief: { is: { topic: { contains: options.search, mode: 'insensitive' } } } },
@@ -298,6 +306,7 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
     { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
   ] })
   const requiresDerivedLifecycleFilter = options.lifecycleStatus !== undefined && options.lifecycleStatus !== 'Archived'
+  const asOf = new Date()
   const rows = await prisma.content.findMany({
     where: { AND: filters },
     include: contentInclude,
@@ -313,17 +322,16 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   const projected = await Promise.all(complete.map(async (row) => {
     const freshness = await assessmentFreshness(prisma, companyId, row, undefined)
     const approval = await currentApprovalProjection(prisma, companyId, row, freshness)
-    return { row, approvalValid: Boolean(approval) }
+    const lifecycle = deriveLifecycleStatus({ ...row, ...lifecycleProjection(row) }, Boolean(approval))
+    return { row, approvalValid: Boolean(approval), lifecycle }
   }))
-  const matching = options.lifecycleStatus === 'Approved'
-    ? projected.filter((item) => item.approvalValid)
-    : options.lifecycleStatus && options.lifecycleStatus !== 'Archived'
-      ? projected.filter((item) => !item.approvalValid)
-      : projected
+  const matching = options.lifecycleStatus
+    ? projected.filter((item) => item.lifecycle === options.lifecycleStatus)
+    : projected
   const pageRows = matching.slice(0, options.limit)
   const last = pageRows.at(-1)?.row
   return {
-    data: pageRows.map((item) => mapContentSummary(item.row, item.approvalValid)),
+    data: pageRows.map((item) => mapContentSummary(item.row, item.approvalValid, asOf)),
     nextCursor: matching.length > options.limit && last ? encodeCursor({ createdAt: last.updatedAt, id: last.id }) : null,
   }
 }
@@ -334,6 +342,7 @@ export async function updateContent(prisma: PrismaClient, companyId: string, con
     const current = await getContentAggregate(tx, companyId, contentId)
     if (current.archivedAt) throw conflict('Archived Content cannot be edited.')
     await assertReviewUnlockedForContent(tx, companyId, current, config)
+    assertNoPublishedVariants(current)
     if (input.brief) await validateBriefReference(tx, companyId, input.brief)
     if (input.enabledPlatforms && input.enabledPlatforms.length === 0) throw validationError('At least one enabled platform is required.', { enabledPlatforms: 'Select Instagram or LinkedIn.' })
 
@@ -386,6 +395,7 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
     const variant = content.variants.find((item) => item.platform === platform)
     if (!variant) throw notFound()
     if (!variant.enabled) throw conflict('Enable the platform before saving its adaptation.')
+    if (variant.publication) throw conflict('Published Variants are immutable. Duplicate Content to develop replacement copy.')
     const copyChanged = variant.copy !== input.copy || variant.cta !== input.cta || variant.hashtags !== input.hashtags || variant.visualRecommendation !== input.visualRecommendation
     await tx.platformVariant.update({
       where: { id: variant.id },
@@ -715,15 +725,32 @@ export async function assertReviewUnlocked(db: Db, companyId: string, contentId:
 }
 
 async function setEnabledPlatforms(tx: Prisma.TransactionClient, contentId: string, platforms: PlatformCode[]) {
-  const existing = await tx.platformVariant.findMany({ where: { contentId }, select: { id: true, platform: true } })
+  const existing = await tx.platformVariant.findMany({
+    where: { contentId },
+    select: { id: true, platform: true, publication: { select: { id: true } }, schedule: { select: { cancelledAt: true } } },
+  })
   for (const platform of platforms) {
     const row = existing.find((item) => item.platform === platform)
     if (row) await tx.platformVariant.update({ where: { id: row.id }, data: { enabled: true } })
     else await tx.platformVariant.create({ data: { contentId, platform, enabled: true } })
   }
   for (const row of existing) {
-    if (!platforms.includes(row.platform as PlatformCode)) await tx.platformVariant.update({ where: { id: row.id }, data: { enabled: false } })
+    if (!platforms.includes(row.platform as PlatformCode)) {
+      if (row.publication) throw conflict('Published Variants cannot be disabled. Duplicate Content to develop replacement content.')
+      if (row.schedule && !row.schedule.cancelledAt) throw conflict('A Variant with an active schedule cannot be disabled.')
+      await tx.platformVariant.update({ where: { id: row.id }, data: { enabled: false } })
+    }
   }
+}
+
+type PublishedVariantCandidate = { publication?: { id: string } | null }
+
+export function assertNoPublishedVariants(content: { variants: PublishedVariantCandidate[] }) {
+  if (content.variants.some((variant) => variant.publication)) throw conflict('Published Variants are immutable. Duplicate Content to develop replacement content.')
+}
+
+export function assertVariantNotPublished(variant: PublishedVariantCandidate) {
+  if (variant.publication) throw conflict('Published Variants are immutable. Duplicate Content to develop replacement content.')
 }
 
 async function appendEvent(tx: Prisma.TransactionClient, input: { contentId: string; variantId?: string; actorId: string; eventType: string; metadata: Record<string, unknown>; requestId: string }) {
@@ -774,9 +801,10 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
   }
 }
 
-export function mapContent(content: CompleteContentRow, freshness?: Map<string, 'current' | 'stale'>, approval: ReturnType<typeof mapApprovalAction> | null = null) {
+export function mapContent(content: CompleteContentRow, freshness?: Map<string, 'current' | 'stale'>, approval: ReturnType<typeof mapApprovalAction> | null = null, asOf = new Date()) {
   const master = decodeMaster(content.masterContent)
   const direction = decodeVisualDirection(content.visualDirection)
+  const projection = lifecycleProjection(content)
   return {
     id: content.id,
     companyId: content.companyId,
@@ -795,11 +823,13 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
     master,
     visualDirection: direction,
     designStatus: content.designStatus,
-    variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master), freshness)),
+    variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master), freshness, content.id, asOf)),
+    schedules: content.variants.flatMap((variant) => variant.schedule ? [mapSchedule(variant.schedule, content.id, variant.platform, variant.publication, asOf)] : []),
+    publications: content.variants.flatMap((variant) => variant.publication ? [mapPublication(variant.publication, content.id, variant.platform)] : []),
     editorialStage: content.editorialStage,
     editorialRevision: content.editorialRevision,
-    lifecycleStatus: deriveLifecycleStatus(content, approval !== null),
-    resumeStep: deriveResumeStep(content, approval !== null),
+    lifecycleStatus: deriveLifecycleStatus({ ...content, ...projection }, approval !== null),
+    resumeStep: deriveResumeStep({ ...content, ...projection }, approval !== null),
     approval,
     archivedAt: content.archivedAt?.toISOString() ?? null,
     version: content.version,
@@ -809,8 +839,9 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
   }
 }
 
-function mapContentSummary(content: CompleteContentRow, approvalValid = false) {
+function mapContentSummary(content: CompleteContentRow, approvalValid = false, asOf = new Date()) {
   const master = decodeMaster(content.masterContent)
+  const projection = lifecycleProjection(content)
   return {
     id: content.id,
     title: master?.title ?? content.brief.topic,
@@ -818,16 +849,16 @@ function mapContentSummary(content: CompleteContentRow, approvalValid = false) {
     company: { id: content.company.id, name: content.company.name },
     product: content.product ? { id: content.product.id, name: content.product.name } : null,
     enabledPlatforms: content.variants.filter((variant) => variant.enabled).map((variant) => variant.platform),
-    lifecycleStatus: deriveLifecycleStatus(content, approvalValid),
-    resumeStep: deriveResumeStep(content, approvalValid),
-    scheduleSummary: [],
-    publications: [],
+    lifecycleStatus: deriveLifecycleStatus({ ...content, ...projection }, approvalValid),
+    resumeStep: deriveResumeStep({ ...content, ...projection }, approvalValid),
+    scheduleSummary: content.variants.flatMap((variant) => variant.schedule ? [mapSchedule(variant.schedule, content.id, variant.platform, variant.publication, asOf)] : []),
+    publications: content.variants.flatMap((variant) => variant.publication ? [mapPublication(variant.publication, content.id, variant.platform)] : []),
     updatedAt: content.updatedAt.toISOString(),
     version: content.version,
   }
 }
 
-function mapVariant(variant: ContentRow['variants'][number], allVariants: ContentRow['variants'], masterRevision: number, hasMaster: boolean, freshness?: Map<string, 'current' | 'stale'>) {
+function mapVariant(variant: ContentRow['variants'][number], allVariants: ContentRow['variants'], masterRevision: number, hasMaster: boolean, freshness?: Map<string, 'current' | 'stale'>, contentId = variant.contentId, asOf = new Date()) {
   const ownAssets = variant.assetLinks.map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
   const effectiveAssets = effectiveAssetLinks(variant, allVariants).map((link) => ({ asset: mapAsset(link.asset), sortOrder: link.sortOrder }))
   return {
@@ -854,8 +885,66 @@ function mapVariant(variant: ContentRow['variants'][number], allVariants: Conten
       createdAt: variant.currentAssessment.createdAt.toISOString(),
       freshness: freshness?.get(variant.id) ?? (variant.currentAssessment.variantRevision === variant.revision ? 'current' : 'stale'),
     } : null,
-    schedule: null,
-    publication: null,
+    schedule: variant.schedule ? mapSchedule(variant.schedule, contentId, variant.platform, variant.publication, asOf) : null,
+    publication: variant.publication ? mapPublication(variant.publication, contentId, variant.platform) : null,
+  }
+}
+
+function mapSchedule(
+  schedule: NonNullable<ContentRow['variants'][number]['schedule']>,
+  contentId: string,
+  platform: string,
+  publication: ContentRow['variants'][number]['publication'],
+  asOf: Date,
+) {
+  const status = publication
+    ? 'published'
+    : schedule.cancelledAt
+      ? 'cancelled'
+      : schedule.scheduledAt <= asOf
+        ? 'ready_to_publish'
+        : 'scheduled'
+  return {
+    id: schedule.id,
+    contentId,
+    variantId: schedule.variantId,
+    platform,
+    scheduledAt: schedule.scheduledAt.toISOString(),
+    timezone: schedule.timezone,
+    approvalActionId: schedule.approvalActionId,
+    cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+    cancellationReason: schedule.cancellationReason,
+    status,
+    version: schedule.version,
+  }
+}
+
+function mapPublication(
+  publication: NonNullable<ContentRow['variants'][number]['publication']>,
+  contentId: string,
+  platform: string,
+) {
+  return {
+    id: publication.id,
+    contentId,
+    variantId: publication.variantId,
+    platform,
+    scheduleId: publication.scheduleId,
+    scheduledAt: publication.scheduledAtSnapshot.toISOString(),
+    publishedAt: publication.publishedAt.toISOString(),
+    postUrl: publication.postUrl,
+    markedBy: { id: publication.marker.id, name: publication.marker.name },
+    recordedAt: publication.recordedAt.toISOString(),
+    updatedAt: publication.updatedAt.toISOString(),
+    version: publication.version,
+  }
+}
+
+function lifecycleProjection(content: Pick<CompleteContentRow, 'variants'>) {
+  const enabled = content.variants.filter((variant) => variant.enabled)
+  return {
+    allEnabledVariantsPublished: enabled.length > 0 && enabled.every((variant) => Boolean(variant.publication)),
+    hasActiveUnpublishedSchedule: enabled.some((variant) => Boolean(variant.schedule && !variant.schedule.cancelledAt && !variant.publication)),
   }
 }
 

@@ -9,7 +9,7 @@ import {
 import { requestHash } from '../context/normalize.js'
 import { readResolvedContextFromDb } from '../context/service.js'
 import { companyContextReadiness, productContextReadiness } from '../context/readiness.js'
-import { approvalIsCurrent, assessmentFreshness, assertReviewUnlocked, getContentAggregate, readContentFromDb } from '../content/service.js'
+import { approvalIsCurrent, assessmentFreshness, assertReviewUnlocked, assertVariantNotPublished, getContentAggregate, readContentFromDb } from '../content/service.js'
 import { hasCompleteVariantCopy } from '../content/lifecycle.js'
 import type { PlatformCode } from '../content/constants.js'
 import {
@@ -98,7 +98,9 @@ export async function adaptContent(
   try {
     prepared = await prisma.$transaction(async (tx) => {
       await lockContent(tx, companyId, contentId, expectedVersion)
-      await assertReviewUnlocked(tx, companyId, contentId, config)
+      const unlocked = await assertReviewUnlocked(tx, companyId, contentId, config)
+      const unlockedTarget = unlocked.variants.find((variant) => variant.platform === platform)
+      if (unlockedTarget) assertVariantNotPublished(unlockedTarget)
       const input = await buildAdaptationInput(tx, config, provider, companyId, actorId, contentId, expectedVersion, platform, false)
       const raced = await tx.requestIdempotency.findUnique({
         where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } },
@@ -397,6 +399,7 @@ async function finalizeAdaptation(
     const reviewFreshness = await assessmentFreshness(tx, companyId, aggregate, config)
     const reviewLocked = await approvalIsCurrent(tx, companyId, aggregate, reviewFreshness)
     const target = await tx.platformVariant.findFirst({ where: { id: prepared.targetVariantId, contentId: prepared.contentId } })
+    const aggregateTarget = aggregate.variants.find((variant) => variant.id === prepared.targetVariantId)
     const currentContent = await tx.content.findFirst({ where: { id: prepared.contentId, companyId }, select: { version: true } })
     let currentInput: Awaited<ReturnType<typeof buildAdaptationInput>> | null = null
     try {
@@ -407,7 +410,7 @@ async function finalizeAdaptation(
     // Approval may win while the provider is running. The aggregate lock makes
     // that race deterministic; an in-flight adaptation must not write into the
     // newly reviewed revision.
-    const stale = reviewLocked || !target || !currentContent || !currentInput || currentInput.inputHash !== prepared.inputHash
+    const stale = reviewLocked || Boolean(aggregateTarget?.publication) || !target || !currentContent || !currentInput || currentInput.inputHash !== prepared.inputHash
     const usage = usageForDb(providerResult)
     if (stale) {
       await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {
