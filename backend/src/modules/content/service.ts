@@ -1067,7 +1067,15 @@ function toJson(value: object): Prisma.InputJsonValue {
 
 function sameJson(value: Prisma.JsonValue | null, next: object | null) {
   if (next === null) return value === null
-  return JSON.stringify(value) === JSON.stringify(next)
+  return stableJson(value) === stableJson(next)
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>).sort(([first], [second]) => first.localeCompare(second)).map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'undefined'
 }
 
 function sameBrief(content: CompleteContentRow, brief: BriefInput) {
