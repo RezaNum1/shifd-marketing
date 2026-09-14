@@ -219,9 +219,10 @@ runIntegration('Phase 8 M4 Brand Consistency Checker', () => {
     const auth = await session(email)
     const other = await session(otherEmail)
     const prepared = await createReadyContent(auth, 'phase8-boundary')
-    expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, payload: { platform: 'instagram' } })).statusCode).toBe(401)
+    // Pass Origin validation so this assertion specifically exercises the authentication boundary.
+    expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: { origin }, payload: { platform: 'instagram' } })).statusCode).toBe(401)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: { cookie: auth.cookie, 'if-match': `"${prepared.version}"`, 'idempotency-key': 'no-origin' }, payload: { platform: 'instagram' } })).statusCode).toBe(403)
-    expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: { ...headers(auth, prepared.version), 'idempotency-key': 'no-csrf' }, payload: { platform: 'instagram' } })).statusCode).toBe(403)
+    expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: { origin, cookie: auth.cookie, 'if-match': `"${prepared.version}"`, 'idempotency-key': 'no-csrf' }, payload: { platform: 'instagram' } })).statusCode).toBe(403)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: headers(auth, undefined, 'no-etag'), payload: { platform: 'instagram' } })).statusCode).toBe(428)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: headers(auth, prepared.version, 'bad-body'), payload: { platform: 'instagram', score: 100 } })).statusCode).toBe(400)
     expect((await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/brand-check`, headers: headers(auth, prepared.version, 'bad-platform'), payload: { platform: 'facebook' } })).statusCode).toBe(422)

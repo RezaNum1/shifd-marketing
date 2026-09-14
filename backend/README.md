@@ -1,9 +1,10 @@
 # Shifd Marketing Backend
 
-Phase 7 adds M3 Cross-Platform Adaptation to the Phase 1–6 foundations. M2 and
-M3 are server-controlled AI operations. M2 produces Master Content and Visual
-Direction; M3 adapts one enabled platform Variant at a time. Neither operation
-approves Content or creates images.
+Phase 9 adds Human Review, warning overrides, final approval, and explicit
+Request Revision to the Phase 1–8 foundations. M2, M3, and M4 remain
+server-controlled AI operations: M2 produces Master Content and Visual
+Direction, M3 adapts one enabled platform Variant at a time, and M4 produces
+advisory evidence. No AI operation approves Content or creates images.
 
 ## Prerequisites
 
@@ -49,7 +50,7 @@ npm run db:generate
 npm run dev
 ```
 
-Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type; Phase 7 adds only the `ai_adapted` event type; Phase 8 adds only `brand_assessments`, `platform_variants.current_assessment_id`, the same-Variant assessment constraint, and the `ai_brand_checked` event type. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6–8 AI checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
+Phase 4 added only `content_ideas`, `contents`, `content_briefs`, `platform_variants`, and `content_events`; Phase 5 adds only `creative_assets`, `variant_assets`, and the required `platform_variants.reuse_creative_from_variant_id` constraint; Phase 6 adds only `ai_settings`, `prompt_versions`, `ai_request_logs`, `ai_rate_versions`, the AI idempotency link, and the `ai_generated` event type; Phase 7 adds only the `ai_adapted` event type; Phase 8 adds only `brand_assessments`, `platform_variants.current_assessment_id`, the same-Variant assessment constraint, and the `ai_brand_checked` event type; Phase 9 adds only `approval_actions`, `contents.current_approval_id`, same-Content review constraints, and human-review event types. Use `npm run db:migrate` locally and `npm run db:deploy` for applying committed migrations in a deployment. `prisma migrate dev`, `prisma migrate deploy`, and `prisma generate` are the supported workflows. Do not use `prisma db push` as the canonical migration command. The case-insensitive email index, Phase 2 company normalization, Phase 3 checks/seed statements, Phase 4 ownership/lifecycle checks, Phase 5 asset constraints, and Phase 6–9 AI/review checks are reviewed PostgreSQL SQL migration additions. Never reset a non-empty database.
 
 For explicit local database verification, run this sequence after PostgreSQL is up and `.env` exists:
 
@@ -70,6 +71,7 @@ npm run ai:seed
 npm run test:ai
 npm run test:adapt
 npm run test:brand
+npm run test:review
 npm run test:unit
 npm run build
 ```
@@ -90,13 +92,14 @@ npm run build
 - `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; it never calls Anthropic
 - `npm run test:adapt` — required real PostgreSQL M3 integration tests using the same test-only injected provider; it never calls Anthropic
 - `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; it never calls Anthropic
+- `npm run test:review` — required real PostgreSQL Phase 9 Human Review integration tests; it never calls an AI provider
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
 - `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v1 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
 
-Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Phase 6 adds settings, prompt metadata, AI request, usage, and M2 generation routes; Phase 7 adds `POST /api/contents/:id/adapt` for one-platform M3 adaptation; Phase 8 adds `POST /api/contents/:id/brand-check` for one-platform advisory assessment. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
+Public routes are `GET /api/health/live` and the three auth endpoints under `/api/auth`. Phase 3 session routes are `GET/PUT /api/company`, `GET /api/context/resolved`, `GET/POST /api/products`, `GET/PUT /api/products/:id`, and `GET /api/content-taxonomy`. Phase 4 adds the Idea list/create/update/duplicate/archive/restore routes, Content list/create/detail/PATCH routes, Variant copy, progress, duplicate/archive, and event history routes. Phase 6 adds settings, prompt metadata, AI request, usage, and M2 generation routes; Phase 7 adds `POST /api/contents/:id/adapt` for one-platform M3 adaptation; Phase 8 adds `POST /api/contents/:id/brand-check` for one-platform advisory assessment; Phase 9 adds `POST /api/contents/:id/override`, `POST /api/contents/:id/approve`, `POST /api/contents/:id/request-revision`, and `GET /api/contents/:id/review-actions`. Unknown routes use the shared error envelope with a request ID. The Prisma plugin creates one client per process and disconnects it during Fastify shutdown.
 
 ## Structure
 
@@ -108,6 +111,7 @@ src/plugins/prisma.ts      one PrismaClient application boundary
 src/modules/auth           password, session, CSRF, bootstrap and auth routes
 src/modules/context        Company/Product Context and taxonomy
 src/modules/content        Ideas, Content, Briefs, Variants and Events
+src/modules/review         Human override, approval, revision, and review history
 src/modules/assets         private AssetStorage, upload/read/attach/reuse/delete/cleanup
 src/modules/ai             M2/M3 provider, prompts, settings, generation, adaptation, logs and usage
 src/shared/errors          focused application errors
@@ -295,7 +299,67 @@ pending/success/failure/stale AI request log and paid-call-safe idempotency
 boundary; provider calls occur outside database locks, stale relevant inputs
 return `409 INPUT_CHANGED`, and retries require a new key after failure.
 
-This phase does not implement Human Approval, overrides, schedules,
+Phase 8 did not implement Human Approval or overrides; those are now covered
+by Phase 9. Schedules,
 publication, performance, M3 changes, or any image inspection.
 
 Set `BOOTSTRAP_COMPANY_NAME`, `BOOTSTRAP_COMPANY_DESCRIPTION`, `BOOTSTRAP_USER_NAME`, `BOOTSTRAP_USER_EMAIL`, and `BOOTSTRAP_USER_PASSWORD` only in the local environment, then run `npm run auth:bootstrap`. The command creates one founder user with an Argon2id password hash and refuses duplicate email creation. It never logs or stores the plaintext password. No HTTP bootstrap or public signup endpoint exists.
+
+## Phase 9 Human Review
+
+M4 remains advisory: `aligned` does not mean Approved. Only an authenticated
+human `POST /api/contents/:id/approve` command creates approval evidence. The
+review module also provides `POST /api/contents/:id/override` for a justified
+warning assessment and `POST /api/contents/:id/request-revision` to explicitly
+unlock a reviewed Content. `GET /api/contents/:id/review-actions` exposes the
+append-only history, including superseded approvals, overrides, and revision
+requests.
+
+`approval_actions` stores immutable human evidence. Override actions bind a
+nonblank justification to the exact current warning Assessment, Variant, and
+editorial revision; they never change the Assessment or approve Content.
+Approval accepts exactly five Boolean checklist confirmations, all `true`:
+`copyReviewed`, `creativeReviewed`, `visualCopyConsistent`, `noErrors`, and
+`readyForPublication`. The server constructs `reviewedVariants` evidence from
+the currently enabled Variants, current Assessment IDs/revisions, overrides,
+and effective Asset IDs. The browser cannot submit that evidence.
+
+The Content `currentApprovalId` pointer is valid only for an `approve` action
+whose editorial revision and reviewed Variant/Assessment evidence still match
+the current aggregate. Content reads project the valid action as `approval`;
+stale or superseded actions remain available through review history. The
+lifecycle selector derives `Approved` and resume step `schedule` from this
+validated pointer/evidence. `editorialStage` remains `ready_for_review`.
+
+Approval applies the preserved D-03 gate: when `designStatus` is not `ready`,
+missing Assets alone do not prevent approval; when it is `ready`, every enabled
+Variant must have an effective creative Asset, including via LinkedIn reuse.
+Current adaptations, current assessments, and any exact warning overrides are
+still required. This is conditional prototype compatibility, not a universal
+image requirement.
+
+While a valid approval exists, all review-affecting writes return
+`409 REVIEW_LOCKED`: Brief/Master/Visual Direction and platform changes, M2/M3,
+M4 reruns, copy, Asset attachments, and creative reuse. Reads, archive, and
+duplication remain available. `request-revision` appends immutable evidence,
+clears the current approval pointer, sets `needs_revision`, increments only the
+Content aggregate version, and does not increment `editorialRevision`; the next
+actual editorial write owns its normal revision increment. No approval is
+silently cleared by a blocked write.
+
+All review commands require the parent Content ETag, Origin, CSRF, and an
+`Idempotency-Key`. Parent Content rows are locked first; approval additionally
+locks enabled Variants by stable ID order. Successful actions and their concise
+`review_override_recorded`, `content_approved`, or `revision_requested` events
+commit atomically. Same-key retries replay the original action without another
+action, event, or version increment; a changed body, path, Content, or
+precondition returns `IDEMPOTENCY_CONFLICT`.
+
+Run the real-PostgreSQL review suite with:
+
+```sh
+npm run test:review
+```
+
+Scheduling, Publication, Performance, and published-variant immutability remain
+outside Phase 9.

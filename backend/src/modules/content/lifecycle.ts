@@ -1,11 +1,12 @@
 import type { ContentStage } from './constants.js'
 
-export type LifecycleStatus = 'Draft' | 'Generated' | 'Adapted' | 'Creative In Progress' | 'Ready for Review' | 'Needs Revision' | 'Archived'
-export type ResumeStep = 'brief' | 'generate' | 'adapt' | 'creative' | 'review' | null
+export type LifecycleStatus = 'Draft' | 'Generated' | 'Adapted' | 'Creative In Progress' | 'Ready for Review' | 'Needs Revision' | 'Approved' | 'Archived'
+export type ResumeStep = 'brief' | 'generate' | 'adapt' | 'creative' | 'review' | 'schedule' | null
 export type AdaptationState = 'missing' | 'current' | 'needs_adaptation'
 
-export function deriveLifecycleStatus(input: { archivedAt: Date | string | null; editorialStage: string }): LifecycleStatus {
+export function deriveLifecycleStatus(input: { archivedAt: Date | string | null; editorialStage: string }, approvalValid = false): LifecycleStatus {
   if (input.archivedAt) return 'Archived'
+  if (approvalValid) return 'Approved'
   const stages: Record<ContentStage, LifecycleStatus> = {
     draft: 'Draft',
     generated: 'Generated',
@@ -17,8 +18,9 @@ export function deriveLifecycleStatus(input: { archivedAt: Date | string | null;
   return stages[input.editorialStage as ContentStage] ?? 'Draft'
 }
 
-export function deriveResumeStep(input: { archivedAt: Date | string | null; editorialStage: string }): ResumeStep {
+export function deriveResumeStep(input: { archivedAt: Date | string | null; editorialStage: string }, approvalValid = false): ResumeStep {
   if (input.archivedAt) return null
+  if (approvalValid) return 'schedule'
   const steps: Record<ContentStage, Exclude<ResumeStep, null>> = {
     draft: 'brief',
     generated: 'generate',

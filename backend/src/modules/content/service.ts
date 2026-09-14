@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
-import { conflict, notFound, revisionConflict, validationError } from '../../shared/errors/AppError.js'
+import { conflict, notFound, reviewLocked, revisionConflict, validationError } from '../../shared/errors/AppError.js'
 import { encodeCursor, etag } from '../context/service.js'
 import { executeIdempotent } from './idempotency.js'
 import { deriveAdaptationState, deriveLifecycleStatus, deriveResumeStep, hasCompleteVariantCopy } from './lifecycle.js'
@@ -94,6 +94,7 @@ const contentInclude = {
   product: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
   brief: true,
+  currentApproval: { include: { actor: { select: { id: true, name: true } } } },
   variants: {
     orderBy: { platform: 'asc' },
     include: {
@@ -104,8 +105,8 @@ const contentInclude = {
   },
 } satisfies Prisma.ContentInclude
 
-type ContentRow = Prisma.ContentGetPayload<{ include: typeof contentInclude }>
-type CompleteContentRow = ContentRow & { brief: NonNullable<ContentRow['brief']> }
+export type ContentRow = Prisma.ContentGetPayload<{ include: typeof contentInclude }>
+export type CompleteContentRow = ContentRow & { brief: NonNullable<ContentRow['brief']> }
 
 export async function createIdea(prisma: PrismaClient, companyId: string, actorId: string, input: IdeaInput, idempotencyKey: string) {
   return executeIdempotent(prisma, {
@@ -271,7 +272,9 @@ export async function readContent(prisma: PrismaClient, companyId: string, conte
 
 export async function readContentFromDb(db: Db, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
   const aggregate = await getContentAggregate(db, companyId, contentId)
-  return mapContent(aggregate, await assessmentFreshness(db, companyId, aggregate, config))
+  const freshness = await assessmentFreshness(db, companyId, aggregate, config)
+  const approval = await currentApprovalProjection(db, companyId, aggregate, freshness)
+  return mapContent(aggregate, freshness, approval)
 }
 
 export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions) {
@@ -294,18 +297,34 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
     { updatedAt: { lt: options.cursor.createdAt } },
     { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
   ] })
+  const requiresDerivedLifecycleFilter = options.lifecycleStatus !== undefined && options.lifecycleStatus !== 'Archived'
   const rows = await prisma.content.findMany({
     where: { AND: filters },
     include: contentInclude,
     orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-    take: options.limit + 1,
+    // Approved has precedence over every stored editorial stage: its pointer
+    // must still match every live assessment, override, revision, and
+    // effective-asset binding. Fetch all candidates for any stage filter
+    // before deriving that state so a matching row cannot be lost behind an
+    // arbitrary pre-filtered page.
+    ...(requiresDerivedLifecycleFilter ? {} : { take: options.limit + 1 }),
   })
   const complete = rows.filter(hasBrief)
-  const pageRows = complete.slice(0, options.limit)
-  const last = pageRows.at(-1)
+  const projected = await Promise.all(complete.map(async (row) => {
+    const freshness = await assessmentFreshness(prisma, companyId, row, undefined)
+    const approval = await currentApprovalProjection(prisma, companyId, row, freshness)
+    return { row, approvalValid: Boolean(approval) }
+  }))
+  const matching = options.lifecycleStatus === 'Approved'
+    ? projected.filter((item) => item.approvalValid)
+    : options.lifecycleStatus && options.lifecycleStatus !== 'Archived'
+      ? projected.filter((item) => !item.approvalValid)
+      : projected
+  const pageRows = matching.slice(0, options.limit)
+  const last = pageRows.at(-1)?.row
   return {
-    data: pageRows.map(mapContentSummary),
-    nextCursor: complete.length > options.limit && last ? encodeCursor({ createdAt: last.updatedAt, id: last.id }) : null,
+    data: pageRows.map((item) => mapContentSummary(item.row, item.approvalValid)),
+    nextCursor: matching.length > options.limit && last ? encodeCursor({ createdAt: last.updatedAt, id: last.id }) : null,
   }
 }
 
@@ -314,6 +333,7 @@ export async function updateContent(prisma: PrismaClient, companyId: string, con
     await lockContent(tx, companyId, contentId, expectedVersion)
     const current = await getContentAggregate(tx, companyId, contentId)
     if (current.archivedAt) throw conflict('Archived Content cannot be edited.')
+    await assertReviewUnlockedForContent(tx, companyId, current, config)
     if (input.brief) await validateBriefReference(tx, companyId, input.brief)
     if (input.enabledPlatforms && input.enabledPlatforms.length === 0) throw validationError('At least one enabled platform is required.', { enabledPlatforms: 'Select Instagram or LinkedIn.' })
 
@@ -361,6 +381,7 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
     if (content.archivedAt) throw conflict('Archived Content cannot be edited.')
+    await assertReviewUnlockedForContent(tx, companyId, content, config)
     if (!decodeMaster(content.masterContent)) throw conflict('Create Master Content before saving a platform adaptation.')
     const variant = content.variants.find((item) => item.platform === platform)
     if (!variant) throw notFound()
@@ -385,6 +406,7 @@ export async function progressContent(prisma: PrismaClient, companyId: string, c
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
     if (content.archivedAt) throw conflict('Archived Content cannot progress through the editorial workflow.')
+    await assertReviewUnlockedForContent(tx, companyId, content, config)
     assertAdaptedPrerequisites(content)
     if (stage === 'ready_for_review' && content.designStatus === 'ready') assertCreativePrerequisites(content)
     // D-03 remains conditional: designStatus=ready requires effective creative
@@ -565,7 +587,7 @@ async function lockContent(tx: Prisma.TransactionClient, companyId: string, cont
   return content
 }
 
-async function getContentAggregate(db: Db, companyId: string, contentId: string): Promise<CompleteContentRow> {
+export async function getContentAggregate(db: Db, companyId: string, contentId: string): Promise<CompleteContentRow> {
   const content = await db.content.findFirst({ where: { id: contentId, companyId }, include: contentInclude })
   if (!content) throw notFound()
   if (!content.brief) throw conflict('Content persistence is incomplete: the required Brief is missing.')
@@ -577,7 +599,7 @@ async function getContentAggregate(db: Db, companyId: string, contentId: string)
  * the M4 input hash from live context and never changes the assessment row or
  * the current pointer while serving a Content read.
  */
-async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { anthropicModel: string | null }) {
+export async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { anthropicModel: string | null }) {
   const result = new Map<string, 'current' | 'stale'>()
   const assessed = content.variants.filter((variant) => Boolean(variant.currentAssessment))
   if (assessed.length === 0) return result
@@ -651,6 +673,47 @@ async function assessmentFreshness(db: Db, companyId: string, content: CompleteC
   return result
 }
 
+type ApprovalActionRow = NonNullable<ContentRow['currentApproval']>
+
+export async function approvalIsCurrent(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>) {
+  const action = content.currentApproval
+  if (!action || action.action !== 'approve' || content.archivedAt || action.editorialRevision !== content.editorialRevision) return false
+  const enabled = content.variants.filter((variant) => variant.enabled)
+  const evidence = parseReviewedVariants(action.reviewedVariants)
+  if (!evidence || evidence.length !== enabled.length || enabled.length === 0) return false
+  const overrideIds = evidence.map((item) => item.overrideId).filter((value): value is string => Boolean(value))
+  const overrides = overrideIds.length
+    ? await db.approvalAction.findMany({ where: { id: { in: overrideIds }, contentId: content.id, action: 'override' }, select: { id: true, variantId: true, assessmentId: true, editorialRevision: true, justification: true } })
+    : []
+  for (const variant of enabled) {
+    const reviewed = evidence.find((item) => item.variantId === variant.id)
+    const assessment = variant.currentAssessment
+    if (!reviewed || !assessment || reviewed.platform !== variant.platform || reviewed.variantRevision !== variant.revision || reviewed.assessmentId !== assessment.id || reviewed.assessmentStatus !== assessment.result || assessment.variantRevision !== variant.revision || freshness.get(variant.id) !== 'current') return false
+    const effectiveIds = effectiveAssetLinks(variant, content.variants).map((link) => link.assetId)
+    if (!sameStringArray(reviewed.effectiveAssetIds, effectiveIds)) return false
+    if (assessment.result === 'needs_attention') {
+      const override = reviewed.overrideId ? overrides.find((item) => item.id === reviewed.overrideId) : undefined
+      if (!override || override.variantId !== variant.id || override.assessmentId !== assessment.id || override.editorialRevision !== content.editorialRevision || !override.justification?.trim()) return false
+    } else if (assessment.result !== 'aligned' || reviewed.overrideId !== null) return false
+  }
+  return true
+}
+
+export async function currentApprovalProjection(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>) {
+  return await approvalIsCurrent(db, companyId, content, freshness) ? mapApprovalAction(content.currentApproval!) : null
+}
+
+export async function assertReviewUnlockedForContent(db: Db, companyId: string, content: CompleteContentRow, config?: { anthropicModel: string | null }) {
+  const freshness = await assessmentFreshness(db, companyId, content, config)
+  if (await approvalIsCurrent(db, companyId, content, freshness)) throw reviewLocked()
+}
+
+export async function assertReviewUnlocked(db: Db, companyId: string, contentId: string, config?: { anthropicModel: string | null }) {
+  const content = await getContentAggregate(db, companyId, contentId)
+  await assertReviewUnlockedForContent(db, companyId, content, config)
+  return content
+}
+
 async function setEnabledPlatforms(tx: Prisma.TransactionClient, contentId: string, platforms: PlatformCode[]) {
   const existing = await tx.platformVariant.findMany({ where: { contentId }, select: { id: true, platform: true } })
   for (const platform of platforms) {
@@ -711,7 +774,7 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
   }
 }
 
-export function mapContent(content: CompleteContentRow, freshness?: Map<string, 'current' | 'stale'>) {
+export function mapContent(content: CompleteContentRow, freshness?: Map<string, 'current' | 'stale'>, approval: ReturnType<typeof mapApprovalAction> | null = null) {
   const master = decodeMaster(content.masterContent)
   const direction = decodeVisualDirection(content.visualDirection)
   return {
@@ -735,9 +798,9 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
     variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master), freshness)),
     editorialStage: content.editorialStage,
     editorialRevision: content.editorialRevision,
-    lifecycleStatus: deriveLifecycleStatus(content),
-    resumeStep: deriveResumeStep(content),
-    approval: null,
+    lifecycleStatus: deriveLifecycleStatus(content, approval !== null),
+    resumeStep: deriveResumeStep(content, approval !== null),
+    approval,
     archivedAt: content.archivedAt?.toISOString() ?? null,
     version: content.version,
     createdBy: { id: content.creator.id, name: content.creator.name },
@@ -746,7 +809,7 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
   }
 }
 
-function mapContentSummary(content: CompleteContentRow) {
+function mapContentSummary(content: CompleteContentRow, approvalValid = false) {
   const master = decodeMaster(content.masterContent)
   return {
     id: content.id,
@@ -755,8 +818,8 @@ function mapContentSummary(content: CompleteContentRow) {
     company: { id: content.company.id, name: content.company.name },
     product: content.product ? { id: content.product.id, name: content.product.name } : null,
     enabledPlatforms: content.variants.filter((variant) => variant.enabled).map((variant) => variant.platform),
-    lifecycleStatus: deriveLifecycleStatus(content),
-    resumeStep: deriveResumeStep(content),
+    lifecycleStatus: deriveLifecycleStatus(content, approvalValid),
+    resumeStep: deriveResumeStep(content, approvalValid),
     scheduleSummary: [],
     publications: [],
     updatedAt: content.updatedAt.toISOString(),
@@ -793,6 +856,21 @@ function mapVariant(variant: ContentRow['variants'][number], allVariants: Conten
     } : null,
     schedule: null,
     publication: null,
+  }
+}
+
+function mapApprovalAction(action: ApprovalActionRow) {
+  return {
+    id: action.id,
+    action: action.action as 'approve' | 'request_revision' | 'override',
+    actor: { id: action.actor.id, name: action.actor.name },
+    editorialRevision: action.editorialRevision,
+    variantId: action.variantId,
+    assessmentId: action.assessmentId,
+    justification: action.justification,
+    checklist: action.checklist,
+    reviewedVariants: action.reviewedVariants,
+    createdAt: action.createdAt.toISOString(),
   }
 }
 
@@ -834,6 +912,7 @@ function lifecycleFilter(value: string): Prisma.ContentWhereInput {
     Draft: 'draft', Generated: 'generated', Adapted: 'adapted', 'Creative In Progress': 'creative_in_progress', 'Ready for Review': 'ready_for_review', 'Needs Revision': 'needs_revision',
   }
   if (value === 'Archived') return { archivedAt: { not: null } }
+  if (value === 'Approved') return { archivedAt: null, currentApprovalId: { not: null } }
   const stage = stages[value]
   if (!stage) throw validationError('The lifecycle filter is invalid.', { lifecycleStatus: 'Choose an approved lifecycle status.' })
   return { archivedAt: null, editorialStage: stage }
@@ -857,6 +936,40 @@ function decodeVisualDirection(value: Prisma.JsonValue | null): VisualDirectionI
 
 function isRecord(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+interface ReviewedVariantEvidence {
+  variantId: string
+  platform: string
+  variantRevision: number
+  assessmentId: string
+  assessmentStatus: 'aligned' | 'needs_attention'
+  overrideId: string | null
+  effectiveAssetIds: string[]
+}
+
+function parseReviewedVariants(value: Prisma.JsonValue | null): ReviewedVariantEvidence[] | null {
+  if (!Array.isArray(value)) return null
+  const result: ReviewedVariantEvidence[] = []
+  for (const item of value) {
+    if (!isRecord(item)) return null
+    const row = item as Record<string, unknown>
+    if (typeof row.variantId !== 'string' || typeof row.platform !== 'string' || !Number.isInteger(row.variantRevision) || (row.variantRevision as number) < 1 || typeof row.assessmentId !== 'string' || (row.assessmentStatus !== 'aligned' && row.assessmentStatus !== 'needs_attention') || (row.overrideId !== null && typeof row.overrideId !== 'string') || !Array.isArray(row.effectiveAssetIds) || row.effectiveAssetIds.some((assetId) => typeof assetId !== 'string')) return null
+    result.push({
+      variantId: row.variantId,
+      platform: row.platform,
+      variantRevision: row.variantRevision as number,
+      assessmentId: row.assessmentId,
+      assessmentStatus: row.assessmentStatus as 'aligned' | 'needs_attention',
+      overrideId: row.overrideId as string | null,
+      effectiveAssetIds: row.effectiveAssetIds as string[],
+    })
+  }
+  return result
+}
+
+function sameStringArray(first: string[], second: string[]) {
+  return first.length === second.length && first.every((value, index) => value === second[index])
 }
 
 function toJson(value: object): Prisma.InputJsonValue {

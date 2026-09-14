@@ -15,6 +15,7 @@ export class AppError extends Error {
 export const badRequest = (message = 'The request is invalid.', fields?: ErrorFields) => new AppError(400, 'MALFORMED_REQUEST', message, fields)
 export const notFound = (message = 'The requested resource was not found.') => new AppError(404, 'NOT_FOUND', message)
 export const conflict = (message = 'The request conflicts with the current state.') => new AppError(409, 'STATE_CONFLICT', message)
+export const reviewLocked = () => new AppError(409, 'REVIEW_LOCKED', 'Reviewed Content is locked. Request Revision before making review-affecting changes.')
 export const assetInUse = () => new AppError(409, 'ASSET_IN_USE', 'The Asset is still attached and cannot be deleted.')
 export const storageFailure = () => new AppError(500, 'INTERNAL_ERROR', 'The Asset storage operation could not be completed.')
 export const payloadTooLarge = (message = 'The uploaded file is too large.') => new AppError(413, 'PAYLOAD_TOO_LARGE', message)

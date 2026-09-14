@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { assetInUse, conflict, notFound, revisionConflict, storageFailure, validationError } from '../../shared/errors/AppError.js'
-import { readContent } from '../content/service.js'
+import { assertReviewUnlocked, readContent } from '../content/service.js'
 import { executeIdempotent } from '../content/idempotency.js'
 import type { PlatformCode } from '../content/constants.js'
 import { etag } from '../context/service.js'
@@ -137,6 +137,7 @@ export async function replaceVariantAssets(
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getAssetContent(tx, companyId, contentId)
     if (content.archivedAt) throw conflict('Archived Content cannot be edited.')
+    await assertReviewUnlocked(tx, companyId, contentId)
     const variant = content.variants.find((item) => item.platform === platform)
     if (!variant) throw notFound()
     if (new Set(assetIds).size !== assetIds.length) throw validationError('Asset IDs must be unique.', { assetIds: 'Do not repeat an Asset.' })
@@ -176,6 +177,7 @@ export async function setCreativeReuse(
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getAssetContent(tx, companyId, contentId)
     if (content.archivedAt) throw conflict('Archived Content cannot be edited.')
+    await assertReviewUnlocked(tx, companyId, contentId)
     const linkedin = content.variants.find((item) => item.platform === 'linkedin')
     const instagram = content.variants.find((item) => item.platform === 'instagram')
     if (!linkedin || !instagram) throw conflict('Instagram and LinkedIn Variants are required for creative reuse.')

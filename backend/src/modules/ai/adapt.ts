@@ -9,7 +9,7 @@ import {
 import { requestHash } from '../context/normalize.js'
 import { readResolvedContextFromDb } from '../context/service.js'
 import { companyContextReadiness, productContextReadiness } from '../context/readiness.js'
-import { readContentFromDb } from '../content/service.js'
+import { approvalIsCurrent, assessmentFreshness, assertReviewUnlocked, getContentAggregate, readContentFromDb } from '../content/service.js'
 import { hasCompleteVariantCopy } from '../content/lifecycle.js'
 import type { PlatformCode } from '../content/constants.js'
 import {
@@ -98,6 +98,7 @@ export async function adaptContent(
   try {
     prepared = await prisma.$transaction(async (tx) => {
       await lockContent(tx, companyId, contentId, expectedVersion)
+      await assertReviewUnlocked(tx, companyId, contentId, config)
       const input = await buildAdaptationInput(tx, config, provider, companyId, actorId, contentId, expectedVersion, platform, false)
       const raced = await tx.requestIdempotency.findUnique({
         where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } },
@@ -392,6 +393,9 @@ async function finalizeAdaptation(
 ) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, prepared.contentId)
+    const aggregate = await getContentAggregate(tx, companyId, prepared.contentId)
+    const reviewFreshness = await assessmentFreshness(tx, companyId, aggregate, config)
+    const reviewLocked = await approvalIsCurrent(tx, companyId, aggregate, reviewFreshness)
     const target = await tx.platformVariant.findFirst({ where: { id: prepared.targetVariantId, contentId: prepared.contentId } })
     const currentContent = await tx.content.findFirst({ where: { id: prepared.contentId, companyId }, select: { version: true } })
     let currentInput: Awaited<ReturnType<typeof buildAdaptationInput>> | null = null
@@ -400,7 +404,10 @@ async function finalizeAdaptation(
     } catch {
       currentInput = null
     }
-    const stale = !target || !currentContent || !currentInput || currentInput.inputHash !== prepared.inputHash
+    // Approval may win while the provider is running. The aggregate lock makes
+    // that race deterministic; an in-flight adaptation must not write into the
+    // newly reviewed revision.
+    const stale = reviewLocked || !target || !currentContent || !currentInput || currentInput.inputHash !== prepared.inputHash
     const usage = usageForDb(providerResult)
     if (stale) {
       await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {

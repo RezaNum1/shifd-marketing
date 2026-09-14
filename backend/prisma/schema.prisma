@@ -60,6 +60,7 @@ model User {
   contentEvents  ContentEvent[]
   uploadedAssets CreativeAsset[]
   aiRequests     AiRequestLog[]
+  approvalActions ApprovalAction[]
 
   @@index([companyId])
   @@map("users")
@@ -232,6 +233,11 @@ model Content {
   variants          PlatformVariant[]
   events            ContentEvent[]
   aiRequests        AiRequestLog[]
+  approvalActions   ApprovalAction[]   @relation("ContentApprovalActions")
+  currentApprovalId String?            @map("current_approval_id") @db.Uuid
+  // Keep Prisma's client-side relation scalar-only; the Phase 9 migration's
+  // composite FK still enforces that the pointed action belongs to this Content.
+  currentApproval   ApprovalAction?    @relation("ContentCurrentApproval", fields: [currentApprovalId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, id])
   @@index([companyId, updatedAt, id])
@@ -280,9 +286,12 @@ model PlatformVariant {
   assetLinks                 VariantAsset[]
   assessments                BrandAssessment[] @relation("VariantAssessments")
   currentAssessmentId       String?           @map("current_assessment_id") @db.Uuid
-  currentAssessment          BrandAssessment?  @relation("VariantCurrentAssessment", fields: [id, currentAssessmentId], references: [variantId, id], onDelete: Restrict)
+  // Keep Prisma's client-side relation scalar-only; the Phase 8 migration's
+  // composite FK still enforces that the pointed assessment belongs to this Variant.
+  currentAssessment          BrandAssessment?  @relation("VariantCurrentAssessment", fields: [currentAssessmentId], references: [id], onDelete: Restrict)
   reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
   reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
+  approvalActions            ApprovalAction[]
 
   @@unique([contentId, platform])
   @@unique([contentId, id])
@@ -304,6 +313,7 @@ model BrandAssessment {
   variant               PlatformVariant  @relation("VariantAssessments", fields: [variantId], references: [id], onDelete: Restrict)
   aiRequest             AiRequestLog     @relation(fields: [aiRequestId], references: [id], onDelete: Restrict)
   currentForVariants    PlatformVariant[] @relation("VariantCurrentAssessment")
+  approvalActions       ApprovalAction[]
 
   @@unique([variantId, id])
   @@index([variantId, createdAt])
@@ -476,4 +486,29 @@ model AiRateVersion {
   @@unique([provider, model, version])
   @@index([provider, model, effectiveFrom])
   @@map("ai_rate_versions")
+}
+
+model ApprovalAction {
+  id                String            @id @default(uuid()) @db.Uuid
+  contentId         String            @map("content_id") @db.Uuid
+  variantId         String?           @map("variant_id") @db.Uuid
+  assessmentId      String?           @map("assessment_id") @db.Uuid
+  editorialRevision Int               @map("editorial_revision")
+  action            String
+  actorId           String            @map("actor_id") @db.Uuid
+  justification     String?
+  checklist         Json?
+  reviewedVariants  Json?             @map("reviewed_variants")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  content           Content           @relation("ContentApprovalActions", fields: [contentId], references: [id], onDelete: Restrict)
+  currentForContent Content[]         @relation("ContentCurrentApproval")
+  variant           PlatformVariant?  @relation(fields: [contentId, variantId], references: [contentId, id], onDelete: Restrict)
+  assessment        BrandAssessment?  @relation(fields: [variantId, assessmentId], references: [variantId, id], onDelete: Restrict)
+  actor             User              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([contentId, id])
+  @@index([contentId, createdAt, id])
+  @@index([variantId])
+  @@index([assessmentId])
+  @@map("approval_actions")
 }

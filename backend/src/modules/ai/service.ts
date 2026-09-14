@@ -9,7 +9,7 @@ import {
 import { readCompanyContext, readProduct, readResolvedContextFromDb, type ContextDb } from '../context/service.js'
 import { companyContextReadiness, productContextReadiness } from '../context/readiness.js'
 import { requestHash } from '../context/normalize.js'
-import { readContentFromDb, mapContent } from '../content/service.js'
+import { assertReviewUnlocked, readContentFromDb, mapContent } from '../content/service.js'
 import { encodeCursor, etag } from '../context/service.js'
 import type { AiMode, AiRequestStatus } from './constants.js'
 import { AI_GENERATE_OPERATION, AI_LANGUAGES, AI_MODULE, AI_OPERATION, AI_PROVIDER, OUTPUT_SCHEMA_VERSION } from './constants.js'
@@ -127,6 +127,7 @@ export async function generateContent(
   try {
     prepared = await prisma.$transaction(async (tx) => {
       const locked = await lockContentForGeneration(tx, companyId, contentId, expectedVersion)
+      await assertReviewUnlocked(tx, companyId, contentId, config)
       const input = await buildGenerationInput(tx, config, provider, companyId, actorId, contentId, expectedVersion, idempotencyKey, locked)
       const raced = await tx.requestIdempotency.findUnique({
         where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } },

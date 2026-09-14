@@ -16,6 +16,7 @@ import type { AiProvider } from '../ai/provider.js'
 import { generateContent } from '../ai/service.js'
 import { adaptContent } from '../ai/adapt.js'
 import { brandCheckContent } from '../ai/brand.js'
+import { approveContent, listReviewActions, recordOverride, requestRevision, type ReviewChecklist } from '../review/service.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -178,6 +179,67 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     return reply.status(result.status).send(result.body)
   })
 
+  app.post('/contents/:id/override', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const input = parseOverride(request.body)
+    const result = await recordOverride(
+      app.prisma,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      input.platform,
+      input.assessmentId,
+      input.justification,
+      idempotencyKey(request),
+      request.id,
+      options.config,
+    )
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
+  app.post('/contents/:id/approve', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const result = await approveContent(
+      app.prisma,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      parseChecklist(request.body),
+      idempotencyKey(request),
+      request.id,
+      options.config,
+    )
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
+  app.post('/contents/:id/request-revision', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const input = parseRevisionRequest(request.body)
+    const result = await requestRevision(
+      app.prisma,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      ifMatch(request),
+      input.reason,
+      idempotencyKey(request),
+      request.id,
+      options.config,
+    )
+    if (result.etag) reply.header('ETag', result.etag)
+    return reply.status(result.status).send(result.body)
+  })
+
   app.get('/contents/:id', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const content = await readContent(app.prisma, auth.user.companyId, routeId(request), options.config)
@@ -243,6 +305,15 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const result = await listContentEvents(app.prisma, auth.user.companyId, routeId(request), { limit, cursor: query.cursor === undefined ? undefined : decodeCursor(query.cursor) })
     return reply.send({ data: result.data, page: { limit, nextCursor: result.nextCursor } })
   })
+
+  app.get('/contents/:id/review-actions', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = queryObject(request)
+    allowedKeys(query, ['limit', 'cursor'], 'query')
+    const limit = parseLimit(query.limit)
+    const result = await listReviewActions(app.prisma, auth.user.companyId, routeId(request), { limit, ...(query.cursor === undefined ? {} : { cursor: decodeCursor(query.cursor) }) })
+    return reply.send({ data: result.data, page: { limit, nextCursor: result.nextCursor } })
+  })
 }
 
 function parseIdeaInput(value: unknown): IdeaInput {
@@ -290,6 +361,37 @@ function parseAdapt(value: unknown): { platform: PlatformCode } {
   const input = object(value, 'Adapt request')
   allowedKeys(input, ['platform'], 'body')
   return { platform: parsePlatform(input.platform, 'platform') }
+}
+
+function parseOverride(value: unknown): { platform: PlatformCode; assessmentId: string; justification: string } {
+  const input = object(value, 'Override request')
+  allowedKeys(input, ['platform', 'assessmentId', 'justification'], 'body')
+  if (typeof input.assessmentId !== 'string' || !uuid(input.assessmentId)) throw validationError('The Assessment identifier is invalid.', { assessmentId: 'Use a UUID.' })
+  return {
+    platform: parsePlatform(input.platform, 'platform'),
+    assessmentId: input.assessmentId,
+    justification: requiredText(input.justification, 'justification'),
+  }
+}
+
+function parseChecklist(value: unknown): ReviewChecklist {
+  const body = object(value, 'Approval request')
+  allowedKeys(body, ['checklist'], 'body')
+  const checklist = object(body.checklist, 'checklist')
+  const keys = ['copyReviewed', 'creativeReviewed', 'visualCopyConsistent', 'noErrors', 'readyForPublication'] as const
+  allowedKeys(checklist, keys, 'checklist')
+  for (const key of keys) {
+    if (typeof checklist[key] !== 'boolean') throw validationError('The approval checklist is invalid.', { [`checklist.${key}`]: 'Use a Boolean value.' })
+    if (checklist[key] !== true) throw validationError('All approval checklist items must be true.', { [`checklist.${key}`]: 'This confirmation must be true.' })
+  }
+  if (Object.keys(checklist).length !== keys.length) throw validationError('The approval checklist is incomplete.', { checklist: 'All five confirmations are required.' })
+  return checklist as unknown as ReviewChecklist
+}
+
+function parseRevisionRequest(value: unknown): { reason: string } {
+  const body = object(value, 'Request revision body')
+  allowedKeys(body, ['reason'], 'body')
+  return { reason: requiredText(body.reason, 'reason') }
 }
 
 function parseContentPatch(value: unknown): ContentPatchInput {
@@ -378,7 +480,7 @@ function parsePillarCode(value: unknown, path: string): string {
 }
 
 function parseLifecycleStatus(value: string): string {
-  const valid = ['Draft', 'Generated', 'Adapted', 'Creative In Progress', 'Ready for Review', 'Needs Revision', 'Archived']
+  const valid = ['Draft', 'Generated', 'Adapted', 'Creative In Progress', 'Ready for Review', 'Needs Revision', 'Approved', 'Archived']
   if (!valid.includes(value)) throw validationError('The lifecycle filter is invalid.', { lifecycleStatus: 'Choose an approved lifecycle status.' })
   return value
 }

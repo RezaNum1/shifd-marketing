@@ -167,12 +167,15 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
   it('C01-C09/C14/C15-C18: creates a complete draft atomically, consumes a Ready source Idea once, and retains historical links', async () => {
     const app = await buildApp({ config, logger: false })
     const auth = await session(app)
+    const source = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': `idea-content-source-${suffix}` }, payload: companyIdea('A source idea for content creation') })
+    expect(source.statusCode).toBe(201)
+    sourceIdeaId = source.json().data.id
     const rejected = await app.inject({ method: 'POST', url: '/api/contents', headers: { ...mutationHeaders(auth), 'idempotency-key': 'content-invalid' }, payload: { sourceIdeaId, brief: { ...companyBrief(), topic: '   ' }, enabledPlatforms: ['instagram'] } })
     expect(rejected.statusCode).toBe(422)
     expect((await prisma.contentIdea.findUnique({ where: { id: sourceIdeaId } }))?.status).toBe('ready')
     expect(await prisma.content.count({ where: { companyId } })).toBe(0)
     const created = await app.inject({ method: 'POST', url: '/api/contents', headers: { ...mutationHeaders(auth), 'idempotency-key': 'content-primary' }, payload: { sourceIdeaId, brief: companyBrief(), enabledPlatforms: ['instagram', 'linkedin'] } })
-    expect(created.statusCode).toBe(201)
+    expect(created.statusCode, `POST /api/contents failed: ${created.statusCode} ${created.body}`).toBe(201)
     contentId = created.json().data.id
     expect(created.json().data).toMatchObject({ sourceIdeaId, editorialStage: 'draft', editorialRevision: 1, designStatus: 'not_started', master: null, visualDirection: null, lifecycleStatus: 'Draft', resumeStep: 'brief' })
     expect(created.json().data.title).toBe(companyBrief().topic)
