@@ -171,6 +171,7 @@ export async function adaptContent(
   try {
     providerResult = await provider.generate({
       model: prepared.model,
+      outputSchemaVersion: M3_OUTPUT_SCHEMA_VERSION,
       systemPrompt: M3_SYSTEM_PROMPT,
       userPrompt: prepared.userPrompt,
       maxOutputTokens: config.aiMaxOutputTokens,
@@ -263,7 +264,7 @@ async function buildAdaptationInput(
   if (!settings) throw aiNotConfigured()
   const prompt = await tx.promptVersion.findFirst({ where: { module: M3_MODULE, operation: M3_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
-  const configuredModel = settings.modelId ?? config.anthropicModel ?? undefined
+  const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
   const model = configuredModel ?? settings.modelDisplayName
   const mode = settings.mode as AiMode
   const language = settings.generationLanguage
@@ -469,7 +470,7 @@ async function finalizeAdaptation(
       inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
       estimatedCostUsd: estimatedCost, providerRequestId: providerResult.providerRequestId,
     } })
-    const content = await readContentFromDb(tx, companyId, prepared.contentId, { anthropicModel: config.anthropicModel })
+    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel })
     const log = await tx.aiRequestLog.findUnique({ where: { id: prepared.aiRequestId }, include: { promptVersion: true } })
     if (!log) throw conflict('AI request evidence could not be finalized.')
     const body: AdaptResponse = { data: { content, request: mapAiRequest(log) } }

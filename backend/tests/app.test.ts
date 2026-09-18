@@ -18,8 +18,8 @@ const config: AppConfig = {
   assetMaxWidth: 8_192,
   assetMaxHeight: 8_192,
   assetUnattachedGraceHours: 168,
-  anthropicApiKey: null,
-  anthropicModel: null,
+  openaiApiKey: null,
+  openaiModel: null,
   aiRequestTimeoutMs: 60_000,
   aiMaxOutputTokens: 2_048,
 }

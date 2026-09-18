@@ -17,8 +17,8 @@ export interface AppConfig {
   assetMaxWidth: number
   assetMaxHeight: number
   assetUnattachedGraceHours: number
-  anthropicApiKey: string | null
-  anthropicModel: string | null
+  openaiApiKey: string | null
+  openaiModel: string | null
   aiRequestTimeoutMs: number
   aiMaxOutputTokens: number
 }
@@ -57,7 +57,7 @@ function parseBoundedPositiveInteger(name: string, value: string | undefined, de
 function optionalConfigText(name: string, value: string | undefined, fields: Record<string, string>) {
   const trimmed = value?.trim() || null
   if (trimmed?.includes('\0') || trimmed?.includes('\r') || trimmed?.includes('\n')) fields[name] = 'Must not contain control characters.'
-  if (trimmed && ((name === 'ANTHROPIC_API_KEY' && trimmed.length > 5000) || (name === 'ANTHROPIC_MODEL' && trimmed.length > 200))) fields[name] = 'Value is too long.'
+  if (trimmed && ((name === 'OPENAI_API_KEY' && trimmed.length > 5000) || (name === 'OPENAI_MODEL' && trimmed.length > 200))) fields[name] = 'Value is too long.'
   return trimmed
 }
 
@@ -86,10 +86,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const assetMaxWidth = parsePositiveInteger('ASSET_MAX_WIDTH', env.ASSET_MAX_WIDTH, 8_192, fields)
   const assetMaxHeight = parsePositiveInteger('ASSET_MAX_HEIGHT', env.ASSET_MAX_HEIGHT, 8_192, fields)
   const assetUnattachedGraceHours = parsePositiveInteger('ASSET_UNATTACHED_GRACE_HOURS', env.ASSET_UNATTACHED_GRACE_HOURS, 168, fields)
-  const anthropicApiKey = optionalConfigText('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY, fields)
-  const anthropicModel = optionalConfigText('ANTHROPIC_MODEL', env.ANTHROPIC_MODEL, fields)
+  const openaiApiKey = optionalConfigText('OPENAI_API_KEY', env.OPENAI_API_KEY, fields)
+  const openaiModel = optionalConfigText('OPENAI_MODEL', env.OPENAI_MODEL, fields)
   const aiRequestTimeoutMs = parseBoundedPositiveInteger('AI_REQUEST_TIMEOUT_MS', env.AI_REQUEST_TIMEOUT_MS, 60_000, 300_000, fields)
   const aiMaxOutputTokens = parseBoundedPositiveInteger('AI_MAX_OUTPUT_TOKENS', env.AI_MAX_OUTPUT_TOKENS, 2_048, 32_768, fields)
   if (Object.keys(fields).length) throw new ConfigError(fields)
-  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, anthropicApiKey, anthropicModel, aiRequestTimeoutMs, aiMaxOutputTokens }
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, aiRequestTimeoutMs, aiMaxOutputTokens }
 }

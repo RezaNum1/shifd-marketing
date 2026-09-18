@@ -6,10 +6,12 @@ import { loadConfig, type AppConfig } from '../src/config/env.js'
 import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { productContextReadiness } from '../src/modules/context/readiness.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
 const config: AppConfig = {
-  ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL, ALLOWED_ORIGIN: origin }),
+  ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl, ALLOWED_ORIGIN: origin }),
 }
 const prisma = new PrismaClient({ datasources: { db: { url: config.databaseUrl } } })
 const suffix = Date.now().toString()

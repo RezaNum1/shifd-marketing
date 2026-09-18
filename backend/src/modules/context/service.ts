@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client'
 import { conflict, idempotencyConflict, notFound, revisionConflict, validationError } from '../../shared/errors/AppError.js'
 import { BMC_TITLES, BMC_TYPES, type BmcType } from './constants.js'
 import { requestHash } from './normalize.js'
+import { AI_MODEL_DISPLAY_NAME, AI_MODEL_ID, AI_PROVIDER } from '../ai/constants.js'
 
 export type ContextDb = PrismaClient | Prisma.TransactionClient
 type Db = ContextDb
@@ -85,7 +86,7 @@ export async function provisionCompanyContext(db: Db, companyId: string) {
   })
   await db.aiSettings.upsert({
     where: { companyId },
-    create: { companyId, provider: 'anthropic', modelDisplayName: 'Claude', generationLanguage: 'English', mode: 'real' },
+    create: { companyId, provider: AI_PROVIDER, modelId: AI_MODEL_ID, modelDisplayName: AI_MODEL_DISPLAY_NAME, generationLanguage: 'English', mode: 'real' },
     update: {},
   })
 }

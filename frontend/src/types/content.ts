@@ -115,7 +115,7 @@ export interface ContentRecordDetails {
  */
 export interface ContentLifecycleState {
   status: ContentLifecycleStatus
-  workflowStep: WorkflowStep
+  workflowStep: WorkflowStep | null
   schedules: Partial<Record<ContentPlatform, ContentPlatformSchedule>>
   publications: Partial<Record<ContentPlatform, ContentPublication>>
 }
@@ -139,8 +139,12 @@ export interface ContentLibraryRecord {
   /** @deprecated Use lifecycle.publications or contentPublications(record). */
   publishedAt?: string
   updatedAt: string
+  /** Backend optimistic-concurrency version for this canonical record. */
+  version?: number
+  /** Response ETag for this canonical record. */
+  etag?: string
   /** @deprecated Use lifecycle.workflowStep or workflowStepForStatus(). */
-  workflowStep: WorkflowStep
+  workflowStep: WorkflowStep | null
   details: ContentRecordDetails
 }
 
@@ -255,7 +259,7 @@ export interface ContentWorkflowState {
 
 export interface CreativeAsset {
   id: string
-  file: File
+  file?: File
   name: string
   url: string
 }

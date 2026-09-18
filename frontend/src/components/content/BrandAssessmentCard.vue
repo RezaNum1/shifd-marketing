@@ -16,7 +16,7 @@ defineEmits<{
   override: []
 }>()
 
-const hasWarning = () => props.assessment.checks.some((check) => check.status === 'warning')
+const hasWarning = () => props.assessment.status === 'Needs Attention' || props.assessment.checks.some((check) => check.status === 'warning')
 </script>
 
 <template>
@@ -28,7 +28,7 @@ const hasWarning = () => props.assessment.checks.some((check) => check.status ==
       </StatusBadge>
     </div>
     <div v-if="assessment.state !== 'needs-recheck'" class="assessment-score-row">
-      <strong>{{ assessment.score }}<small>/100</small></strong><span>Mock frontend assessment</span>
+      <strong>{{ assessment.score }}<small>/100</small></strong><span>Backend textual/context assessment</span>
     </div>
     <div class="assessment-check-list">
       <div v-for="check in assessment.checks" :key="check.label">

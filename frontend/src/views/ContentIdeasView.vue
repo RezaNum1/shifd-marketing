@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContentIdeaEditor from '../components/content/ContentIdeaEditor.vue'
@@ -11,8 +11,8 @@ import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTable from '../components/ui/BaseTable.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
-import { pillarOptions } from '../data/contentBrief'
-import { ideaContextOptions, ideaObjectiveOptions } from '../data/contentIdeas'
+import InlineAlert from '../components/ui/InlineAlert.vue'
+import { ideaContextOptions, ideaObjectiveOptions, pillarOptions } from '../constants/contentOptions'
 import { useContentIdeasStore } from '../stores/contentIdeas'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import { useUiStore } from '../stores/ui'
@@ -72,11 +72,13 @@ function startNewContent() {
   workflow.startNewWorkflow()
   router.push('/content/create')
 }
-function duplicate(idea: ContentIdea) {
-  if (store.duplicate(idea.id)) { clearFilters(); ui.notify('Idea duplicated as Ready.', 'success') }
+async function duplicate(idea: ContentIdea) {
+  if (await store.duplicate(idea.id)) { clearFilters(); ui.notify('Idea duplicated as Ready.', 'success') }
 }
-function archive(idea: ContentIdea) { store.archive(idea.id); ui.notify('Idea archived. You can restore it from Archived.', 'info') }
-function restore(idea: ContentIdea) { store.restore(idea.id); ui.notify('Idea restored to Ready.', 'success') }
+async function archive(idea: ContentIdea) { if (await store.archive(idea.id)) ui.notify('Idea archived. You can restore it from Archived.', 'info') }
+async function restore(idea: ContentIdea) { if (await store.restore(idea.id)) ui.notify('Idea restored to Ready.', 'success') }
+
+onMounted(() => { void Promise.all([store.load(), products.load(), companyContext.loadTaxonomy(), companyContext.load()]) })
 </script>
 
 <template>
@@ -100,7 +102,10 @@ function restore(idea: ContentIdea) { store.restore(idea.id); ui.notify('Idea re
       <div v-if="activeFilters" class="idea-filter-footer"><span role="status">{{ filteredIdeas.length }} matching ideas</span><BaseButton variant="ghost" size="compact" @click="clearFilters">Clear Filters</BaseButton></div>
     </BaseCard>
 
-    <BaseTable v-if="filteredIdeas.length" :columns="columns" :rows="filteredIdeas" caption="Content ideas">
+    <InlineAlert v-if="store.loading" title="Loading ideas">Loading canonical ideas from the backend…</InlineAlert>
+    <InlineAlert v-if="store.error" title="Ideas unavailable" tone="danger">{{ store.error }}</InlineAlert>
+
+    <BaseTable v-if="store.loaded && filteredIdeas.length" :columns="columns" :rows="filteredIdeas" caption="Content ideas">
       <template #cell-idea="{ row }"><div class="idea-title"><strong>{{ row.title }}</strong><p v-if="row.notes">{{ row.notes }}</p></div></template>
       <template #cell-context="{ row }"><div class="idea-cell"><strong>{{ row.contextType === 'product' ? products.nameFor(row.productId) : companyContext.companyProfile.name }}</strong><span>{{ row.contextType === 'product' ? 'Product' : 'Company' }}</span></div></template>
       <template #cell-pillar="{ row }"><div class="idea-cell"><strong>{{ label(pillarOptions, row.pillar) }}</strong><span>{{ label(ideaObjectiveOptions, row.objective) }}</span></div></template>
@@ -117,8 +122,8 @@ function restore(idea: ContentIdea) { store.restore(idea.id); ui.notify('Idea re
         </div>
       </template>
     </BaseTable>
-    <BaseCard v-else-if="!store.ideas.length"><EmptyState icon="idea" title="No ideas yet." description="Capture potential topics and turn them into structured content briefs when ready."><BaseButton @click="edit()">Add Idea</BaseButton></EmptyState></BaseCard>
-    <BaseCard v-else><EmptyState icon="search" title="No ideas match these filters." description="Try another search or clear your filters."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-else-if="store.loaded && !store.ideas.length"><EmptyState icon="idea" title="No ideas yet." description="Capture potential topics and turn them into structured content briefs when ready."><BaseButton @click="edit()">Add Idea</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-else-if="store.loaded"><EmptyState icon="search" title="No ideas match these filters." description="Try another search or clear your filters."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
 
     <ContentIdeaEditor v-model="editorOpen" :idea="editingIdea" @saved="clearFilters(); ui.notify('Idea saved.', 'success')" />
   </div>

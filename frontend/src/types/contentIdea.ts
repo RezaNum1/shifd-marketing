@@ -18,4 +18,5 @@ export interface ContentIdea extends ContentIdeaInput {
   relatedContentId?: string
   createdAt: string
   updatedAt: string
+  version?: number
 }

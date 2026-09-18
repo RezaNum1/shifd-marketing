@@ -5,16 +5,19 @@ import { buildApp } from '../src/app.js'
 import { loadConfig, type AppConfig } from '../src/config/env.js'
 import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { seedM2Prompt } from '../src/modules/ai/seed.js'
+import { OUTPUT_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
 import { AiProviderFailure, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 import { promptDigest } from '../src/modules/ai/prompt.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
 // This suite intentionally reuses one Fastify instance and logs in repeatedly
 // across independent integration cases. Keep the production limiter enabled,
 // but avoid exhausting its low production-oriented threshold during setup.
 const config: AppConfig = {
-  ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL, ALLOWED_ORIGIN: origin, LOGIN_RATE_LIMIT_MAX: '1000', AI_REQUEST_TIMEOUT_MS: '100' }),
+  ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl, ALLOWED_ORIGIN: origin, LOGIN_RATE_LIMIT_MAX: '1000', AI_REQUEST_TIMEOUT_MS: '100' }),
 }
 const prisma = new PrismaClient({ datasources: { db: { url: config.databaseUrl } } })
 const suffix = Date.now().toString()
@@ -130,7 +133,7 @@ async function removeCompany(id: string) {
   await prisma.company.delete({ where: { id } })
 }
 
-runIntegration('Phase 6 M2 Claude guided generation', () => {
+runIntegration('M2 guided content generation', () => {
   beforeEach(() => fake.reset())
 
   afterEach(() => fake.reset())
@@ -161,8 +164,8 @@ runIntegration('Phase 6 M2 Claude guided generation', () => {
     const auth = await session(email)
     const settings = await app.inject({ method: 'GET', url: '/api/settings/ai', headers: { cookie: auth.cookie } })
     expect(settings.statusCode).toBe(200)
-    expect(settings.json().data).toMatchObject({ provider: 'Claude', generationLanguage: 'English', mode: 'real', status: 'not_configured' })
-    expect(JSON.stringify(settings.json())).not.toContain('ANTHROPIC_API_KEY')
+    expect(settings.json().data).toMatchObject({ provider: 'OpenAI', model: 'GPT-5.6 Luna', generationLanguage: 'English', mode: 'real', status: 'not_configured' })
+    expect(JSON.stringify(settings.json())).not.toContain('OPENAI_API_KEY')
     const prompts = await app.inject({ method: 'GET', url: '/api/prompt-versions?module=M2', headers: { cookie: auth.cookie } })
     expect(prompts.statusCode).toBe(200)
     expect(prompts.json().data[0]).toMatchObject({ module: 'M2', operation: 'generate', version: 'v1', status: 'active' })
@@ -215,10 +218,12 @@ runIntegration('Phase 6 M2 Claude guided generation', () => {
     expect(body.request).not.toHaveProperty('inputHash')
     expect(fake.requests.at(-1)?.systemPrompt).toContain('SERVER INSTRUCTIONS')
     expect(fake.requests.at(-1)?.userPrompt).toContain('COMPANY_CONTEXT_DATA')
+    expect(fake.requests.at(-1)?.outputSchemaVersion).toBe(OUTPUT_SCHEMA_VERSION)
     const log = await prisma.aiRequestLog.findUnique({ where: { id: body.request.id } })
+    expect(log).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' })
     expect(log?.inputSnapshot).toMatchObject({ content: { id: draft.json().data.id, version: 1, editorialRevision: 1, masterRevision: 0 }, contextVersions: { company: 2 } })
     expect(log?.inputHash).toMatch(/^[0-9a-f]{64}$/)
-    expect(JSON.stringify(log?.inputSnapshot)).not.toContain('ANTHROPIC_API_KEY')
+    expect(JSON.stringify(log?.inputSnapshot)).not.toContain('OPENAI_API_KEY')
     const eventCount = await prisma.contentEvent.count({ where: { contentId: draft.json().data.id, eventType: 'ai_generated' } })
     expect(eventCount).toBe(1)
     const callsBeforeReplay = fake.calls

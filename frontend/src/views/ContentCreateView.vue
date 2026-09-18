@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, toRef } from "vue";
+import { computed, onMounted, ref, toRef } from "vue";
 import { useUiStore } from "../stores/ui";
 import {
   audienceSuggestions,
   briefSteps,
-  contentBriefDefaults,
-  brandAssessmentMocks,
-  generatedContentVariants,
-  instagramAdaptationVariants,
-  linkedInAdaptationVariants,
   objectiveOptions,
   pillarOptions,
-} from "../data/contentBrief";
+} from "../constants/contentOptions";
 import AppIcon from "../components/ui/AppIcon.vue";
 import BaseButton from "../components/ui/BaseButton.vue";
 import BaseCard from "../components/ui/BaseCard.vue";
@@ -22,10 +17,8 @@ import BaseSelect from "../components/ui/BaseSelect.vue";
 import BaseTextarea from "../components/ui/BaseTextarea.vue";
 import InlineAlert from "../components/ui/InlineAlert.vue";
 import StatusBadge from "../components/ui/StatusBadge.vue";
-import type { CreativeAsset } from "../types/content";
 import { useContentWorkflowStore } from "../stores/contentWorkflow";
 import { useContentIdeasStore } from "../stores/contentIdeas";
-import { useContentLibraryStore } from "../stores/contentLibrary";
 import { useCompanyContextStore } from "../stores/companyContext";
 import { useProductsStore } from "../stores/products";
 import type { ContentIdea } from "../types/contentIdea";
@@ -34,14 +27,12 @@ import ContentWorkflowStepper from "../components/content/ContentWorkflowStepper
 import CreativeThumbnail from "../components/content/CreativeThumbnail.vue";
 import BrandAssessmentCard from "../components/content/BrandAssessmentCard.vue";
 import VisualDirectionCard from "../components/content/VisualDirectionCard.vue";
-import { retainWorkflowAsset, releaseCreativeAsset } from "../utils/creativeAssetRegistry";
 import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
 
 const ui = useUiStore();
 const router = useRouter();
 const workflow = useContentWorkflowStore();
 const ideas = useContentIdeasStore();
-const library = useContentLibraryStore();
 const companyContext = useCompanyContextStore();
 const productsStore = useProductsStore();
 const brief = workflow.brief;
@@ -50,14 +41,11 @@ const isRefining = ref(false);
 const isSaving = ref(false);
 const savedAt = ref<string | null>(null);
 const isEditingDraft = ref(false);
-const generatedVariantIndex = toRef(workflow, "generatedVariantIndex");
 const generatedContent = workflow.generatedContent;
 const visualDirection = workflow.visualDirection;
 const enabledPlatforms = workflow.enabledPlatforms;
 const isEditingInstagram = ref(false);
 const isEditingLinkedIn = ref(false);
-const instagramVariantIndex = toRef(workflow, "instagramVariantIndex");
-const linkedInVariantIndex = toRef(workflow, "linkedInVariantIndex");
 const designStatus = toRef(workflow, "designStatus");
 const reuseInstagramCreative = toRef(workflow, "reuseInstagramCreative");
 const instagramAssets = toRef(workflow, "instagramAssets");
@@ -66,6 +54,7 @@ const creativeValidation = ref("");
 const draggedInstagramAssetId = ref<string | null>(null);
 const draggedLinkedInAssetId = ref<string | null>(null);
 const isApproved = toRef(workflow, "isApproved");
+const approvedBy = toRef(workflow, "approvedBy");
 const approvedAt = toRef(workflow, "approvedAt");
 const reviewValidation = ref("");
 const reviewChecklist = workflow.reviewChecklist;
@@ -84,6 +73,7 @@ const linkedInSchedule = workflow.linkedInSchedule;
 const scheduledRecords = workflow.scheduledRecords;
 const instagramContent = workflow.instagramContent;
 const linkedInContent = workflow.linkedInContent;
+const ARTIFACT_TIMEZONE = "Asia/Jakarta";
 const productOptions = computed(() => productsStore.productOptions);
 
 const selectedProduct = computed(() =>
@@ -99,12 +89,10 @@ const activeContextAudience = computed(() =>
     ? resolvedProductContext.value.profile.targetUsers.join(", ")
     : brief.context === "company" && companyContext.companyProfile.customerSegments.length
       ? companyContext.companyProfile.customerSegments.join(", ")
-    : brief.audience.trim() === contentBriefDefaults.audience
-      ? "Corporate Administration / Enterprise"
-    : brief.audience || "Not set",
+      : brief.audience || "Not set",
 );
 const activeContextName = computed(() => brief.context === "company" ? companyContext.companyProfile.name : selectedProductName.value);
-const activeContextValue = computed(() => resolvedProductContext.value?.profile.valueProposition || (brief.context === "company" ? companyContext.companyProfile.coreValueProposition : "Digital correspondence and approval workflow for organizations."));
+const activeContextValue = computed(() => resolvedProductContext.value?.profile.valueProposition || (brief.context === "company" ? companyContext.companyProfile.coreValueProposition : "Select a product to resolve its value proposition."));
 const activeBrandVoice = computed(() => resolvedProductContext.value?.resolvedBrandVoice || companyContext.brandProfile.brandVoice);
 const selectedPillarLabel = computed(
   () =>
@@ -129,9 +117,10 @@ const briefReadinessItems = computed(() => [
   { label: "Topic", complete: Boolean(brief.topic.trim()) },
 ]);
 const isBriefReady = computed(() => isBriefReadyValue(brief));
-const generatedVariant = computed(
-  () => generatedContentVariants[generatedVariantIndex.value],
-);
+const generatedVariant = computed(() => ({
+  ...generatedContent,
+  label: generatedContent.title ? "Backend generation" : "Awaiting generation",
+}));
 const canContinueToCreative = computed(
   () => enabledPlatforms.instagram || enabledPlatforms.linkedin,
 );
@@ -172,7 +161,7 @@ const missingCreativePlatforms = computed(() => {
   return missing;
 });
 const canContinueToReview = computed(
-  () => designStatus.value !== "ready" || missingCreativePlatforms.value.length === 0,
+  () => designStatus.value === "ready" && missingCreativePlatforms.value.length === 0,
 );
 const inheritedLinkedInAssets = computed(() =>
   reuseInstagramCreative.value ? instagramAssets.value : linkedInAssets.value,
@@ -188,12 +177,12 @@ const reviewChecklistComplete = computed(() =>
 );
 const reviewNeedsRecheck = computed(() =>
   enabledReviewPlatforms.value.some(
-    (platform) => reviewAssessments[platform].state === "needs-recheck",
+    (platform) => reviewAssessments[platform].state === "needs-recheck" || reviewAssessments[platform].checks.length === 0,
   ),
 );
 const platformsRequiringOverride = computed(() =>
   enabledReviewPlatforms.value.filter((platform) =>
-    reviewAssessments[platform].checks.some((check) => check.status === "warning"),
+    reviewAssessments[platform].status === "Needs Attention" || reviewAssessments[platform].checks.some((check) => check.status === "warning"),
   ),
 );
 const reviewOverridesComplete = computed(() =>
@@ -211,7 +200,16 @@ const approvedTimestampLabel = computed(
   () => approvedAt.value ?? "Not approved",
 );
 const schedulePlatformCount = computed(() => enabledReviewPlatforms.value.length);
-const scheduleDateMinimum = computed(() => new Date().toISOString().slice(0, 10));
+const scheduleDateMinimum = computed(() => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ARTIFACT_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+});
 const schedulePlatformRows = computed(() => [
   {
     id: "instagram" as const,
@@ -246,18 +244,13 @@ function applyRecentIdea(idea: ContentIdea) {
   ui.notify(`Idea loaded: ${idea.title}`, "info");
 }
 
-function loadGeneratedVariant(index: number) {
-  generatedVariantIndex.value = index;
-  Object.assign(generatedContent, generatedContentVariants[index]);
-  library.upsertFromWorkflow(workflow);
-}
-
-function regenerateContent() {
-  const nextIndex =
-    (generatedVariantIndex.value + 1) % generatedContentVariants.length;
-  loadGeneratedVariant(nextIndex);
-  isEditingDraft.value = false;
-  ui.notify(`${generatedContentVariants[nextIndex].label} loaded from mock generation.`, "info");
+async function regenerateContent() {
+  if (workflow.loading) return;
+  const generated = await workflow.generate();
+  if (generated) {
+    isEditingDraft.value = false;
+    ui.notify("Content regenerated by the backend.", "success");
+  }
 }
 
 function beginEditingDraft() {
@@ -267,24 +260,22 @@ function beginEditingDraft() {
   }, 0);
 }
 
-function regenerateInstagram() {
-  const nextIndex =
-    (instagramVariantIndex.value + 1) % instagramAdaptationVariants.length;
-  instagramVariantIndex.value = nextIndex;
-  Object.assign(instagramContent, instagramAdaptationVariants[nextIndex]);
-  isEditingInstagram.value = false;
-  library.upsertFromWorkflow(workflow);
-  ui.notify("Instagram mock variant regenerated.", "info");
+async function regenerateInstagram() {
+  if (workflow.loading || !enabledPlatforms.instagram) return;
+  const adapted = await workflow.adapt("instagram");
+  if (adapted) {
+    isEditingInstagram.value = false;
+    ui.notify("Instagram adaptation refreshed.", "success");
+  }
 }
 
-function regenerateLinkedIn() {
-  const nextIndex =
-    (linkedInVariantIndex.value + 1) % linkedInAdaptationVariants.length;
-  linkedInVariantIndex.value = nextIndex;
-  Object.assign(linkedInContent, linkedInAdaptationVariants[nextIndex]);
-  isEditingLinkedIn.value = false;
-  library.upsertFromWorkflow(workflow);
-  ui.notify("LinkedIn mock variant regenerated.", "info");
+async function regenerateLinkedIn() {
+  if (workflow.loading || !enabledPlatforms.linkedin) return;
+  const adapted = await workflow.adapt("linkedin");
+  if (adapted) {
+    isEditingLinkedIn.value = false;
+    ui.notify("LinkedIn adaptation refreshed.", "success");
+  }
 }
 
 function beginEditingInstagram() {
@@ -301,27 +292,20 @@ function beginEditingLinkedIn() {
   }, 0);
 }
 
-function createCreativeAsset(file: File): CreativeAsset | null {
+function isSupportedCreative(file: File) {
   const allowedTypes = ["image/png", "image/jpeg"];
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (!allowedTypes.includes(file.type) && !["png", "jpg", "jpeg"].includes(extension ?? "")) {
-    return null;
-  }
-  const asset = {
-    id: `asset-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    file,
-    name: file.name,
-    url: URL.createObjectURL(file),
-  };
-  retainWorkflowAsset(asset.id, asset.url, workflow.contentId);
-  return asset;
+  return allowedTypes.includes(file.type) || ["png", "jpg", "jpeg"].includes(extension ?? "");
 }
 
-function addCreativeFiles(files: FileList | File[], target: "instagram" | "linkedin") {
-  const assets = Array.from(files)
-    .map(createCreativeAsset)
-    .filter((asset): asset is CreativeAsset => asset !== null);
-  const rejectedCount = files.length - assets.length;
+async function addCreativeFiles(files: FileList | File[], target: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    guardApprovedEditing();
+    return;
+  }
+  const selected = Array.from(files).filter(isSupportedCreative);
+  const assets = (await Promise.all(selected.map((file) => workflow.uploadCreative(file)))).filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
+  const rejectedCount = files.length - selected.length;
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
   destination.value.push(...assets);
   if (rejectedCount > 0) {
@@ -329,9 +313,7 @@ function addCreativeFiles(files: FileList | File[], target: "instagram" | "linke
   } else {
     creativeValidation.value = "";
   }
-  if (assets.length > 0 && designStatus.value === "not-started") {
-    designStatus.value = "in-progress";
-  }
+  if (assets.length > 0 && designStatus.value === "not-started") designStatus.value = "in-progress";
 }
 
 function handleCreativeInput(event: Event, target: "instagram" | "linkedin") {
@@ -346,15 +328,22 @@ function handleCreativeDrop(event: DragEvent, target: "instagram" | "linkedin") 
 }
 
 function openCreativePicker(target: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    guardApprovedEditing();
+    return;
+  }
   document.getElementById(`${target}-file-input`)?.click();
 }
 
 function removeCreativeAsset(assetId: string, target: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    guardApprovedEditing();
+    return;
+  }
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
   const index = destination.value.findIndex((asset) => asset.id === assetId);
   if (index < 0) return;
-  const [removed] = destination.value.splice(index, 1);
-  releaseCreativeAsset(removed.id, removed.url, `workflow:${workflow.contentId}`);
+  destination.value.splice(index, 1);
 }
 
 function moveCreativeAsset(
@@ -362,6 +351,10 @@ function moveCreativeAsset(
   fromId: string | null,
   toId: string,
 ) {
+  if (isApproved.value) {
+    guardApprovedEditing();
+    return;
+  }
   if (!fromId || fromId === toId) return;
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
   const fromIndex = destination.value.findIndex((asset) => asset.id === fromId);
@@ -388,62 +381,104 @@ function copyVisualBrief() {
     .catch(() => ui.notify("Visual brief is ready to copy manually.", "info"));
 }
 
-function continueToReview() {
-  if (!canContinueToReview.value) {
-    creativeValidation.value = `Add at least one creative asset for ${missingCreativePlatforms.value.join(" and ")} before marking the design Ready.`;
+async function continueToReview() {
+  if (isApproved.value) {
+    guardApprovedEditing();
     return;
   }
+  if (!canContinueToReview.value) {
+    creativeValidation.value = designStatus.value !== "ready"
+      ? "Set Design Status to Ready after the required creative assets are uploaded."
+      : `Add at least one creative asset for ${missingCreativePlatforms.value.join(" and ")} before marking the design Ready.`;
+    return;
+  }
+  if (!workflow.contentId) {
+    creativeValidation.value = "Create the Content brief before uploading creative assets.";
+    return;
+  }
+  for (const platform of enabledReviewPlatforms.value) {
+    if (platform === "instagram" || !reuseInstagramCreative.value) {
+      const assets = platform === "instagram" ? instagramAssets.value : linkedInAssets.value;
+      if (!(await workflow.attachCreative(platform, assets))) return;
+    }
+  }
+  if (enabledPlatforms.linkedin && !(await workflow.setReuseCreative(reuseInstagramCreative.value))) return;
+  if (!(await workflow.saveEditorial()) || !(await workflow.progress("ready_for_review"))) return;
   creativeValidation.value = "";
   activeStep.value = "review";
-  library.upsertFromWorkflow(workflow);
 }
 
 function markAssessmentNeedsRecheck(platform: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it.";
+    return;
+  }
   reviewAssessments[platform].state = "needs-recheck";
   reviewOverrides[platform] = "";
   reviewValidation.value = "";
-  library.upsertFromWorkflow(workflow);
 }
 
 function editReviewPlatform(platform: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it.";
+    return;
+  }
   reviewEditing[platform] = true;
 }
 
-function recheckAlignment(platform: "instagram" | "linkedin") {
-  const assessment = reviewAssessments[platform];
-  assessment.state = "assessed";
-  assessment.score = platform === "instagram" ? 95 : 91;
-  assessment.status = "Aligned";
-  assessment.recommendation =
-    platform === "instagram"
-      ? "The edited CTA now supports a softer discovery-oriented close."
-      : "The edited copy now uses a more professional closing for B2B readers.";
-  assessment.checks = assessment.checks.map((check) => ({
-    ...check,
-    status: "pass",
-  }));
-  ui.notify(`${platform === "instagram" ? "Instagram" : "LinkedIn"} alignment re-checked.`, "success");
+async function recheckAlignment(platform: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it."
+    return
+  }
+  if (!(await workflow.saveVariant(platform))) return;
+  const assessment = await workflow.brandCheck(platform);
+  if (assessment) ui.notify(`${platform === "instagram" ? "Instagram" : "LinkedIn"} alignment checked by the backend.`, "success");
 }
 
-function regenerateReviewPlatform(platform: "instagram" | "linkedin") {
-  if (platform === "instagram") regenerateInstagram();
-  else regenerateLinkedIn();
-  markAssessmentNeedsRecheck(platform);
-  reviewAssessments[platform].checks = brandAssessmentMocks[platform].checks.map((check) => ({ ...check }));
+async function regenerateReviewPlatform(platform: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it."
+    return
+  }
+  if (platform === "instagram") await regenerateInstagram();
+  else await regenerateLinkedIn();
   reviewEditing[platform] = false;
 }
 
 function openOverride(platform: "instagram" | "linkedin") {
+  if (isApproved.value) {
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it."
+    return
+  }
   overridePlatform.value = platform;
   overrideJustification.value = reviewOverrides[platform];
   overrideError.value = "";
   overrideModalOpen.value = true;
 }
 
-function confirmOverride() {
+function guardApprovedEditing() {
+  reviewValidation.value = "Approved Content is locked. Request a revision before editing it.";
+  if (workflow.contentId) void router.push(`/content/${workflow.contentId}`);
+}
+
+function backFromReview() {
+  if (isApproved.value) {
+    guardApprovedEditing();
+    return;
+  }
+  activeStep.value = "creative";
+}
+
+async function confirmOverride() {
   const justification = overrideJustification.value.trim();
   if (!justification) {
     overrideError.value = "Justification is required before recording an override.";
+    return;
+  }
+  const recorded = await workflow.override(overridePlatform.value, justification);
+  if (!recorded) {
+    overrideError.value = workflow.error || "Unable to record the override.";
     return;
   }
   reviewOverrides[overridePlatform.value] = justification;
@@ -453,7 +488,7 @@ function confirmOverride() {
   ui.notify("Override recorded.", "success");
 }
 
-function approveContent() {
+async function approveContent() {
   if (!canApproveContent.value) {
     reviewValidation.value = reviewNeedsRecheck.value
       ? "Re-check each edited or regenerated platform before approving."
@@ -464,12 +499,11 @@ function approveContent() {
           : "Add the required creative assets before approving this content.";
     return;
   }
-  approvedAt.value = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date());
-  isApproved.value = true;
-  library.upsertFromWorkflow(workflow);
+  const approved = await workflow.approve();
+  if (!approved) {
+    reviewValidation.value = workflow.error || "Unable to approve this Content.";
+    return;
+  }
   reviewValidation.value = "";
   ui.notify("Content approved by human review.", "success");
 }
@@ -502,17 +536,18 @@ function syncScheduleMode() {
 }
 
 function scheduleDateTime(schedule: { date: string; time: string }) {
-  return new Date(`${schedule.date}T${schedule.time}`);
+  return new Date(`${schedule.date}T${schedule.time}:00+07:00`);
 }
 
 function formatScheduleDate(date: string, time: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: ARTIFACT_TIMEZONE,
   }).format(scheduleDateTime({ date, time }));
 }
 
-function scheduleContent() {
+async function scheduleContent() {
   if (!isApproved.value) {
     scheduleValidation.value = "Approve the content in Review before scheduling.";
     return;
@@ -536,15 +571,13 @@ function scheduleContent() {
     scheduleValidation.value = `Choose a future publication date and time for ${invalid.platform === "instagram" ? "Instagram" : "LinkedIn"}.`;
     return;
   }
-  schedules.forEach(({ platform, schedule }) => {
-    scheduledRecords[platform].date = schedule.date;
-    scheduledRecords[platform].time = schedule.time;
-    scheduledRecords[platform].status = "Scheduled";
-  });
-  isScheduled.value = true;
-  library.syncScheduledWorkflow(workflow);
+  const scheduled = await workflow.schedule();
+  if (!scheduled) {
+    scheduleValidation.value = workflow.error || "Unable to schedule this Content.";
+    return;
+  }
   scheduleValidation.value = "";
-  ui.notify("Content scheduled in local frontend state.", "success");
+  ui.notify("Content scheduled for manual publication.", "success");
 }
 
 function resetWorkflow() {
@@ -562,13 +595,21 @@ function resetWorkflow() {
 }
 
 function continueToAdapt() {
-  activeStep.value = "adapt";
-  library.upsertFromWorkflow(workflow);
+  void (async () => {
+    if (!(await workflow.saveEditorial())) return;
+    let adapted = true;
+    if (enabledPlatforms.instagram) adapted = Boolean(await workflow.adapt("instagram"));
+    if (adapted && enabledPlatforms.linkedin) adapted = Boolean(await workflow.adapt("linkedin"));
+    if (adapted) activeStep.value = "adapt";
+  })();
 }
 
-function continueToCreative() {
+async function continueToCreative() {
+  if (enabledPlatforms.instagram && !(await workflow.saveVariant("instagram"))) return;
+  if (enabledPlatforms.linkedin && !(await workflow.saveVariant("linkedin"))) return;
+  if (!(await workflow.saveEditorial())) return;
+  if (!(await workflow.progress("adapted"))) return;
   activeStep.value = "creative";
-  library.upsertFromWorkflow(workflow);
 }
 
 function addAudience(suggestion: string) {
@@ -579,49 +620,47 @@ function addAudience(suggestion: string) {
 }
 
 function autoRefine() {
-  if (isRefining.value) return;
-  isRefining.value = true;
-  window.setTimeout(() => {
-    brief.thesis =
-      "Show how a structured digital approval workflow can make correspondence, ownership, and next steps easier to follow than manual paper handoffs.";
-    isRefining.value = false;
-    ui.notify("Thesis refined from the current brief.", "success");
-  }, 450);
+  ui.notify("Edit the thesis directly; no brief-refinement endpoint is configured.", "info");
 }
 
-function saveDraft() {
+async function saveDraft() {
   if (isSaving.value) return;
   isSaving.value = true;
-  window.setTimeout(() => {
+  const wasNew = !workflow.contentId;
+  const saved = workflow.contentId ? await workflow.saveEditorial() : isBriefReady.value ? await workflow.createFromBrief() : undefined;
+  if (saved) {
+    if (wasNew && workflow.sourceIdeaId) await ideas.load(true);
     savedAt.value = new Intl.DateTimeFormat(undefined, {
       hour: "numeric",
       minute: "2-digit",
     }).format(new Date());
-    isSaving.value = false;
-    ui.notify("Brief saved as a local draft.", "success");
-  }, 300);
+    ui.notify("Brief saved to the backend.", "success");
+  }
+  isSaving.value = false;
 }
 
 function cancelBrief() {
-  workflow.sourceIdeaId = undefined;
-  Object.assign(brief, contentBriefDefaults);
+  workflow.startNewWorkflow();
   savedAt.value = null;
   ui.notify("Draft changes reset to the starting brief.", "info");
 }
 
-function continueToGenerate() {
+async function continueToGenerate() {
   if (!isBriefReady.value) {
     ui.notify("Complete the required Brief fields before generating content.", "warning");
     return;
   }
-  if (workflow.sourceIdeaId) ideas.markUsed(workflow.sourceIdeaId);
-  saveDraft();
-  window.setTimeout(() => {
-    activeStep.value = "generate";
-    library.upsertFromWorkflow(workflow);
-    ui.notify("Brief saved. Step 2 is ready for generation.", "info");
-  }, 350);
+  const created = await workflow.createFromBrief();
+  if (!created) return;
+  if (workflow.sourceIdeaId) await ideas.load(true);
+  if (!(await workflow.generate())) return;
+  activeStep.value = "generate";
+  ui.notify("Content generated by the backend.", "success");
 }
+
+onMounted(() => {
+  void Promise.all([ideas.load(), productsStore.load(), companyContext.load()]);
+});
 </script>
 
 <template>
@@ -649,14 +688,16 @@ function continueToGenerate() {
             </p>
           </div>
           <StatusBadge tone="info" dot
-            ><AppIcon name="system" :size="14" /> Context Engine: Local mock
-            context</StatusBadge
+            ><AppIcon name="system" :size="14" /> Context Engine: Backend context
+            </StatusBadge
           >
         </div>
       </div>
     </header>
 
     <ContentWorkflowStepper :steps="briefSteps" :current="activeStep" />
+    <InlineAlert v-if="workflow.loading" title="Working">Saving the canonical Content state…</InlineAlert>
+    <InlineAlert v-else-if="workflow.error" title="Content action unavailable" tone="danger">{{ workflow.error }}</InlineAlert>
 
     <div v-if="activeStep === 'generate'" class="generate-workspace">
       <div class="generate-summary-bar">
@@ -691,8 +732,8 @@ function continueToGenerate() {
               <BaseTextarea v-model="generatedContent.body" label="Body" :rows="7" />
               <BaseTextarea v-model="generatedContent.cta" label="CTA" :rows="2" />
             </div>
-            <InlineAlert title="Mock generation" tone="info">
-              This draft is local mock content grounded in the selected Brief. No AI or backend request was made.
+            <InlineAlert title="Backend generation" tone="info">
+              This draft is generated from the selected Brief by the configured backend AI service.
             </InlineAlert>
           </BaseCard>
 
@@ -700,7 +741,7 @@ function continueToGenerate() {
             <BaseButton variant="secondary" @click="regenerateContent">
               <AppIcon name="sparkles" :size="16" />Regenerate
             </BaseButton>
-            <span class="generate-actions__hint">{{ generatedVariant.label }} of {{ generatedContentVariants.length }} mock variants</span>
+            <span class="generate-actions__hint">{{ generatedVariant.label }} · canonical Content response</span>
           </div>
         </section>
 
@@ -823,7 +864,7 @@ function continueToGenerate() {
         />
 
         <BaseCard title="Design Status" description="Update this manually as the visual moves toward production.">
-          <BaseSelect v-model="designStatus" label="Design status" :options="creativeStatusOptions" />
+          <BaseSelect v-model="designStatus" label="Design status" :options="creativeStatusOptions" :disabled="isApproved" />
           <div class="creative-status-guide">
             <div :class="{ 'is-active': designStatus === 'not-started' }"><span>Not Started</span><small>No creative uploaded yet</small></div>
             <div :class="{ 'is-active': designStatus === 'in-progress' }"><span>In Progress</span><small>Assets are being prepared</small></div>
@@ -862,10 +903,10 @@ function continueToGenerate() {
 
         <BaseCard title="LinkedIn Creative" description="Reuse the Instagram carousel or provide a separate asset.">
           <template #actions><StatusBadge tone="neutral">{{ reuseInstagramCreative ? "Inherited" : `${linkedInAssets.length} assets` }}</StatusBadge></template>
-          <BaseCheckbox v-model="reuseInstagramCreative" label="Use the same creative as Instagram" />
+          <BaseCheckbox v-model="reuseInstagramCreative" label="Use the same creative as Instagram" :disabled="isApproved" />
           <div v-if="reuseInstagramCreative" class="inherited-creative-panel">
             <InlineAlert title="Instagram creative inherited" tone="info">
-              LinkedIn will use the same local previews unless you switch to a separate upload.
+              LinkedIn will use the same authenticated creative assets unless you switch to a separate upload.
             </InlineAlert>
             <div v-if="inheritedLinkedInAssets.length" class="creative-asset-grid" aria-label="Inherited LinkedIn creative order">
               <CreativeThumbnail
@@ -885,7 +926,7 @@ function continueToGenerate() {
               <strong>Drop a LinkedIn PNG/JPG here</strong>
               <span>or</span>
               <button type="button" class="brief-text-action" @click="openCreativePicker('linkedin')">Browse files</button>
-              <small>Separate platform creative stays local to this browser.</small>
+              <small>Separate platform creative is stored as a private backend asset.</small>
               <input id="linkedin-file-input" class="sr-only" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple @change="handleCreativeInput($event, 'linkedin')" />
             </div>
             <div v-if="linkedInAssets.length" class="creative-asset-grid" aria-label="LinkedIn creative order">
@@ -925,7 +966,7 @@ function continueToGenerate() {
       </div>
 
       <section class="review-platform-grid">
-        <BaseCard v-if="enabledPlatforms.instagram" title="Instagram" description="Final carousel copy and browser-local creative preview.">
+        <BaseCard v-if="enabledPlatforms.instagram" title="Instagram" description="Final carousel copy and authenticated creative preview.">
           <template #actions><StatusBadge tone="info">Instagram</StatusBadge></template>
           <div class="review-platform-body">
             <div class="review-copy-fields">
@@ -979,11 +1020,11 @@ function continueToGenerate() {
       <BaseCard title="Human Final Review" description="Complete every check before asking for approval.">
         <div class="human-review-layout">
           <div class="human-review-checklist">
-            <BaseCheckbox v-model="reviewChecklist.copyReviewed" label="Copy reviewed" />
-            <BaseCheckbox v-model="reviewChecklist.creativeReviewed" label="Creative reviewed" />
-            <BaseCheckbox v-model="reviewChecklist.visualCopyConsistent" label="Visual and copy are consistent" />
-            <BaseCheckbox v-model="reviewChecklist.noErrors" label="No obvious typo or incorrect claim" />
-            <BaseCheckbox v-model="reviewChecklist.readyForPublication" label="Ready for publication" />
+            <BaseCheckbox v-model="reviewChecklist.copyReviewed" label="Copy reviewed" :disabled="isApproved" />
+            <BaseCheckbox v-model="reviewChecklist.creativeReviewed" label="Creative reviewed" :disabled="isApproved" />
+            <BaseCheckbox v-model="reviewChecklist.visualCopyConsistent" label="Visual and copy are consistent" :disabled="isApproved" />
+            <BaseCheckbox v-model="reviewChecklist.noErrors" label="No obvious typo or incorrect claim" :disabled="isApproved" />
+            <BaseCheckbox v-model="reviewChecklist.readyForPublication" label="Ready for publication" :disabled="isApproved" />
           </div>
           <div class="approval-panel">
             <span class="brief-overline">Human Approval</span>
@@ -994,7 +1035,7 @@ function continueToGenerate() {
               <li :class="{ 'is-complete': reviewOverridesComplete }">Warning justifications recorded</li>
               <li :class="{ 'is-complete': canContinueToReview }">Creative requirements satisfied</li>
             </ul>
-            <div v-if="isApproved" class="approval-success"><StatusBadge tone="success" dot>Approved</StatusBadge><strong>Approved by: Reza Fadli Harris</strong><span>{{ approvedTimestampLabel }}</span></div>
+            <div v-if="isApproved" class="approval-success"><StatusBadge tone="success" dot>Approved</StatusBadge><strong>Approved by: {{ approvedBy ?? 'Backend reviewer' }}</strong><span>{{ approvedTimestampLabel }}</span><BaseButton variant="secondary" size="compact" @click="router.push(`/content/${workflow.contentId}`)">Request Revision</BaseButton></div>
             <BaseButton v-else size="comfortable" :disabled="!canApproveContent" @click="approveContent">Approve Content <AppIcon name="check" :size="17" /></BaseButton>
           </div>
         </div>
@@ -1003,7 +1044,7 @@ function continueToGenerate() {
       <InlineAlert v-if="reviewValidation" title="Review action required" tone="warning">{{ reviewValidation }}</InlineAlert>
 
       <div class="review-footer">
-        <BaseButton variant="ghost" @click="activeStep = 'creative'"><AppIcon name="arrow-left" :size="16" />Back to Creative</BaseButton>
+        <BaseButton variant="ghost" @click="backFromReview"><AppIcon name="arrow-left" :size="16" />Back to Creative</BaseButton>
         <BaseButton v-if="isApproved" size="comfortable" @click="activeStep = 'schedule'">Continue to Schedule <AppIcon name="arrow-right" :size="17" /></BaseButton>
         <span v-else class="review-footer-hint">Approval unlocks the Schedule step.</span>
       </div>
@@ -1022,7 +1063,7 @@ function continueToGenerate() {
             <div><span class="brief-overline">Product / Context</span><strong>{{ brief.context === 'company' ? companyContext.companyProfile.name : selectedProductName }}</strong></div>
             <div><span class="brief-overline">Content Pillar</span><strong>{{ selectedPillarLabel }}</strong></div>
             <div><span class="brief-overline">Objective</span><strong>{{ selectedObjectiveLabel }}</strong></div>
-            <div><span class="brief-overline">Approved By</span><strong>Reza Fadli Harris</strong></div>
+            <div><span class="brief-overline">Approved By</span><strong>{{ approvedBy ?? 'Backend reviewer' }}</strong></div>
             <div><span class="brief-overline">Approval Timestamp</span><strong>{{ approvedTimestampLabel }}</strong></div>
           </div>
           <template #footer><StatusBadge tone="success" dot>Approved by human review</StatusBadge></template>
@@ -1068,7 +1109,7 @@ function continueToGenerate() {
         </div>
       </template>
 
-      <BaseCard v-else title="Content Scheduled" description="The approved content is now recorded in local frontend state.">
+      <BaseCard v-else title="Content Scheduled" description="The approved content is now recorded in the backend.">
         <div class="schedule-success-state"><StatusBadge tone="success" dot>Scheduled</StatusBadge><h2>Ready for manual publication</h2><p>Publishing remains manual. Shifd Marketing will keep the approved copy, creative assets, and schedule ready for publication.</p></div>
         <div class="scheduled-platform-list">
           <template v-for="row in schedulePlatformRows" :key="row.id"><div v-if="enabledPlatforms[row.id]" class="scheduled-platform-row"><div><strong>{{ row.label }}</strong><span>{{ formatScheduleDate(row.record.date, row.record.time) }}</span></div><StatusBadge tone="success">{{ row.record.status }}</StatusBadge></div></template>
@@ -1286,7 +1327,7 @@ function continueToGenerate() {
               @click="saveDraft"
               ><AppIcon name="library" :size="17" />Save as Draft</BaseButton
             ><span v-if="savedAt" class="save-status"
-              >Saved locally at {{ savedAt }}</span
+              >Saved at {{ savedAt }}</span
             >
           </div>
           <div class="brief-action-right">

@@ -5,14 +5,17 @@ import { buildApp } from '../src/app.js'
 import { loadConfig, type AppConfig } from '../src/config/env.js'
 import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { seedM2Prompt } from '../src/modules/ai/seed.js'
+import { M3_OUTPUT_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
 import { m3PromptDigest, promptDigest } from '../src/modules/ai/prompt.js'
 import { AiProviderFailure, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
 const config: AppConfig = {
   ...loadConfig({
-    NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL,
+    NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl,
     ALLOWED_ORIGIN: origin, LOGIN_RATE_LIMIT_MAX: '1000', AI_REQUEST_TIMEOUT_MS: '100',
   }),
 }
@@ -209,9 +212,11 @@ runIntegration('Phase 7 M3 cross-platform adaptation', () => {
     expect(firstData.request).not.toHaveProperty('inputHash')
     const snapshot = await prisma.aiRequestLog.findUnique({ where: { id: firstData.request.id } })
     expect(snapshot?.module).toBe('M3')
+    expect(fake.requests.at(-1)?.outputSchemaVersion).toBe(M3_OUTPUT_SCHEMA_VERSION)
+    expect(snapshot).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' })
     expect(snapshot?.variantId).toBe(firstData.content.variants.find((v: { platform: string }) => v.platform === 'instagram').id)
     expect(snapshot?.inputSnapshot).toMatchObject({ content: { version: 2, editorialRevision: 2, masterRevision: 1 }, targetVariant: { platform: 'instagram', revision: 1 } })
-    expect(JSON.stringify(snapshot?.inputSnapshot)).not.toContain('ANTHROPIC_API_KEY')
+    expect(JSON.stringify(snapshot?.inputSnapshot)).not.toContain('OPENAI_API_KEY')
 
     const second = await app.inject({ method: 'POST', url: `/api/contents/${prepared.id}/adapt`, headers: headers(auth, 3, 'phase7-linkedin'), payload: { platform: 'linkedin' } })
     expect(second.statusCode).toBe(200)

@@ -1,24 +1,32 @@
 # Shifd Marketing frontend
 
-Phase 1 foundation: Vue 3, TypeScript, Vite, Vue Router, Pinia, and Tailwind CSS. Business pages are placeholders. There are no backend, authentication, AI, or social API calls. Workspace identity and UI state are local and in-memory.
+Phase 12 integration artifact: Vue 3, TypeScript, Vite, Vue Router, Pinia, and Tailwind CSS. The locked frontend-v1 visual system is connected to the Phase 1–11 backend through typed domain adapters. Session authentication uses the backend HttpOnly cookie; CSRF tokens and canonical resource ETags remain runtime-only.
 
 ## Run
 
 ```sh
-npm install
+npm ci
 npm run dev
 npm run build
 npm run preview
 ```
 
-Use Node.js 20.19+ or a compatible newer version supported by the installed Vite release. The build runs TypeScript checking before producing `dist/`. Production hosting must serve `index.html` for application paths because routing uses HTML5 history.
+Set public frontend configuration in `.env` when needed:
+
+```sh
+VITE_API_BASE_URL=/api
+VITE_DEV_BACKEND_URL=http://127.0.0.1:3000
+```
+
+`VITE_API_BASE_URL` defaults to same-origin `/api`; `VITE_DEV_BACKEND_URL` is used only by the Vite development proxy. Do not put secrets in `VITE_*` variables. Run the backend and PostgreSQL separately for real workflow use. The build runs TypeScript checking before producing `dist/`. Production hosting must serve `index.html` for application paths because routing uses HTML5 history.
 
 ## Structure
 
-- `src/router/navigation.ts`: navigation groups and the twelve requested route definitions. `src/router/index.ts` supplies lazy placeholder views, breadcrumbs, document titles, history/scroll behavior, and not-found recovery.
+- `src/router/navigation.ts`: navigation groups and the locked route definitions. `src/router/index.ts` supplies lazy views, protected-route authentication, breadcrumbs, document titles, history/scroll behavior, and not-found recovery.
 - `src/components/app/`: persistent shell, shared navigation/header, identity, page container/header/breadcrumbs, and toast region. The sidebar stays mounted while navigating; below 1024px navigation uses a drawer.
 - `src/components/ui/`: buttons/icons, cards, labeled inputs/selects/textareas, checkbox, badges, alerts, empty state, table, modal/drawer, and stepper primitives.
-- `src/stores/`: workspace identity/mobile navigation and global toast state. `src/data/` contains the small workspace fixture; `src/types/` defines shared contracts.
+- `src/api/`: shared HTTP client plus typed domain adapters for auth, context, ideas, content, assets, review, scheduling, performance, integrations, and AI settings.
+- `src/stores/`: Pinia stores for canonical API data, loading/error state, UI state, and ephemeral workflow drafts. Legacy files under `src/data/` remain only as isolated compatibility/test fixtures; they are not runtime business-data sources.
 - `src/style.css`: canonical design tokens and shared styles, exposed through Tailwind's theme. Inter and SVG identity assets are local; no font CDN is required.
 - `src/views/`: a metadata-driven placeholder and a not-found page. Introduce business views in later approved phases without rebuilding the shell.
 
@@ -36,6 +44,6 @@ Use `BaseButton` for actions and `RouterLink` for navigation. Links can share `u
 
 `Stepper` receives `steps`, `current`, and an accessible label. It is display-only by default; enabling `interactive` emits `select` for available steps. It does not perform routing, validate workflow gates, or grant approval.
 
-## Verification for future changes
+## Verification
 
-Run `npm run build`. Check the requested routes and direct refreshes; Ideas/Create must resolve ahead of content detail IDs. Verify one selected item in the primary navigation, parent selection for detail views, browser history, and unknown-path recovery. At desktop/tablet/mobile widths, check for horizontal overflow, drawer keyboard containment, Escape/close/backdrop dismissal, and focus return. Business-page requirements remain in the [implementation plan](../docs/FRONTEND_IMPLEMENTATION_PLAN.md); implemented visual standardizations are recorded in [design decisions](../docs/DESIGN_DECISIONS.md).
+Run `npm run test` and `npm run build`. The optional Playwright script is `npm run test:e2e`; it is not part of the locked passing gate. Check the requested routes and direct refreshes; Ideas/Create must resolve ahead of content detail IDs. Verify one selected item in the primary navigation, parent selection for detail views, browser history, and unknown-path recovery. At desktop/tablet/mobile widths, check for horizontal overflow, drawer keyboard containment, Escape/close/backdrop dismissal, and focus return. Integration coverage and known environment limitations are recorded in [Phase 12 integration notes](../docs/PHASE_12_FRONTEND_BACKEND_INTEGRATION.md); the visual standard remains in the [design decisions](../docs/DESIGN_DECISIONS.md).

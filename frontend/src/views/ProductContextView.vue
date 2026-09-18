@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContextListEditor from '../components/context/ContextListEditor.vue'
@@ -11,8 +11,10 @@ import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
-import { objectiveOptions } from '../data/contentBrief'
+import InlineAlert from '../components/ui/InlineAlert.vue'
+import { objectiveOptions } from '../constants/contentOptions'
 import { useProductsStore } from '../stores/products'
+import { useCompanyContextStore } from '../stores/companyContext'
 import type { Product, ProductProfile } from '../types/productContext'
 import type { Tone } from '../types/ui'
 
@@ -29,7 +31,7 @@ const resolved = computed(() => product.value ? store.resolveProductContext(prod
 const resolvedTone = computed(() => draftProfile.inheritCompanyTone ? (resolved.value?.company.brandProfile.brandVoice ?? '') : (draftProfile.toneOverride || resolved.value?.company.brandProfile.brandVoice || ''))
 const productStatusTone = computed<Tone>(() => draftProduct.status === 'Active' ? 'success' : draftProduct.status === 'Inactive' ? 'neutral' : 'warning')
 
-watch(() => String(route.params.id), () => {
+watch([() => String(route.params.id), product, profile], () => {
   if (!product.value || !profile.value) return
   Object.assign(draftProduct, JSON.parse(JSON.stringify(product.value)))
   Object.assign(draftProfile, JSON.parse(JSON.stringify(profile.value)))
@@ -37,7 +39,9 @@ watch(() => String(route.params.id), () => {
   savedAt.value = null
 }, { immediate: true })
 
-function save() { if (!draftProduct.name.trim() || !draftProduct.description.trim()) return; draftProduct.updatedAt = new Date().toISOString(); store.saveProduct(draftProduct); store.saveProfile(draftProfile); savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()) }
+async function save() { if (!draftProduct.name.trim() || !draftProduct.description.trim()) return; const saved = await store.saveProduct(draftProduct, draftProfile); if (saved) savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()) }
+
+onMounted(() => { const id = String(route.params.id); void Promise.all([store.loadProduct(id), store.loadResolvedContext(id, true), useCompanyContextStore().load()]) })
 </script>
 
 <template>
@@ -54,6 +58,8 @@ function save() { if (!draftProduct.name.trim() || !draftProduct.description.tri
     <BaseCard title="Marketing Context"><div class="product-form-grid"><BaseSelect v-model="draftProfile.campaignObjective" label="Campaign Objective" :options="campaignObjectiveOptions" /><BaseInput v-model="draftProfile.defaultCta" label="Default CTA" /><ContextListEditor v-model="draftProfile.keyMessages" label="Key Messages" /><ContextListEditor v-model="draftProfile.proofPoints" label="Proof Points" hint="Add only evidence or claims that can be supported." /></div></BaseCard>
     <BaseCard title="Communication / Tone" description="Product context can inherit the Company Brand values without copying them."><label class="tone-toggle"><input v-model="draftProfile.inheritCompanyTone" type="checkbox" /> <span><strong>Inherit Company Brand Tone</strong><small>Use the current Company Context brand rules dynamically.</small></span></label><div v-if="draftProfile.inheritCompanyTone" class="inherited-tone-grid"><div><span>Inherited Brand Voice</span><strong>{{ resolvedTone }}</strong></div><div><span>Inherited CTA Style</span><strong>{{ resolved.company.brandProfile.ctaStyle }}</strong></div><div><span>Inherited Preferred Language</span><strong>{{ resolved.company.brandProfile.preferredLanguage }}</strong></div></div><div v-else class="tone-override"><BaseTextarea v-model="draftProfile.toneOverride" label="Product Tone Override" :rows="3" hint="This overrides only the brand voice; other Company Context remains inherited." /><div class="tone-resolution-grid"><div><span>Inherited Company Brand Voice</span><strong>{{ resolved.company.brandProfile.brandVoice }}</strong></div><div><span>Resolved Product Brand Voice</span><strong>{{ resolvedTone }}</strong></div></div></div></BaseCard>
   </div>
+  <div v-else-if="store.loading || store.resolvedLoading" class="page-stack product-context-page"><InlineAlert title="Loading product context">Loading the canonical product profile…</InlineAlert></div>
+  <div v-else-if="store.error" class="page-stack product-context-page"><InlineAlert title="Product context unavailable" tone="danger">{{ store.error }}</InlineAlert><BaseButton variant="secondary" @click="router.push('/context/products')">Back to Products</BaseButton></div>
   <BaseCard v-else class="product-not-found"><EmptyState icon="product" title="Product not found." description="The requested product context is not available."><BaseButton variant="secondary" @click="router.push('/context/products')">Back to Products</BaseButton><BaseButton @click="router.push('/context/products')">Add Product</BaseButton></EmptyState></BaseCard>
 </template>
 

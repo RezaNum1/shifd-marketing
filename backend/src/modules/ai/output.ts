@@ -78,7 +78,7 @@ export function parseM3Output(text: string): M3Output {
 
 const M4_KEYS = ['score', 'status', 'recommendation', 'checks']
 const M4_CHECK_KEYS = ['label', 'status']
-const M4_CHECK_LABELS = new Set([
+export const M4_CHECK_LABELS = [
   'Tone / Brand Voice',
   'Messaging Alignment',
   'Audience Fit',
@@ -86,7 +86,8 @@ const M4_CHECK_LABELS = new Set([
   'CTA Alignment',
   'Company/Product Context Alignment',
   'Platform Appropriateness',
-])
+] as const
+const M4_CHECK_LABEL_SET = new Set<string>(M4_CHECK_LABELS)
 
 export function parseM4Output(text: string): M4Output {
   let value: unknown
@@ -100,12 +101,12 @@ export function parseM4Output(text: string): M4Output {
   const score = value.score as number
   if (value.status !== 'aligned' && value.status !== 'needs_attention') throw aiOutputInvalid('The AI brand assessment status is invalid.')
   const recommendation = requiredField(value.recommendation, 4_000)
-  if (!Array.isArray(value.checks) || value.checks.length === 0 || value.checks.length > M4_CHECK_LABELS.size) throw aiOutputInvalid('The AI brand assessment checks are invalid.')
+  if (!Array.isArray(value.checks) || value.checks.length === 0 || value.checks.length > M4_CHECK_LABELS.length) throw aiOutputInvalid('The AI brand assessment checks are invalid.')
   const seen = new Set<string>()
   const checks = value.checks.map((check) => {
     if (!isRecord(check) || !exactKeys(check, M4_CHECK_KEYS)) throw aiOutputInvalid('The AI brand assessment check has an unsupported shape.')
     const label = requiredField(check.label, 200)
-    if (!M4_CHECK_LABELS.has(label) || seen.has(label)) throw aiOutputInvalid('The AI brand assessment check framework is invalid.')
+    if (!M4_CHECK_LABEL_SET.has(label) || seen.has(label)) throw aiOutputInvalid('The AI brand assessment check framework is invalid.')
     seen.add(label)
     if (check.status !== 'pass' && check.status !== 'warning') throw aiOutputInvalid('The AI brand assessment check status is invalid.')
     return { label, status: check.status as 'pass' | 'warning' }

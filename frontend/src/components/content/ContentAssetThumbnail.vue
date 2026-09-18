@@ -18,8 +18,8 @@ defineEmits<{ preview: [asset: ContentAssetRecord] }>()
   >
     <span class="record-asset__visual">
       <img v-if="asset.url" :src="asset.url" :alt="asset.name" />
-      <span v-else class="record-asset__mock">
-        <small>Product creative</small>
+      <span v-else class="record-asset__placeholder">
+        <small>Creative placeholder</small>
         <strong>{{ asset.previewLabel ?? 'Creative' }}</strong>
         <i aria-hidden="true" />
       </span>
@@ -36,10 +36,10 @@ defineEmits<{ preview: [asset: ContentAssetRecord] }>()
 .record-asset { display: flex; flex-direction: column; gap: 8px; min-width: 0; text-align: left; color: var(--color-text); }
 .record-asset__visual { position: relative; display: block; overflow: hidden; aspect-ratio: 4 / 5; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: #eff4ff; }
 .record-asset__visual img { width: 100%; height: 100%; object-fit: cover; }
-.record-asset__mock { display: flex; flex-direction: column; justify-content: flex-end; width: 100%; height: 100%; padding: 14px; color: white; background: linear-gradient(145deg, #0b1c30, #153d83); }
-.record-asset__mock small { margin-bottom: auto; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
-.record-asset__mock strong { max-width: 10ch; font-size: 14px; line-height: 1.25; font-weight: 600; }
-.record-asset__mock i { width: 58%; height: 4px; margin-top: 12px; border-radius: 999px; background: #7dd3fc; }
+.record-asset__placeholder { display: flex; flex-direction: column; justify-content: flex-end; width: 100%; height: 100%; padding: 14px; color: white; background: var(--color-well); }
+.record-asset__placeholder small { margin-bottom: auto; color: var(--color-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.record-asset__placeholder strong { max-width: 10ch; color: var(--color-ink); font-size: 14px; line-height: 1.25; font-weight: 600; }
+.record-asset__placeholder i { width: 58%; height: 4px; margin-top: 12px; border-radius: 999px; background: var(--color-control-border); }
 .record-asset__order { position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; min-width: 25px; height: 22px; padding-inline: 5px; border-radius: 5px; background: rgb(255 255 255 / .92); color: #0b1c30; font-size: 10px; font-weight: 600; }
 .record-asset__meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .record-asset__meta strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }

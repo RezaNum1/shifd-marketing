@@ -20,21 +20,23 @@ function clearFieldError(field: 'email' | 'password') {
   authError.value = ''
 }
 
-function submit() {
+async function submit() {
   errors.email = form.email.trim() ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ? '' : 'Enter a valid email address.') : 'Email is required.'
   errors.password = form.password ? '' : 'Password is required.'
   authError.value = ''
   if (errors.email || errors.password) return
 
   submitting.value = true
-  window.setTimeout(() => {
-    submitting.value = false
-    if (!auth.login(form.email, form.password)) {
-      authError.value = 'Incorrect email or password.'
-      return
-    }
-    router.replace('/')
-  }, 280)
+  const success = await auth.login(form.email, form.password)
+  submitting.value = false
+  if (!success) {
+    authError.value = auth.error || 'Unable to sign in.'
+    return
+  }
+  const redirect = typeof router.currentRoute.value.query.redirect === 'string' && router.currentRoute.value.query.redirect.startsWith('/') && !router.currentRoute.value.query.redirect.startsWith('//')
+    ? router.currentRoute.value.query.redirect
+    : '/'
+  router.replace(redirect)
 }
 </script>
 

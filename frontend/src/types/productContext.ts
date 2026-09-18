@@ -14,6 +14,7 @@ export interface Product {
   url?: string
   createdAt: string
   updatedAt: string
+  version?: number
 }
 
 export interface ProductProfile {

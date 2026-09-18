@@ -15,7 +15,7 @@ import { contentRoutes } from './modules/content/routes.js'
 import multipart from '@fastify/multipart'
 import { assetRoutes } from './modules/assets/routes.js'
 import { LocalAssetStorage } from './modules/assets/storage.js'
-import { AnthropicAiProvider } from './modules/ai/anthropic.js'
+import { OpenAiAiProvider } from './modules/ai/openai.js'
 import { aiRoutes } from './modules/ai/routes.js'
 import type { AiProvider } from './modules/ai/provider.js'
 import { systemClock, type Clock } from './shared/time/clock.js'
@@ -53,7 +53,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(authPlugin, { config: options.config })
   await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
-  const aiProvider = options.aiProvider ?? new AnthropicAiProvider(options.config)
+  const aiProvider = options.aiProvider ?? new OpenAiAiProvider(options.config)
   const clock = options.clock ?? systemClock
   await app.register(contentRoutes, { config: options.config, aiProvider, clock, prefix: '/api' })
   await app.register(schedulingRoutes, { config: options.config, clock, prefix: '/api' })

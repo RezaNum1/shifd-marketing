@@ -1,6 +1,9 @@
 export const AI_MODULE = 'M2' as const
 export const AI_OPERATION = 'generate' as const
-export const AI_PROVIDER = 'anthropic' as const
+export const AI_PROVIDER = 'openai' as const
+export const AI_MODEL_ID = 'gpt-5.6-luna' as const
+export const AI_MODEL_DISPLAY_NAME = 'GPT-5.6 Luna' as const
+export const AI_PROVIDER_DISPLAY_NAME = 'OpenAI' as const
 export const M3_MODULE = 'M3' as const
 export const M3_OPERATION = 'adapt' as const
 export const M3_ADAPT_OPERATION = 'content.adapt' as const

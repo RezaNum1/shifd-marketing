@@ -7,10 +7,12 @@ import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { seedM2Prompt } from '../src/modules/ai/seed.js'
 import { AiProviderFailure, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
 const config: AppConfig = loadConfig({
-  NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL,
+  NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl,
   ALLOWED_ORIGIN: origin, LOGIN_RATE_LIMIT_MAX: '1000', AI_REQUEST_TIMEOUT_MS: '100',
 })
 const prisma = new PrismaClient({ datasources: { db: { url: config.databaseUrl } } })

@@ -12,7 +12,7 @@ import { requestHash } from '../context/normalize.js'
 import { assertNoPublishedVariants, assertReviewUnlocked, getContentAggregate, readContentFromDb, mapContent } from '../content/service.js'
 import { encodeCursor, etag } from '../context/service.js'
 import type { AiMode, AiRequestStatus } from './constants.js'
-import { AI_GENERATE_OPERATION, AI_LANGUAGES, AI_MODULE, AI_OPERATION, AI_PROVIDER, OUTPUT_SCHEMA_VERSION } from './constants.js'
+import { AI_GENERATE_OPERATION, AI_LANGUAGES, AI_MODULE, AI_OPERATION, AI_PROVIDER, AI_PROVIDER_DISPLAY_NAME, OUTPUT_SCHEMA_VERSION } from './constants.js'
 import { M2_PROMPT_REFERENCE, M2_SYSTEM_PROMPT, canonicalInputHash, renderM2DataPrompt } from './prompt.js'
 import { parseM2Output, type M2Output } from './output.js'
 import { AiProviderFailure, type AiProvider, type AiProviderResult } from './provider.js'
@@ -211,6 +211,7 @@ export async function generateContent(
   try {
     providerResult = await provider.generate({
       model: prepared.model,
+      outputSchemaVersion: OUTPUT_SCHEMA_VERSION,
       systemPrompt: M2_SYSTEM_PROMPT,
       userPrompt: prepared.userPrompt,
       maxOutputTokens: config.aiMaxOutputTokens,
@@ -282,7 +283,7 @@ async function buildGenerationInput(
   if (!settings) throw aiNotConfigured()
   const prompt = await tx.promptVersion.findFirst({ where: { module: AI_MODULE, operation: AI_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
-  const configuredModel = settings.modelId ?? config.anthropicModel ?? undefined
+  const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
   const model = configuredModel ?? settings.modelDisplayName
   const mode = settings.mode as AiMode
   const language = settings.generationLanguage
@@ -421,7 +422,7 @@ async function finalizeSuccessfulRequest(
       estimatedCostUsd: estimatedCost,
       providerRequestId: providerResult.providerRequestId,
     } })
-    const content = await readContentFromDb(tx, companyId, prepared.contentId, { anthropicModel: config.anthropicModel })
+    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel })
     const log = await tx.aiRequestLog.findUnique({ where: { id: prepared.aiRequestId }, include: { promptVersion: true } })
     if (!log) throw conflict('AI request evidence could not be finalized.')
     const request = mapAiRequest(log)
@@ -548,10 +549,10 @@ async function hasActivePrompt(prisma: PrismaClient) {
 }
 
 function mapAiSettings(settings: { provider: string; modelId: string | null; modelDisplayName: string; generationLanguage: string; mode: string; version: number }, config: AppConfig, promptConfigured: boolean) {
-  const hasProvider = Boolean(config.anthropicApiKey && (settings.modelId || config.anthropicModel))
+  const hasProvider = Boolean(config.openaiApiKey && (settings.modelId || config.openaiModel))
   return {
-    provider: 'Claude',
-    model: settings.modelId ?? config.anthropicModel ?? settings.modelDisplayName,
+    provider: AI_PROVIDER_DISPLAY_NAME,
+    model: settings.modelDisplayName,
     generationLanguage: settings.generationLanguage,
     mode: settings.mode,
     status: hasProvider && promptConfigured ? 'configured' : 'not_configured',
@@ -647,7 +648,7 @@ export function mapAiRequest(row: {
 }): AiRequestDto {
   return {
     id: row.id, module: row.module, operation: row.operation, contentId: row.contentId, variantId: row.variantId,
-    promptVersion: mapPromptVersion(row.promptVersion), provider: row.provider === 'anthropic' ? 'Claude' : row.provider,
+    promptVersion: mapPromptVersion(row.promptVersion), provider: row.provider === 'anthropic' ? 'Claude' : row.provider === AI_PROVIDER ? AI_PROVIDER_DISPLAY_NAME : row.provider,
     model: row.model, generationLanguage: row.language, mode: row.mode,
     inputTokens: row.inputTokens === null ? null : Number(row.inputTokens), outputTokens: row.outputTokens === null ? null : Number(row.outputTokens),
     estimatedCostUsd: row.estimatedCostUsd === null ? null : row.estimatedCostUsd.toFixed(8), latencyMs: row.latencyMs,

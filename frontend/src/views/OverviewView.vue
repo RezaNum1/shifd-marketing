@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -7,29 +7,16 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
-import { useCompanyContextStore } from '../stores/companyContext'
-import { useContentIdeasStore } from '../stores/contentIdeas'
-import { useContentLibraryStore } from '../stores/contentLibrary'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
-import { usePerformanceStore } from '../stores/performance'
-import { useProductsStore } from '../stores/products'
-import { calculateConsistency, calculateEngagementRate, engagementCount, WEEKLY_POST_TARGET } from '../utils/performanceMetrics'
-import { getEffectivePublishedPostCount, getEffectivePublishedPostsForWeek } from '../utils/publicationMetrics'
+import { useOverviewStore } from '../stores/overview'
 import type { ContentCalendarStatus, ContentPlatform } from '../types/content'
+import type { BackendCalendarEntry } from '../types/backend'
 import type { Tone } from '../types/ui'
-import { contentLifecycle, contentStatus } from '../utils/contentRecords'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 
 const router = useRouter()
-const library = useContentLibraryStore()
 const workflow = useContentWorkflowStore()
-const performance = usePerformanceStore()
-const ideas = useContentIdeasStore()
-const company = useCompanyContextStore()
-const products = useProductsStore()
-
-// Keep a scheduled workflow visible to every aggregation view in this session.
-library.syncScheduledWorkflow(workflow)
-const now = ref(new Date())
+const overview = useOverviewStore()
 
 interface CalendarSummaryEntry {
   contentId: string
@@ -45,92 +32,57 @@ interface CalendarSummaryEntry {
 }
 
 function platformLabel(platform: ContentPlatform) { return platform === 'instagram' ? 'Instagram' : 'LinkedIn' }
-function contextName(record: { context: 'company' | 'product'; productId?: string }) {
-  return record.context === 'company' ? company.companyProfile.name : products.nameFor(record.productId)
-}
-function formatNumber(value: number) { return value.toLocaleString() }
+function formatNumber(value: number | null | undefined) { return value === null || value === undefined ? '—' : value.toLocaleString() }
 function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }) {
   return new Intl.DateTimeFormat(undefined, options).format(new Date(`${value}T00:00:00`))
 }
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
-function parseSchedule(date: string, time: string) { return new Date(`${date}T${time}:00`) }
 function toneForStatus(status: ContentCalendarStatus): Tone { return status === 'Published' ? 'success' : status === 'Ready to Publish' ? 'warning' : 'info' }
-function startOfWeek(value: Date) {
-  const date = new Date(value)
-  const day = date.getDay()
-  date.setHours(0, 0, 0, 0)
-  date.setDate(date.getDate() - (day === 0 ? 6 : day - 1))
-  return date
-}
-const calendarEntries = computed<CalendarSummaryEntry[]>(() => library.records.flatMap((record) => record.platforms.flatMap((platform) => {
-  const schedule = contentLifecycle(record).schedules[platform]
-  if (!schedule) return []
-  const publication = library.getPublicationRecord(record.id, platform)
-  const at = parseSchedule(schedule.date, schedule.time)
-  return [{
-    contentId: record.id, title: record.title, topic: record.topic, platform,
-    contextName: contextName(record), pillar: record.pillar, date: schedule.date, time: schedule.time, at,
-    status: publication ? 'Published' : at <= now.value ? 'Ready to Publish' : 'Scheduled',
-  }]
-})))
-const plannedEntries = computed(() => calendarEntries.value.filter((entry) => entry.status !== 'Published'))
-const readyToPublishCount = computed(() => calendarEntries.value.filter((entry) => entry.status === 'Ready to Publish').length)
-const upcoming = computed(() => [...plannedEntries.value].sort((a, b) => a.at.getTime() - b.at.getTime()).slice(0, 5))
-const publishedRecords = computed(() => library.records.flatMap((record) => record.platforms.flatMap((platform) => {
-  const publication = library.getPublicationRecord(record.id, platform)
-  return publication ? [{ record, platform, publication }] : []
-})).sort((a, b) => new Date(b.publication.publishedAt).getTime() - new Date(a.publication.publishedAt).getTime()))
-const recentPublished = computed(() => publishedRecords.value.slice(0, 5))
-const publishedPosts = computed(() => getEffectivePublishedPostCount(performance.weeklyMetrics, library.publicationRecords))
-const needsReview = computed(() => library.records.filter((record) => ['Ready for Review', 'Needs Revision'].includes(contentStatus(record))))
-
-const metricWeeks = computed(() => [...new Set(performance.weeklyMetrics.map((metric) => metric.weekStart))].sort().slice(-8))
-const latestMetrics = computed(() => ({
-  instagram: performance.weeklyMetrics.filter((metric) => metric.platform === 'instagram' && metric.weekStart === metricWeeks.value.at(-1)).at(-1),
-  linkedin: performance.weeklyMetrics.filter((metric) => metric.platform === 'linkedin' && metric.weekStart === metricWeeks.value.at(-1)).at(-1),
-}))
+const report = computed(() => overview.report)
+const plannedEntries = computed(() => report.value?.upcoming.filter((entry) => entry.status !== 'published').map(calendarEntry) ?? [])
+const readyToPublishCount = computed(() => report.value?.readyToPublish ?? 0)
+const upcoming = computed(() => plannedEntries.value.slice(0, 5))
+const recentPublished = computed(() => report.value?.recentlyPublished.slice(0, 5).map((item) => ({ record: { id: item.content.id, title: item.content.title }, platform: item.publication.platform, publication: item.publication })) ?? [])
+const publishedPosts = computed(() => report.value?.published.effectivePosts ?? 0)
+const needsReview = computed(() => Array.from({ length: report.value?.needsReviewCampaigns ?? 0 }, (_, index) => ({ id: String(index) })))
+const readyIdeasCount = computed(() => report.value?.ideas.readyCount ?? 0)
+const latestIdeas = computed(() => report.value?.ideas.latest ?? [])
 const performanceSnapshot = computed(() => {
-  const metrics = performance.weeklyMetrics.filter((metric) => metricWeeks.value.includes(metric.weekStart))
-  const impressions = metrics.reduce((sum, metric) => sum + metric.impressions, 0)
-  const engagements = metrics.reduce((sum, metric) => sum + engagementCount(metric), 0)
-  const start = (performance.weeklyMetrics.find((metric) => metric.platform === 'instagram' && metric.weekStart === metricWeeks.value[0])?.followers ?? 0)
-    + (performance.weeklyMetrics.find((metric) => metric.platform === 'linkedin' && metric.weekStart === metricWeeks.value[0])?.followers ?? 0)
-  const end = (latestMetrics.value.instagram?.followers ?? 0) + (latestMetrics.value.linkedin?.followers ?? 0)
-  return { reach: (latestMetrics.value.instagram?.reach ?? 0) + (latestMetrics.value.linkedin?.reach ?? 0), impressions, engagementRate: calculateEngagementRate(impressions, engagements) ?? 0, followerGrowth: end - start }
+  const snapshot = report.value?.performanceSnapshot
+  return { reach: snapshot?.summary.latestWeeklyReach ?? null, impressions: snapshot?.summary.impressions ?? null, engagementRate: snapshot?.summary.engagementRate ?? null, followers: snapshot?.followers ?? [] }
 })
-
-const thisWeek = computed(() => {
-  const week = startOfWeek(now.value)
-  const weekEnd = new Date(week)
-  weekEnd.setDate(weekEnd.getDate() + 7)
-  return (['instagram', 'linkedin'] as ContentPlatform[]).map((platform) => {
-    const published = getEffectivePublishedPostsForWeek(performance.weeklyMetrics, library.publicationRecords, platform, week, weekEnd)
-    const consistency = calculateConsistency(published, 1)
-    return { platform, published, expected: WEEKLY_POST_TARGET, percent: consistency.percent }
-  })
-})
+const thisWeek = computed(() => report.value?.thisWeek.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
+const thisWeekLabel = computed(() => thisWeek.value.length ? thisWeek.value.map((item) => `${platformLabel(item.platform)} ${item.percent.toFixed(1)}%`).join(' · ') : '—')
 
 const attentionItems = computed(() => {
   const items: { label: string; detail: string; icon: 'alert' | 'calendar' | 'idea' | 'company'; to: string }[] = []
   if (needsReview.value.length) items.push({ label: `${needsReview.value.length} content ${needsReview.value.length === 1 ? 'needs' : 'need'} review`, detail: 'Human review is required before approval.', icon: 'alert', to: '/content' })
   if (readyToPublishCount.value) items.push({ label: `${readyToPublishCount.value} scheduled ${readyToPublishCount.value === 1 ? 'post is' : 'posts are'} ready to publish`, detail: 'Record publication after manually posting.', icon: 'calendar', to: '/calendar' })
-  if (ideas.recentReadyIdeas.length) items.push({ label: `${ideas.recentReadyIdeas.length} ideas ready to develop`, detail: 'Turn a ready idea into a brief.', icon: 'idea', to: '/content/ideas' })
-  const profileReady = Boolean(company.companyProfile.name.trim() && company.companyProfile.description.trim() && company.brandProfile.brandVoice.trim() && company.brandProfile.preferredLanguage.trim())
-  if (!profileReady) items.push({ label: 'Marketing context needs attention', detail: 'Complete the company and brand context.', icon: 'company', to: '/context/company' })
+  if (readyIdeasCount.value) items.push({ label: `${readyIdeasCount.value} ideas ready to develop`, detail: 'Turn a ready idea into a brief.', icon: 'idea', to: '/content/ideas' })
+  if (report.value && (!report.value.context.companyConfigured || !report.value.context.brandConfigured)) items.push({ label: 'Marketing context needs attention', detail: 'Complete the company and brand context.', icon: 'company', to: '/context/company' })
   return items
 })
 
 const contextReadiness = computed(() => ({
-  company: Boolean(company.companyProfile.name.trim() && company.companyProfile.description.trim()),
-  brand: Boolean(company.brandProfile.brandVoice.trim() && company.brandProfile.toneDescription.trim() && company.brandProfile.preferredLanguage.trim()),
-  activeProducts: products.products.filter((product) => product.status === 'Active').length,
+  company: report.value?.context.companyConfigured ?? false,
+  brand: report.value?.context.brandConfigured ?? false,
+  activeProducts: report.value?.context.activeProducts ?? 0,
 }))
 
 function consistencyTone(percent: number): Tone { return percent >= 100 ? 'success' : percent >= 75 ? 'info' : 'warning' }
+function followerGrowthLabel(values: Array<{ platform: ContentPlatform; change: number | null }>) {
+  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${item.change === null ? '—' : `${item.change >= 0 ? '+' : ''}${formatNumber(item.change)}`}`).join(' · ') : '—'
+}
 function openContent(id: string) { router.push(`/content/${id}`) }
 function startNewContent() { workflow.startNewWorkflow(); router.push('/content/create') }
+function calendarEntry(entry: BackendCalendarEntry): CalendarSummaryEntry {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: entry.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(entry.scheduledAt))
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
+  return { contentId: entry.contentId, title: entry.title, topic: entry.title, platform: entry.platform, contextName: entry.product?.name ?? entry.company.name, pillar: entry.pillarCode, date: `${get('year')}-${get('month')}-${get('day')}`, time: new Intl.DateTimeFormat('en-GB', { timeZone: entry.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(entry.scheduledAt)), at: new Date(entry.scheduledAt), status: entry.status === 'published' ? 'Published' : entry.status === 'ready_to_publish' ? 'Ready to Publish' : 'Scheduled' }
+}
+onMounted(() => { void overview.load(true) })
 </script>
 
 <template>
@@ -141,12 +93,15 @@ function startNewContent() { workflow.startNewWorkflow(); router.push('/content/
         <BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton>
       </template>
     </PageHeader>
+    <InlineAlert v-if="overview.loading" title="Loading overview">Reading the canonical overview report…</InlineAlert>
+    <InlineAlert v-else-if="overview.error" title="Overview unavailable" tone="danger">{{ overview.error }}</InlineAlert>
 
+    <template v-if="overview.loaded">
     <section class="overview-kpi-grid" aria-label="Execution summary">
-      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Planned</span><AppIcon name="calendar" :size="17" /></div><strong>{{ plannedEntries.length }}</strong><small>Platform schedules not yet published</small></div></BaseCard>
+      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Planned</span><AppIcon name="calendar" :size="17" /></div><strong>{{ report?.plannedPlatformSchedules ?? 0 }}</strong><small>Platform schedules not yet published</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Published Posts</span><AppIcon name="check" :size="17" /></div><strong>{{ publishedPosts }}</strong><small>Recorded platform publications</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Needs Review</span><AppIcon name="alert" :size="17" /></div><strong>{{ needsReview.length }}</strong><small>Ready for review or needs revision</small></div></BaseCard>
-      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Posting Consistency</span><AppIcon name="chart" :size="17" /></div><strong>{{ Math.round((thisWeek[0].percent + thisWeek[1].percent) / 2) }}%</strong><small>Current week against a 2 post target</small></div></BaseCard>
+      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Posting Consistency</span><AppIcon name="chart" :size="17" /></div><strong>{{ thisWeekLabel }}</strong><small>Backend report by platform</small></div></BaseCard>
     </section>
 
     <section class="overview-two-column">
@@ -167,14 +122,15 @@ function startNewContent() { workflow.startNewWorkflow(); router.push('/content/
     </BaseCard>
 
     <section class="overview-two-column">
-      <BaseCard title="Performance Snapshot" description="Observed metrics from the latest eight-week period."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/performance')">View Performance <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="snapshot-grid"><div><span>Weekly Reach</span><strong>{{ formatNumber(performanceSnapshot.reach) }}</strong></div><div><span>Impressions</span><strong>{{ formatNumber(performanceSnapshot.impressions) }}</strong></div><div><span>Engagement Rate</span><strong>{{ performanceSnapshot.engagementRate.toFixed(1) }}%</strong></div><div><span>Follower Growth</span><strong>{{ performanceSnapshot.followerGrowth >= 0 ? '+' : '' }}{{ formatNumber(performanceSnapshot.followerGrowth) }}</strong></div></div><p class="helper-text">Engagement rate is calculated as engagements ÷ impressions.</p></BaseCard>
-      <BaseCard title="Ideas Ready" description="Human-captured ideas available for development."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content/ideas')">View Ideas <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div v-if="ideas.recentReadyIdeas.length" class="idea-snapshot"><strong>{{ ideas.recentReadyIdeas.length }} ideas ready</strong><button v-for="idea in ideas.recentReadyIdeas.slice(0, 3)" :key="idea.id" type="button" @click="router.push('/content/ideas')">{{ idea.title }} <AppIcon name="arrow-right" :size="13" /></button></div><EmptyState v-else icon="idea" title="No ideas ready." description="Capture potential topics in the Idea Bank." /></BaseCard>
+      <BaseCard title="Performance Snapshot" description="Backend-calculated metrics from the configured reporting period."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/performance')">View Performance <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="snapshot-grid"><div><span>Weekly Reach</span><strong>{{ formatNumber(performanceSnapshot.reach) }}</strong></div><div><span>Impressions</span><strong>{{ formatNumber(performanceSnapshot.impressions) }}</strong></div><div><span>Engagement Rate</span><strong>{{ performanceSnapshot.engagementRate === null ? '—' : `${performanceSnapshot.engagementRate.toFixed(1)}%` }}</strong></div><div><span>Follower Growth</span><strong>{{ followerGrowthLabel(performanceSnapshot.followers) }}</strong></div></div><p class="helper-text">Values are supplied by the backend performance report.</p></BaseCard>
+      <BaseCard title="Ideas Ready" description="Human-captured ideas available for development."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content/ideas')">View Ideas <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div v-if="readyIdeasCount" class="idea-snapshot"><strong>{{ readyIdeasCount }} ideas ready</strong><button v-for="idea in latestIdeas" :key="idea.id" type="button" @click="router.push('/content/ideas')">{{ idea.title }} <AppIcon name="arrow-right" :size="13" /></button></div><EmptyState v-else icon="idea" title="No ideas ready." description="Capture potential topics in the Idea Bank." /></BaseCard>
     </section>
 
     <section class="overview-two-column">
       <BaseCard title="Marketing Context" description="Deterministic readiness from the canonical context stores."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/context/company')">Manage Context <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="context-readiness"><div><span>Company Context</span><StatusBadge :tone="contextReadiness.company ? 'success' : 'warning'">{{ contextReadiness.company ? 'Configured' : 'Needs setup' }}</StatusBadge></div><div><span>Products</span><StatusBadge :tone="contextReadiness.activeProducts ? 'success' : 'warning'">{{ contextReadiness.activeProducts }} Active</StatusBadge></div><div><span>Brand Context</span><StatusBadge :tone="contextReadiness.brand ? 'success' : 'warning'">{{ contextReadiness.brand ? 'Configured' : 'Needs setup' }}</StatusBadge></div></div></BaseCard>
       <BaseCard title="Recent Published" description="The latest manually recorded platform publications."><div v-if="recentPublished.length" class="recent-list"><button v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`" type="button" class="recent-item" @click="openContent(item.record.id)"><span><strong>{{ item.record.title }}</strong><small>{{ platformLabel(item.platform) }}</small></span><span class="recent-item__date">{{ formatDateTime(item.publication.publishedAt) }}</span><StatusBadge tone="success">Published</StatusBadge></button></div><EmptyState v-else icon="library" title="No content published yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
     </section>
+    </template>
   </div>
 </template>
 

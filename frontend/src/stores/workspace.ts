@@ -1,15 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { workspace as initialWorkspace, workspaceUser } from '../data/workspace'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
-  const workspace = ref({ ...initialWorkspace })
-  const user = ref({ ...workspaceUser })
+  const workspace = ref({ id: '', name: 'Shifd Marketing' })
+  const user = ref({ id: '', name: '', initials: '', role: '' })
   const navigationOpen = ref(false)
 
-  function closeNavigation() {
-    navigationOpen.value = false
-  }
+  function closeNavigation() { navigationOpen.value = false }
 
   return { workspace, user, navigationOpen, closeNavigation }
 })

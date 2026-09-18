@@ -53,6 +53,7 @@ export const mockWeeklyMetrics: WeeklyMetric[] = [
 export const mockInboundInquiries: InboundInquiryMetric[] = weekStarts.map((weekStart, index) => ({
   id: `whatsapp-${weekStart}`,
   weekStart,
+  weekEnd: weekEnd(weekStart),
   count: [0, 1, 0, 2, 1, 0, 2, 1, 3, 2, 1, 2][index],
   source: 'mock',
 }))

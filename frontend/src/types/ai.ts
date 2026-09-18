@@ -4,9 +4,17 @@ export type AiRequestStatus = 'Success' | 'Failed'
 export type PromptVersionStatus = 'Active' | 'Retired'
 
 export interface AiSettings {
-  provider: 'Claude'
+  provider: string
   model: string
   generationLanguage: 'English' | 'Indonesian'
+  mode?: 'real' | 'demo'
+  status?: string
+  systemStatus?: {
+    contextEngine: string
+    promptConfiguration: string
+    aiConfiguration: string
+  }
+  version?: number
 }
 
 export interface PromptVersion {

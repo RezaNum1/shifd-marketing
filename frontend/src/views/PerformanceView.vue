@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import TrendChart from '../components/performance/TrendChart.vue'
@@ -11,20 +11,16 @@ import BaseModal from '../components/ui/BaseModal.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
-import { useContentLibraryStore } from '../stores/contentLibrary'
 import { usePerformanceStore } from '../stores/performance'
 import { useUiStore } from '../stores/ui'
-import type { PerformancePlatform, WeeklyMetric } from '../types/performance'
+import InlineAlert from '../components/ui/InlineAlert.vue'
+import type { PerformancePlatform } from '../types/performance'
 import type { SelectOption, Tone } from '../types/ui'
-import { calculateConsistency, calculateEngagementRate, engagementCount } from '../utils/performanceMetrics'
-import { getEffectivePublishedPostCount, metricForPublication } from '../utils/publicationMetrics'
-import { contentLifecycle, contentStatus } from '../utils/contentRecords'
 
 type PlatformFilter = 'combined' | PerformancePlatform
 type PeriodWeeks = 4 | 8 | 12
 
 const router = useRouter()
-const library = useContentLibraryStore()
 const performance = usePerformanceStore()
 const ui = useUiStore()
 const period = ref('8')
@@ -35,7 +31,9 @@ const logForm = reactive({ platform: 'linkedin' as PerformancePlatform, weekStar
 
 const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }]
 const platformOptions: SelectOption[] = [{ value: 'combined', label: 'Combined' }, { value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
-const logPlatformOptions: SelectOption[] = [{ value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
+const logPlatformOptions: SelectOption[] = [{ value: 'linkedin', label: 'LinkedIn' }]
+/* Legacy mock-derived selectors are kept below only as a migration marker. */
+/*
 const periodWeeks = computed(() => Number(period.value) as PeriodWeeks)
 const selectedMetrics = computed(() => {
   const weeks = [...new Set(performance.weeklyMetrics.map((metric) => metric.weekStart))].sort().slice(-periodWeeks.value)
@@ -53,7 +51,7 @@ const followerStart = computed(() => platform.value === 'combined' ? (selectedMe
 const followerEnd = computed(() => platform.value === 'combined' ? (selectedMetrics.value.instagram.at(-1)?.followers ?? 0) + (selectedMetrics.value.linkedin.at(-1)?.followers ?? 0) : (selectedMetrics.value[platform.value].at(-1)?.followers ?? 0))
 const followerChange = computed(() => followerEnd.value - followerStart.value)
 const followerChangePercent = computed(() => followerStart.value ? (followerChange.value / followerStart.value) * 100 : 0)
-const reachTotal = computed(() => currentSeries.value.reduce((total, metric) => total + ('reach' in metric ? metric.reach : 0), 0))
+const reachTotal = computed(() => currentSeries.value.reduce((total, metric) => total + ('reach' in metric ? (metric.reach ?? 0) : 0), 0))
 const latestReach = computed(() => currentSeries.value.at(-1)?.reach ?? 0)
 const impressionsTotal = computed(() => currentSeries.value.reduce((total, metric) => total + ('impressions' in metric ? metric.impressions : 0), 0))
 const engagementsTotal = computed(() => currentSeries.value.reduce((total, metric) => total + (('likes' in metric) ? engagementCount(metric) : 0), 0))
@@ -121,7 +119,7 @@ function platformLabel(value: PlatformFilter | PerformancePlatform) { return val
 function formatNumber(value: number) { return value.toLocaleString() }
 function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) { return new Intl.DateTimeFormat(undefined, options).format(new Date(`${value}T00:00:00`)) }
 function formatPercent(value: number) { return `${value.toFixed(1)}%` }
-function formatMetric(value: number | undefined) { return value === undefined ? '—' : formatNumber(value) }
+function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? '—' : formatNumber(value) }
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
 function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
 function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: selectedMetrics.value.weeks.at(-1) ?? '2026-09-07', followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
@@ -130,9 +128,95 @@ function saveMetric() {
   if (!logForm.weekStart || required.some((key) => logForm[key] === '' || Number(logForm[key]) < 0)) { logError.value = 'Enter a valid week and non-negative metric values.'; return }
   performance.addWeeklyMetric({ platform: logForm.platform, weekStart: logForm.weekStart, followers: Number(logForm.followers), reach: Number(logForm.reach), impressions: Number(logForm.impressions), likes: Number(logForm.likes), comments: Number(logForm.comments), saves: Number(logForm.saves), publishedPosts: Number(logForm.publishedPosts) })
   logModalOpen.value = false
-  ui.notify('Weekly metrics saved locally.', 'success')
+  ui.notify('Weekly metrics saved to the backend.', 'success')
 }
-function exportReport() { ui.notify('Report export is available for the current mock view.', 'info') }
+function exportReport() { ui.notify('Report export is not part of the backend contract.', 'info') }
+*/
+
+const report = computed(() => performance.report)
+const periodWeeks = computed(() => Number(period.value) as PeriodWeeks)
+const reportWeeks = computed(() => report.value?.weekly ?? [])
+const selectedWeeks = computed(() => reportWeeks.value.filter((item) => item.platform === (platform.value === 'combined' ? 'combined' : platform.value)))
+const currentSeries = computed(() => selectedWeeks.value)
+const followerSeries = computed(() => ({
+  instagram: reportWeeks.value.filter((item) => item.platform === 'instagram'),
+  linkedin: reportWeeks.value.filter((item) => item.platform === 'linkedin'),
+}))
+const followerSummary = computed(() => report.value?.followers ?? [])
+const selectedFollower = computed(() => platform.value === 'combined' ? undefined : followerSummary.value.find((item) => item.platform === platform.value))
+const followerChangeLabel = computed(() => {
+  const values = platform.value === 'combined' ? followerSummary.value : selectedFollower.value ? [selectedFollower.value] : []
+  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${signedNumber(item.change)}`).join(' · ') : '—'
+})
+const followerChangeDetail = computed(() => {
+  const values = platform.value === 'combined' ? followerSummary.value : selectedFollower.value ? [selectedFollower.value] : []
+  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.changePercent)}`).join(' · ') : 'No follower observations'
+})
+const latestReach = computed(() => report.value?.summary.latestWeeklyReach ?? null)
+const impressionsTotal = computed(() => report.value?.summary.impressions ?? 0)
+const engagementRate = computed(() => report.value?.summary.engagementRate ?? null)
+const latestWeekLabel = computed(() => {
+  const latest = report.value?.period.recordedWeekStarts.at(-1)
+  return latest ? formatDate(latest, { month: 'short', day: 'numeric' }) : '—'
+})
+const publishedCount = computed(() => report.value?.summary.published.effectivePosts ?? 0)
+const consistency = computed(() => report.value?.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
+const consistencyLabel = computed(() => consistency.value.length ? consistency.value.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.percent)}`).join(' · ') : '—')
+const executionSummary = computed(() => ({
+  planned: report.value?.execution.planned ?? 0,
+  published: report.value?.execution.publishedWithinCohort ?? 0,
+  pending: report.value?.execution.pending ?? 0,
+  onTime: report.value?.execution.onTime ?? 0,
+}))
+const outputBreakdown = computed(() => ({
+  created: report.value?.contentOutput.created ?? 0,
+  approved: report.value?.contentOutput.approved ?? 0,
+  scheduled: report.value?.contentOutput.scheduled ?? 0,
+  published: report.value?.contentOutput.published ?? 0,
+}))
+const reachChart = computed(() => [{
+  label: platform.value === 'combined' ? 'Combined Platform Reach' : `${platformLabel(platform.value)} Reach`,
+  color: platform.value === 'instagram' ? '#7c3aed' : '#1d4ed8',
+  values: currentSeries.value.map((item) => item.reach),
+}])
+const followerChart = computed(() => platform.value === 'combined'
+  ? [{ label: 'Instagram', color: '#7c3aed', values: followerSeries.value.instagram.map((item) => item.followers) }, { label: 'LinkedIn', color: '#1d4ed8', values: followerSeries.value.linkedin.map((item) => item.followers) }]
+  : [{ label: platformLabel(platform.value), color: platform.value === 'instagram' ? '#7c3aed' : '#1d4ed8', values: (platform.value === 'instagram' ? followerSeries.value.instagram : followerSeries.value.linkedin).map((item) => item.followers) }])
+const chartLabels = computed(() => selectedWeeks.value.map((item) => `W${item.weekStart.slice(5, 7)}-${item.weekStart.slice(8, 10)}`))
+const recentPublished = computed(() => performance.publications.slice(0, 5).map((item) => ({
+  record: { id: item.content.id, title: item.content.title, topic: item.content.title },
+  platform: item.publication.platform,
+  publication: item.publication,
+  reach: item.platformMetricsForPublicationWeek?.reach ?? null,
+  impressions: item.platformMetricsForPublicationWeek?.impressions ?? null,
+  engagements: item.platformMetricsForPublicationWeek?.engagements ?? null,
+})))
+const inquiryWindow = computed(() => report.value?.inquiries.weeks.slice(-periodWeeks.value) ?? [])
+const inquiryTotal = computed(() => inquiryWindow.value.reduce((sum, item) => sum + item.count, 0))
+
+function platformLabel(value: PlatformFilter | PerformancePlatform) { return value === 'instagram' ? 'Instagram' : value === 'linkedin' ? 'LinkedIn' : 'Combined' }
+function formatNumber(value: number | null) { return value === null ? '—' : value.toLocaleString() }
+function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) { return new Intl.DateTimeFormat(undefined, options).format(value.includes('T') ? new Date(value) : new Date(`${value}T00:00:00`)) }
+function formatPercent(value: number | null) { return value === null ? '—' : `${value.toFixed(1)}%` }
+function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? '—' : formatNumber(value) }
+function signedNumber(value: number | null) { return value === null ? '—' : `${value >= 0 ? '+' : ''}${formatNumber(value)}` }
+function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
+function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
+function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: report.value?.period.recordedWeekStarts.at(-1) ?? new Date().toISOString().slice(0, 10), followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
+function addDays(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
+async function saveMetric() {
+  const required = ['followers', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts'] as const
+  if (!logForm.weekStart || required.some((key) => logForm[key] === '' || Number(logForm[key]) < 0) || (logForm.reach !== '' && Number(logForm.reach) < 0)) { logError.value = 'Enter a valid week and non-negative metric values.'; return }
+  const saved = await performance.addWeeklyMetric({ platform: 'linkedin', weekStart: logForm.weekStart, weekEnd: addDays(logForm.weekStart, 6), followers: Number(logForm.followers), reach: logForm.reach === '' ? null : Number(logForm.reach), impressions: Number(logForm.impressions), likes: Number(logForm.likes), comments: Number(logForm.comments), saves: Number(logForm.saves), publishedPosts: Number(logForm.publishedPosts) })
+  if (!saved) { logError.value = performance.error || 'Unable to save the LinkedIn metrics.'; return }
+  logModalOpen.value = false
+  logError.value = ''
+  await performance.loadReport(periodWeeks.value, platform.value)
+  ui.notify('Weekly LinkedIn metrics saved.', 'success')
+}
+function exportReport() { ui.notify('Report export is not part of the backend contract.', 'info') }
+onMounted(() => { void performance.load(periodWeeks.value, platform.value) })
+watch([period, platform], () => { void performance.load(periodWeeks.value, platform.value) })
 </script>
 
 <template>
@@ -140,17 +224,20 @@ function exportReport() { ui.notify('Report export is available for the current 
     <PageHeader title="Performance" description="Track content execution and social media performance over time." :breadcrumbs="[{ label: 'Planning & Insights' }, { label: 'Performance' }]">
       <template #actions><BaseSelect v-model="period" label="Evaluation period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="exportReport"><AppIcon name="library" :size="16" />Export Report</BaseButton><BaseButton @click="openLog"><AppIcon name="plus" :size="16" />Log Weekly Metrics</BaseButton></template>
     </PageHeader>
+    <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
+    <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
 
-    <section class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Observed metrics from local demo data. Reach, followers, impressions, and engagement are reported separately.</span></div><div class="performance-toolbar__source"><span>Instagram · Mock Data <em>Future: Instagram Graph API</em></span><span>LinkedIn · Mock Data <em>Future: Manual Entry</em></span><span>WhatsApp · Mock Data <em>Manual Entry</em></span></div></section>
+    <template v-if="performance.loaded">
+    <section class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Observed platform-account metrics from the backend report. Reach, followers, impressions, and engagement are reported separately.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report <em>API source when configured</em></span><span>LinkedIn · Manual Entry <em>Weekly account metrics</em></span><span>WhatsApp · Manual Entry <em>Supplementary inquiry volume</em></span></div></section>
 
     <section class="kpi-grid" aria-label="Primary metrics">
       <BaseCard v-for="card in [
-        { label: 'Follower Growth', value: `+${formatNumber(followerChange)}`, detail: `${formatPercent(followerChangePercent)} · ${platform === 'combined' ? 'platform totals' : platformLabel(platform)}`, icon: 'company' },
-        { label: platform === 'combined' ? 'Combined Platform Reach' : 'Weekly Reach', value: formatNumber(latestReach), detail: `${latestWeekLabel} · ${formatNumber(reachTotal)} period reach`, icon: 'chart' },
+        { label: 'Follower Growth', value: followerChangeLabel, detail: `${followerChangeDetail} · backend observations`, icon: 'company' },
+        { label: platform === 'combined' ? 'Combined Platform Reach' : 'Weekly Reach', value: formatNumber(latestReach), detail: `${latestWeekLabel} · latest reported week`, icon: 'chart' },
         { label: 'Impressions', value: formatNumber(impressionsTotal), detail: `Total for ${period} weeks`, icon: 'overview' },
         { label: 'Engagement Rate', value: formatPercent(engagementRate), detail: 'Engagements ÷ impressions', icon: 'idea' },
         { label: 'Content Published', value: formatNumber(publishedCount), detail: 'Platform publication records', icon: 'library' },
-        { label: 'Posting Consistency', value: formatPercent(consistency.reduce((sum, item) => sum + item.percent, 0) / consistency.length), detail: 'Against 2 posts / week / platform', icon: 'check' },
+        { label: 'Posting Consistency', value: consistencyLabel, detail: 'Backend report by platform', icon: 'check' },
       ]" :key="card.label" class="kpi-card"><div class="kpi-card__top"><span>{{ card.label }}</span><AppIcon :name="card.icon" :size="17" /></div><strong>{{ card.value }}</strong><small>{{ card.detail }}</small></BaseCard>
     </section>
 
@@ -161,19 +248,20 @@ function exportReport() { ui.notify('Report export is available for the current 
 
     <section class="performance-two-column">
       <BaseCard title="Posting Consistency" description="Published posts compared with the configured target of 2 posts per week per platform."><div class="consistency-list"><div v-for="item in consistency" :key="item.platform" class="consistency-row"><div class="consistency-row__heading"><strong>{{ platformLabel(item.platform) }}</strong><StatusBadge :tone="toneForConsistency(item.percent)">{{ formatPercent(item.percent) }}</StatusBadge></div><div class="consistency-row__meta"><span>Target: {{ item.expected }} posts</span><span>Published: {{ item.published }} / {{ item.expected }}</span></div><div class="progress-track"><span :style="{ width: `${Math.min(100, item.percent)}%` }" :class="{ 'is-complete': item.percent >= 100 }" /></div></div></div></BaseCard>
-      <BaseCard title="Execution Summary" description="A compact view of planned and recorded publication work."><dl class="summary-list"><div><dt>Planned</dt><dd>{{ executionSummary.planned }}</dd></div><div><dt>Published</dt><dd>{{ executionSummary.published }}</dd></div><div><dt>Pending Publication</dt><dd>{{ executionSummary.pending }}</dd></div><div><dt>On-time Publication</dt><dd>{{ executionSummary.onTime }}</dd></div></dl><p class="helper-text">These counts use the local Calendar and Content Library records.</p></BaseCard>
+      <BaseCard title="Execution Summary" description="A compact view of planned and recorded publication work."><dl class="summary-list"><div><dt>Planned</dt><dd>{{ executionSummary.planned }}</dd></div><div><dt>Published</dt><dd>{{ executionSummary.published }}</dd></div><div><dt>Pending Publication</dt><dd>{{ executionSummary.pending }}</dd></div><div><dt>On-time Publication</dt><dd>{{ executionSummary.onTime }}</dd></div></dl><p class="helper-text">These counts use the backend execution report.</p></BaseCard>
     </section>
 
     <section class="performance-two-column">
       <BaseCard title="Content Output" description="Throughput by lifecycle state. Volume is reported without interpreting quality."><div class="output-grid"><div><strong>{{ outputBreakdown.created }}</strong><span>Content Created</span></div><div><strong>{{ outputBreakdown.approved }}</strong><span>Content Approved</span></div><div><strong>{{ outputBreakdown.scheduled }}</strong><span>Content Scheduled</span></div><div><strong>{{ outputBreakdown.published }}</strong><span>Content Published</span></div></div></BaseCard>
-      <BaseCard title="Inbound Inquiries" description="Supplementary Metric · WhatsApp Business manual tracking."><template #actions><strong class="inquiry-total">{{ inquiryTotal }} inquiries</strong></template><div class="inquiry-chart"><div v-for="item in inquiryWindow" :key="item.id" class="inquiry-bar"><span :style="{ height: `${Math.max(8, (item.count / Math.max(1, ...inquiryWindow.map((entry) => entry.count))) * 100)}%` }" /><small>{{ formatDate(item.weekStart, { month: 'short', day: 'numeric' }) }}</small><b>{{ item.count }}</b></div></div><p class="helper-text">Inquiry counts are observed supplementary data; no attribution to individual posts is inferred.</p></BaseCard>
+      <BaseCard title="Supplementary Inquiry Volume" description="Supplementary Metric · WhatsApp Business manual tracking."><template #actions><strong class="inquiry-total">{{ inquiryTotal }} inquiries</strong></template><div class="inquiry-chart"><div v-for="item in inquiryWindow" :key="item.id" class="inquiry-bar"><span :style="{ height: `${Math.max(8, (item.count / Math.max(1, ...inquiryWindow.map((entry) => entry.count))) * 100)}%` }" /><small>{{ formatDate(item.weekStart, { month: 'short', day: 'numeric' }) }}</small><b>{{ item.count }}</b></div></div><p class="helper-text">Inquiry counts are observed supplementary data; no attribution to individual posts is inferred.</p></BaseCard>
     </section>
 
-    <BaseCard title="Recent Published Content" description="Recorded platform publications with metrics from the publication week."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Reach</th><th>Impressions</th><th>Engagement</th></tr></thead><tbody><tr v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.reach) }}</td><td>{{ formatMetric(item.impressions) }}</td><td>{{ item.engagement === undefined ? '—' : formatPercent(item.engagement) }}</td></tr></tbody></table></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
+      <BaseCard title="Recent Published Content" description="Platform Metrics for Publication Week; these are account-week observations, not post-level attribution."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Reach</th><th>Impressions</th><th>Engagements</th></tr></thead><tbody><tr v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.reach) }}</td><td>{{ formatMetric(item.impressions) }}</td><td>{{ formatMetric(item.engagements) }}</td></tr></tbody></table></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
 
     <div class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>LinkedIn metrics are currently entered manually.</span></div>
+    </template>
 
-    <BaseModal v-model="logModalOpen" title="Log Weekly Metrics" description="Record observed platform metrics for a completed week. Values remain in local frontend state."><form class="metrics-form" @submit.prevent="saveMetric"><BaseSelect v-model="logForm.platform" label="Platform" :options="logPlatformOptions" required /><BaseInput v-model="logForm.weekStart" label="Week Start" type="date" required /><div class="metrics-form__grid"><BaseInput v-model="logForm.followers" label="Ending Followers" type="number" min="0" required /><BaseInput v-model="logForm.reach" label="Reach" type="number" min="0" required /><BaseInput v-model="logForm.impressions" label="Impressions" type="number" min="0" required /><BaseInput v-model="logForm.likes" label="Likes" type="number" min="0" required /><BaseInput v-model="logForm.comments" label="Comments" type="number" min="0" required /><BaseInput v-model="logForm.saves" label="Saves" type="number" min="0" required /><BaseInput v-model="logForm.publishedPosts" label="Published Posts" type="number" min="0" required /></div><p v-if="logError" class="form-error" role="alert">{{ logError }}</p><div class="modal-actions"><BaseButton variant="ghost" type="button" @click="logModalOpen = false">Cancel</BaseButton><BaseButton type="submit">Save Metrics</BaseButton></div></form></BaseModal>
+    <BaseModal v-model="logModalOpen" title="Log Weekly Metrics" description="Record observed LinkedIn platform metrics for a completed week. Reach may be left blank when it was not reported."><form class="metrics-form" @submit.prevent="saveMetric"><BaseSelect v-model="logForm.platform" label="Platform" :options="logPlatformOptions" required /><BaseInput v-model="logForm.weekStart" label="Week Start" type="date" required /><div class="metrics-form__grid"><BaseInput v-model="logForm.followers" label="Ending Followers" type="number" min="0" required /><BaseInput v-model="logForm.reach" label="Reach" type="number" min="0" /><BaseInput v-model="logForm.impressions" label="Impressions" type="number" min="0" required /><BaseInput v-model="logForm.likes" label="Likes" type="number" min="0" required /><BaseInput v-model="logForm.comments" label="Comments" type="number" min="0" required /><BaseInput v-model="logForm.saves" label="Saves" type="number" min="0" required /><BaseInput v-model="logForm.publishedPosts" label="Published Posts" type="number" min="0" required /></div><p v-if="logError" class="form-error" role="alert">{{ logError }}</p><div class="modal-actions"><BaseButton variant="ghost" type="button" @click="logModalOpen = false">Cancel</BaseButton><BaseButton type="submit">Save Metrics</BaseButton></div></form></BaseModal>
   </div>
 </template>
 

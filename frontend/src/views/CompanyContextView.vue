@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContextListEditor from '../components/context/ContextListEditor.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -8,6 +8,7 @@ import BaseCard from '../components/ui/BaseCard.vue'
 import AccessibleTabs from '../components/ui/AccessibleTabs.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useCompanyContextStore } from '../stores/companyContext'
 import type { CompanyBusinessType } from '../types/companyContext'
 
@@ -36,16 +37,20 @@ function toggleBusinessType(type: CompanyBusinessType) {
   const types = draft.companyProfile.businessTypes
   draft.companyProfile.businessTypes = types.includes(type) ? types.filter((item) => item !== type) : [...types, type]
 }
-function save() {
+async function save() {
   const errors: string[] = []
   if (!draft.companyProfile.name.trim()) errors.push('Company Name')
   if (!draft.companyProfile.description.trim()) errors.push('Company Description')
   requiredErrors.value = errors
   if (errors.length) { tab.value = 'profile'; return }
-  store.save(draft)
+  const saved = await store.save(draft)
+  if (!saved) return
   savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date())
 }
 function errorFor(label: string) { return requiredErrors.value.includes(label) ? `Enter ${label.toLowerCase()}.` : undefined }
+
+watch(() => store.loaded, (loaded) => { if (loaded) Object.assign(draft, store.snapshot()) }, { immediate: true })
+onMounted(() => { void store.load() })
 </script>
 
 <template>
@@ -54,6 +59,10 @@ function errorFor(label: string) { return requiredErrors.value.includes(label) ?
       <template #actions><span v-if="savedAt && !isDirty" class="context-saved"><AppIcon name="check" :size="15" />Saved {{ savedAt }}</span><BaseButton :disabled="!isDirty" @click="save">Save Changes</BaseButton></template>
     </PageHeader>
 
+    <InlineAlert v-if="store.loading" title="Loading company context">Loading the canonical company, brand, and BMC context…</InlineAlert>
+    <InlineAlert v-if="store.error" title="Company context unavailable" tone="danger">{{ store.error }}</InlineAlert>
+
+    <template v-if="store.loaded">
     <section class="context-completeness" aria-label="Context completeness">
       <div><span class="context-completeness__eyebrow">Context completeness</span><strong>{{ completionItems.filter((item) => item.complete).length }} of {{ completionItems.length }} sections complete</strong></div>
       <div class="context-completeness__items"><span v-for="item in completionItems" :key="item.label" :class="{ 'is-complete': item.complete }"><AppIcon :name="item.complete ? 'check' : 'circle'" :size="14" />{{ item.label }}</span></div>
@@ -98,6 +107,7 @@ function errorFor(label: string) { return requiredErrors.value.includes(label) ?
         <div class="context-list-grid brand-list-grid"><ContextListEditor v-model="draft.brandProfile.communicationGuidelines" label="Communication Guidelines" /><ContextListEditor v-model="draft.brandProfile.preferredTerms" label="Preferred Words / Terms" /><ContextListEditor v-model="draft.brandProfile.thingsToAvoid" label="Things to Avoid" /><ContextListEditor v-model="draft.brandProfile.brandKeywords" label="Brand Keywords" /></div>
       </BaseCard>
     </div>
+    </template>
   </div>
 </template>
 

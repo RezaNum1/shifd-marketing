@@ -5,8 +5,7 @@ import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
 import BaseSelect from '../ui/BaseSelect.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
-import { pillarOptions } from '../../data/contentBrief'
-import { ideaContextOptions, ideaObjectiveOptions } from '../../data/contentIdeas'
+import { ideaContextOptions, ideaObjectiveOptions, pillarOptions } from '../../constants/contentOptions'
 import { useProductsStore } from '../../stores/products'
 import { useContentIdeasStore, validateIdea } from '../../stores/contentIdeas'
 import type { ContentIdea, ContentIdeaInput } from '../../types/contentIdea'
@@ -39,7 +38,7 @@ async function save() {
     formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
     return
   }
-  const idea = store.save(form, props.idea?.id)
+  const idea = await store.save(form, props.idea?.id)
   if (idea) { open.value = false; emit('saved', idea) }
 }
 </script>

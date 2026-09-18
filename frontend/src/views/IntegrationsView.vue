@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -7,38 +7,44 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useIntegrationsStore } from '../stores/integrations'
 import type { Tone } from '../types/ui'
 
 const router = useRouter()
 const integrations = useIntegrationsStore()
 const disconnectOpen = ref(false)
+const instagram = computed(() => integrations.instagram ?? { id: 'instagram' as const, platform: 'Instagram' as const, status: 'disconnected' as const, futureSource: 'Not configured' })
 
-function instagramTone(): Tone { return integrations.instagram.status === 'connected' ? 'success' : 'neutral' }
-function instagramStatus() { return integrations.instagram.status === 'connected' ? 'Connected' : 'Not Connected' }
+function instagramTone(): Tone { return instagram.value.status === 'connected' ? 'success' : 'neutral' }
+function instagramStatus() { return instagram.value.status === 'connected' ? 'Connected' : 'Not Connected' }
+onMounted(() => { void integrations.load() })
 </script>
 
 <template>
   <div class="page-stack integrations-page">
     <PageHeader title="Integrations" description="Manage the external data sources used by Shifd Marketing." :breadcrumbs="[{ label: 'System' }, { label: 'Integrations' }]" />
 
-    <section class="integration-note"><AppIcon name="info" :size="17" /><span>These settings describe prototype data sources. No credentials are stored and no social platform is published to automatically.</span></section>
+    <InlineAlert v-if="integrations.loading" title="Loading integration status">Reading the configured data sources…</InlineAlert>
+    <InlineAlert v-else-if="integrations.error" title="Integration status unavailable" tone="danger">{{ integrations.error }}</InlineAlert>
+    <template v-if="integrations.loaded">
+    <section class="integration-note"><AppIcon name="info" :size="17" /><span>These settings describe the configured data sources. No credentials are stored and no social platform is published to automatically.</span></section>
 
     <section class="integration-grid" aria-label="Data source integrations">
       <BaseCard class="integration-card">
         <template #header><div class="integration-card__header"><div class="integration-card__identity"><span class="integration-card__icon is-instagram"><AppIcon name="chart" :size="20" /></span><div><h2 class="text-headline-sm font-semibold">Instagram</h2><p class="text-body-sm text-muted">Performance metrics synchronization</p></div></div><StatusBadge :tone="instagramTone()" dot>{{ instagramStatus() }}</StatusBadge></div></template>
         <div class="integration-card__body">
           <dl class="integration-details">
-            <div><dt>Account</dt><dd>{{ integrations.instagram.accountName || '—' }}</dd></div>
+            <div><dt>Account</dt><dd>{{ instagram.accountName || '—' }}</dd></div>
             <div><dt>Data Usage</dt><dd>Performance metrics</dd></div>
-            <div><dt>Future Data Source</dt><dd>{{ integrations.instagram.futureSource }}</dd></div>
-            <div><dt>Last Sync</dt><dd>{{ integrations.instagram.lastSync || 'Never' }}</dd></div>
+            <div><dt>Future Data Source</dt><dd>{{ instagram.futureSource }}</dd></div>
+            <div><dt>Last Sync</dt><dd>{{ instagram.lastSync || 'Never' }}</dd></div>
           </dl>
           <p v-if="integrations.instagramSyncState === 'success'" class="integration-feedback is-success" role="status"><AppIcon name="check" :size="15" />Synced successfully</p>
           <p v-else-if="integrations.instagramSyncState === 'syncing'" class="integration-feedback" role="status"><span class="ui-spinner" aria-hidden="true" />Syncing…</p>
           <div class="integration-actions">
-            <BaseButton v-if="integrations.instagram.status === 'connected'" variant="secondary" :disabled="integrations.instagramSyncState === 'syncing'" @click="integrations.syncInstagram"><AppIcon name="chart" :size="16" />{{ integrations.instagramSyncState === 'syncing' ? 'Syncing…' : 'Sync Now' }}</BaseButton>
-            <BaseButton v-if="integrations.instagram.status === 'connected'" variant="ghost" @click="disconnectOpen = true">Disconnect</BaseButton>
+            <BaseButton v-if="instagram.status === 'connected'" variant="secondary" :disabled="integrations.instagramSyncState === 'syncing'" @click="integrations.syncInstagram"><AppIcon name="chart" :size="16" />{{ integrations.instagramSyncState === 'syncing' ? 'Syncing…' : 'Sync Now' }}</BaseButton>
+            <BaseButton v-if="instagram.status === 'connected'" variant="ghost" @click="disconnectOpen = true">Disconnect</BaseButton>
             <BaseButton v-else @click="integrations.connectInstagram">Connect Instagram</BaseButton>
           </div>
         </div>
@@ -55,9 +61,10 @@ function instagramStatus() { return integrations.instagram.status === 'connected
       </BaseCard>
     </section>
 
-    <BaseCard title="Data Source Summary" description="The current prototype keeps source configuration explicit and lightweight."><div class="source-summary"><div><span class="source-summary__dot is-connected" /><div><strong>Instagram</strong><small>Future automated metrics sync · current values are mock data</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>LinkedIn</strong><small>Manual weekly metrics entry</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>WhatsApp Business</strong><small>Manual supplementary inquiry tracking</small></div></div></div></BaseCard>
+    <BaseCard title="Data Source Summary" description="The current configuration keeps source modes explicit and lightweight."><div class="source-summary"><div><span class="source-summary__dot" :class="instagram.status === 'connected' ? 'is-connected' : 'is-manual'" /><div><strong>Instagram</strong><small>{{ instagram.mode === 'api' ? 'Instagram API source' : instagram.mode === 'demo' ? 'Demo source' : 'Not configured' }}</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>LinkedIn</strong><small>{{ integrations.linkedin?.dataSource || 'Manual Entry' }}</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>WhatsApp Business</strong><small>{{ integrations.whatsapp?.dataSource || 'Manual Entry' }}</small></div></div></div></BaseCard>
 
     <BaseModal v-model="disconnectOpen" title="Disconnect Instagram?" description="Performance data already recorded in Shifd Marketing will remain available. Future synchronization will stop."><template #footer><BaseButton variant="ghost" @click="disconnectOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="integrations.disconnectInstagram(); disconnectOpen = false">Disconnect</BaseButton></template></BaseModal>
+    </template>
   </div>
 </template>
 

@@ -10,6 +10,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTable from '../components/ui/BaseTable.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import { useProductsStore } from '../stores/products'
@@ -111,8 +112,9 @@ function openRecord(record: ContentLibraryRecord) {
   router.push(`/content/${record.id}`)
 }
 
-function continueEditing(record: ContentLibraryRecord) {
-  if (!workflow.resumeContent(record)) return
+async function continueEditing(record: ContentLibraryRecord) {
+  const loaded = await workflow.load(record.id)
+  if (!loaded) return
   openMenu.value = null
   router.push('/content/create')
 }
@@ -126,13 +128,13 @@ function canContinueEditing(record: ContentLibraryRecord) {
   return !['Published', 'Archived'].includes(contentStatus(record))
 }
 
-function duplicateRecord(record: ContentLibraryRecord) {
-  library.duplicate(record.id)
+async function duplicateRecord(record: ContentLibraryRecord) {
+  await library.duplicate(record.id)
   openMenu.value = null
 }
 
-function archiveRecord() {
-  if (archiveTarget.value) library.archive(archiveTarget.value.id)
+async function archiveRecord() {
+  if (archiveTarget.value) await library.archive(archiveTarget.value.id)
   archiveTarget.value = null
   archiveModalOpen.value = false
   openMenu.value = null
@@ -149,7 +151,7 @@ function formatSchedule(record: ContentLibraryRecord) {
   return '—'
 }
 
-onMounted(() => library.syncScheduledWorkflow(workflow))
+onMounted(() => { void Promise.all([library.load(), products.load(), companyContext.load()]) })
 </script>
 
 <template>
@@ -157,6 +159,9 @@ onMounted(() => library.syncScheduledWorkflow(workflow))
     <PageHeader title="Content Library" description="Manage your marketing content from draft to publication." :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Content Library' }]">
       <template #actions><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></template>
     </PageHeader>
+
+    <InlineAlert v-if="library.loading" title="Loading content">Loading canonical Content records…</InlineAlert>
+    <InlineAlert v-if="library.error" title="Content library unavailable" tone="danger">{{ library.error }}</InlineAlert>
 
     <section class="library-summary" aria-label="Content summary">
       <div v-for="item in summary" :key="item.label" class="library-summary__item"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>
@@ -176,7 +181,7 @@ onMounted(() => library.syncScheduledWorkflow(workflow))
       <div v-if="activeFilters" class="library-controls__footer"><span class="library-filter-count">{{ filteredRecords.length }} matching content records</span><BaseButton variant="ghost" size="compact" @click="clearFilters">Clear Filters</BaseButton></div>
     </BaseCard>
 
-    <template v-if="hasRecords && filteredRecords.length">
+    <template v-if="library.loaded && hasRecords && filteredRecords.length">
       <BaseTable :columns="columns" :rows="filteredRecords" caption="Content library records">
         <template #cell-content="{ row }"><button class="library-title-cell" type="button" @click="openRecord(row)"><strong>{{ row.title }}</strong><span>{{ row.topic }}</span></button></template>
         <template #cell-context="{ row }"><div class="library-context-cell"><strong>{{ contextName(row) }}</strong><span>{{ row.context === 'company' ? 'Company' : 'Product' }}</span></div></template>
@@ -188,8 +193,8 @@ onMounted(() => library.syncScheduledWorkflow(workflow))
         <template #cell-actions="{ row }"><div class="library-row-actions"><BaseButton variant="ghost" size="compact" aria-label="Open actions" @click.stop="openMenu = openMenu === row.id ? null : row.id"><AppIcon name="settings" :size="15" /></BaseButton><div v-if="openMenu === row.id" class="library-action-menu"><button type="button" @click="openRecord(row)">Open</button><button v-if="canContinueEditing(row)" type="button" @click="continueEditing(row)">Continue Editing</button><button type="button" @click="duplicateRecord(row)">Duplicate</button><button v-if="contentStatus(row) !== 'Archived'" type="button" @click="archiveTarget = row; archiveModalOpen = true; openMenu = null">Archive</button></div></div></template>
       </BaseTable>
     </template>
-    <BaseCard v-else-if="!hasRecords"><EmptyState icon="library" title="No content yet" description="Create your first marketing content and manage its journey from idea to publication."><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></EmptyState></BaseCard>
-    <BaseCard v-else><EmptyState icon="search" title="No content matches these filters." description="Try adjusting your search or filters to find a content record."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-else-if="library.loaded && !hasRecords"><EmptyState icon="library" title="No content yet" description="Create your first marketing content and manage its journey from idea to publication."><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-else-if="library.loaded"><EmptyState icon="search" title="No content matches these filters." description="Try adjusting your search or filters to find a content record."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
 
     <BaseModal v-model="archiveModalOpen" title="Archive content" description="Archived content remains available through the Archived status filter."><p v-if="archiveTarget">Archive “{{ archiveTarget.title }}”?</p><template #footer><div class="modal-actions"><BaseButton variant="ghost" @click="archiveModalOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="archiveRecord">Archive</BaseButton></div></template></BaseModal>
   </div>

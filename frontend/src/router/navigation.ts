@@ -107,6 +107,16 @@ export const pages: PageDefinition[] = [
     group: 'Content Studio',
   },
   {
+    path: '/content/library',
+    name: 'content-library-alias',
+    title: 'Content Library',
+    description:
+      'A shared home for your marketing content and creative assets.',
+    icon: 'library',
+    navigationKey: 'content',
+    group: 'Content Studio',
+  },
+  {
     path: '/content/:id',
     name: 'content-detail',
     title: 'Content Detail',

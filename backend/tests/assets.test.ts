@@ -12,10 +12,11 @@ import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { cleanupAssets } from '../src/modules/assets/service.js'
 import { LocalAssetStorage } from '../src/modules/assets/storage.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
-if (process.env.REQUIRE_DATABASE === '1' && !process.env.DATABASE_URL) throw new Error('DATABASE_URL is required for the Phase 5 Asset integration suite.')
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for the Phase 5 Asset integration suite.')
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
-const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL ?? '' } } })
+const prisma = new PrismaClient({ datasources: { db: { url: testDatabaseUrl ?? '' } } })
 const suffix = Date.now().toString()
 const email = `phase5-${suffix}@example.test`
 const otherEmail = `phase5-other-${suffix}@example.test`
@@ -106,7 +107,7 @@ async function removeCompany(id: string) {
 runIntegration('Phase 5 Asset storage and creative reuse', () => {
   beforeAll(async () => {
     storageRoot = await mkdtemp(join(tmpdir(), 'shifd-phase5-assets-'))
-    config = { ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL, ALLOWED_ORIGIN: origin, ASSET_STORAGE_ROOT: storageRoot }) }
+    config = { ...loadConfig({ NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl, ALLOWED_ORIGIN: origin, ASSET_STORAGE_ROOT: storageRoot }) }
     await prisma.$connect()
     const primary = await bootstrapOperator(prisma, { companyName: 'Phase 5 Company', companyDescription: 'Asset integration company', userName: 'Phase 5 Founder', userEmail: email, userPassword: 'correct-password' })
     const other = await bootstrapOperator(prisma, { companyName: 'Phase 5 Other', companyDescription: 'Other asset company', userName: 'Phase 5 Other Founder', userEmail: otherEmail, userPassword: 'correct-password' })

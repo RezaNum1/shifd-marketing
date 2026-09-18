@@ -1,36 +1,69 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { mockAuthUser, mockLoginCredentials } from '../data/auth'
+import * as authApi from '../api/auth'
+import { isApiError, errorMessage } from '../api/client'
+import { authUser } from '../api/normalizers'
 import type { AuthUser } from '../types/auth'
 
-const SESSION_KEY = 'shifd.mock.auth.user'
-
-function readSessionUser(): AuthUser | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const value = window.sessionStorage.getItem(SESSION_KEY)
-    return value ? JSON.parse(value) as AuthUser : null
-  } catch {
-    return null
-  }
-}
+export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated' | 'error'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<AuthUser | null>(readSessionUser())
-  const isAuthenticated = computed(() => Boolean(user.value))
+  const user = ref<AuthUser | null>(null)
+  const status = ref<AuthStatus>('idle')
+  const error = ref('')
+  let bootstrapPromise: Promise<boolean> | null = null
 
-  function login(email: string, password: string) {
-    const valid = email.trim().toLowerCase() === mockLoginCredentials.email && password === mockLoginCredentials.password
-    if (!valid) return false
-    user.value = { ...mockAuthUser }
-    try { window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(user.value)) } catch { /* session storage may be unavailable */ }
-    return true
+  const isAuthenticated = computed(() => status.value === 'authenticated' && Boolean(user.value))
+  const isLoading = computed(() => status.value === 'loading')
+
+  async function bootstrap() {
+    if (status.value === 'authenticated') return true
+    if (bootstrapPromise) return bootstrapPromise
+    status.value = 'loading'
+    error.value = ''
+    bootstrapPromise = authApi.me().then((result) => {
+      user.value = authUser(result.data.user)
+      status.value = 'authenticated'
+      return true
+    }).catch((reason: unknown) => {
+      user.value = null
+      if (isApiError(reason) && reason.status === 401) {
+        status.value = 'unauthenticated'
+        error.value = ''
+      } else {
+        status.value = 'error'
+        error.value = errorMessage(reason, 'Unable to verify the current session.')
+      }
+      return false
+    }).finally(() => {
+      bootstrapPromise = null
+    })
+    return bootstrapPromise
   }
 
-  function logout() {
+  async function login(email: string, password: string) {
+    status.value = 'loading'
+    error.value = ''
+    try {
+      const result = await authApi.login(email.trim(), password)
+      user.value = authUser(result.data.user)
+      status.value = 'authenticated'
+      return true
+    } catch (reason: unknown) {
+      user.value = null
+      status.value = 'unauthenticated'
+      error.value = errorMessage(reason, 'Unable to sign in.')
+      return false
+    }
+  }
+
+  async function logout() {
+    status.value = 'loading'
+    try { await authApi.logout() } catch { /* local auth state is still cleared */ }
     user.value = null
-    try { window.sessionStorage.removeItem(SESSION_KEY) } catch { /* session storage may be unavailable */ }
+    status.value = 'unauthenticated'
+    error.value = ''
   }
 
-  return { user, isAuthenticated, login, logout }
+  return { user, status, error, isAuthenticated, isLoading, bootstrap, login, logout }
 })

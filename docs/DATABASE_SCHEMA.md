@@ -166,9 +166,9 @@ Assessment validity compares variant revision plus captured input hash, not a du
 
 ## 23. ai_settings — non-secret company configuration
 
-**PK/FK:** `company_id uuid REFERENCES companies`. `provider text!` (anthropic), `model_id text?`, `model_display_name text!`, `generation_language text!` (English/Indonesian), `mode text!` (demo/real), standard timestamps/version.
+**PK/FK:** `company_id uuid REFERENCES companies`. Current canonical configuration: `provider='openai'`, `model_id='gpt-5.6-luna'`, `model_display_name='GPT-5.6 Luna'`, `generation_language text!` (English/Indonesian), `mode='real'`, standard timestamps/version. The Prisma fields remain strings; the provider CHECK is managed by reviewed SQL migrations.
 
-**Constraints/indexes:** one row/company. Model ID is operator-set, null until an allowlisted real model is selected. User API can edit language only. Secret readiness is runtime-derived, not a stored connected Boolean. **Deletion:** restrict. No prices/keys in public settings. Generation language selects output language; brand.preferred_language remains inherited brand guidance, and the prompt explicitly states the output-language override.
+**Constraints/indexes:** one row/company. The provider constraint accepts `anthropic` and `openai` for forward/historical compatibility, while the migration sets current company rows to OpenAI / GPT-5.6 Luna. New company bootstrap uses that same canonical identity. User API can edit language only. Secret readiness is runtime-derived from `OPENAI_API_KEY`, not a stored connected Boolean. **Deletion:** restrict. No prices/keys in public settings. Generation language selects output language; brand.preferred_language remains inherited brand guidance, and the prompt explicitly states the output-language override.
 
 ## 24. prompt_versions — immutable prompt metadata
 
@@ -180,7 +180,7 @@ Assessment validity compares variant revision plus captured input hash, not a du
 
 **PK:** `id`. `company_id uuid! FK companies`, `content_id uuid? FK contents`, `variant_id uuid? FK platform_variants`, `requested_by uuid! FK users`, `prompt_version_id uuid! FK prompt_versions`, `module text!`, `operation text!`, `provider text!`, `model text!`, `mode text!` (demo/real), `language text!`, `editorial_revision integer?`, `variant_revision integer?`, `input_hash text!`, `input_snapshot jsonb!`, `input_tokens bigint?`, `output_tokens bigint?`, `estimated_cost_usd numeric(18,8)?`, `cost_basis jsonb?`, `latency_ms integer?`, `status text!` (pending/success/failed/stale), `error_code text?`, `error_message text?`, `provider_request_id text?`, `created_at timestamptz!`, `completed_at timestamptz?`.
 
-**Constraints/indexes:** nonnegative known tokens/cost/latency; module/operation match prompt; index(company_id,created_at,id), index(content_id,created_at), index status for pending recovery. No separate mutable prompt version string. Module/operation duplicate prompt metadata only as checked execution facts, not independent settings. Core endpoints require contentId; nullable supports historic/system-level execution evidence without making new AI operations. Variant, when supplied, must belong to content.
+**Constraints/indexes:** provider CHECK accepts both `anthropic` and `openai`; nonnegative known tokens/cost/latency; module/operation match prompt; index(company_id,created_at,id), index(content_id,created_at), index status for pending recovery. The OpenAI migration does not update any historical Anthropic row or snapshot. No separate mutable prompt version string. Module/operation duplicate prompt metadata only as checked execution facts, not independent settings. Core endpoints require contentId; nullable supports historic/system-level execution evidence without making new AI operations. Variant, when supplied, must belong to content.
 
 **Privacy:** input snapshot captures exact resolved company/product/brief/copy revisions for research traceability; restricted server storage, never a source for live names, product inheritance or normal API response. Cost basis captures rate version/units/currency; unknown billable usage remains null. No full secret-containing HTTP request, raw stack trace or API key. **Deletion:** restrict during research retention; retention/purge policy D-05.
 
@@ -194,7 +194,7 @@ Assessment validity compares variant revision plus captured input hash, not a du
 
 **PK:** `id`. `provider text!`, `model text!`, `version text!`, `input_usd_per_million numeric(18,8)!`, `output_usd_per_million numeric(18,8)!`, `effective_from timestamptz!`, `source_reference text!`, `created_at timestamptz!`.
 
-**Constraints/indexes:** unique(provider,model,version), nonnegative rates, index(provider,model,effective_from). Server operator-managed, not billing UI. **Deletion:** restrict logically after use; request cost_basis retains the exact version/rates. Start empty until verified pricing is configured; mock estimates remain explicitly mode=demo. If provider cache pricing is later used, version schema and calculator before reporting costs; do not silently use incorrect two-rate estimates. No current production pricing is asserted here.
+**Constraints/indexes:** provider CHECK accepts both `anthropic` and `openai`; unique(provider,model,version), nonnegative rates, index(provider,model,effective_from). Server operator-managed, not billing UI. **Deletion:** restrict logically after use; request cost_basis retains the exact version/rates. Existing Anthropic rates, if any, remain historical. No OpenAI rate is seeded by this migration; requests remain `estimated_cost_usd = null` until a verified version exists. If provider cache pricing is later used, version schema and calculator before reporting costs; do not silently use incorrect two-rate estimates. No current production pricing is asserted here.
 
 ## Consolidations and excluded tables
 

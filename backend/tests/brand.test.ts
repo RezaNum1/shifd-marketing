@@ -5,14 +5,17 @@ import { buildApp } from '../src/app.js'
 import { loadConfig, type AppConfig } from '../src/config/env.js'
 import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { seedM2Prompt } from '../src/modules/ai/seed.js'
+import { M4_OUTPUT_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
 import { m4PromptDigest, m3PromptDigest, promptDigest } from '../src/modules/ai/prompt.js'
 import { AiProviderFailure, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 
-const runIntegration = process.env.DATABASE_URL && process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
+const runIntegration = process.env.REQUIRE_DATABASE === '1' ? describe : describe.skip
 const origin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173'
 const config: AppConfig = {
   ...loadConfig({
-    NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: process.env.DATABASE_URL,
+    NODE_ENV: 'test', PORT: '3000', HOST: '127.0.0.1', DATABASE_URL: testDatabaseUrl,
     ALLOWED_ORIGIN: origin, LOGIN_RATE_LIMIT_MAX: '1000', AI_REQUEST_TIMEOUT_MS: '100',
   }),
 }
@@ -260,17 +263,19 @@ runIntegration('Phase 8 M4 Brand Consistency Checker', () => {
     expect(target.assessment).toMatchObject({ variantId: target.id, variantRevision: target.revision, score: 91, status: 'aligned', recommendation: assessmentOutput.recommendation, checks: assessmentOutput.checks, freshness: 'current' })
     expect(target.assessment).not.toHaveProperty('inputHash')
     const assessment = await prisma.brandAssessment.findUnique({ where: { id: target.assessment.id } })
+    expect(fake.requests.at(-1)?.outputSchemaVersion).toBe(M4_OUTPUT_SCHEMA_VERSION)
+    expect(await prisma.aiRequestLog.findUnique({ where: { id: data.request.id } })).toMatchObject({ provider: 'openai', model: 'gpt-5.6-luna' })
     expect(assessment?.variantRevision).toBe(target.revision)
     expect(assessment?.inputHash).toMatch(/^[0-9a-f]{64}$/)
     expect(await prisma.brandAssessment.count({ where: { variantId: target.id } })).toBe(1)
     expect(await prisma.contentEvent.count({ where: { contentId: prepared.id, eventType: 'ai_brand_checked' } })).toBe(1)
     const event = await prisma.contentEvent.findFirst({ where: { contentId: prepared.id, eventType: 'ai_brand_checked' } })
-    expect(JSON.stringify(event?.metadata)).not.toMatch(/inputHash|snapshot|rawPrompt|ANTHROPIC|secret/i)
+    expect(JSON.stringify(event?.metadata)).not.toMatch(/inputHash|snapshot|rawPrompt|OPENAI|secret/i)
     expect(data.content.approval).toBeNull()
     expect(data.content.variants.find((variant: { platform: string }) => variant.platform === 'linkedin')).toMatchObject({ revision: 1 })
     const requestLog = await prisma.aiRequestLog.findUnique({ where: { id: data.request.id } })
     expect(requestLog).toMatchObject({ module: 'M4', operation: 'brand_check', variantId: target.id, status: 'success' })
-    expect(JSON.stringify(requestLog?.inputSnapshot)).not.toMatch(/storageKey|contentUrl|ANTHROPIC_API_KEY|cookie|csrf/i)
+    expect(JSON.stringify(requestLog?.inputSnapshot)).not.toMatch(/storageKey|contentUrl|OPENAI_API_KEY|cookie|csrf/i)
   })
 
   it('B420-B422/B444-B446: validates advisory semantics and keeps failures non-mutating', async () => {

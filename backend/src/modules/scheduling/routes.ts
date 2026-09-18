@@ -37,7 +37,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       parseScheduleBatch(request.body),
       idempotencyKey(request),
       request.id,
-      { anthropicModel: options.config.anthropicModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, clock: options.clock },
     )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
@@ -55,7 +55,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       ifMatch(request),
       parseScheduleUpdate(request.body),
       request.id,
-      { anthropicModel: options.config.anthropicModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, clock: options.clock },
     )
     reply.header('ETag', result.etag)
     return reply.send({ data: result.content })
@@ -72,7 +72,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       scheduleId(request),
       ifMatch(request),
       request.id,
-      { anthropicModel: options.config.anthropicModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, clock: options.clock },
     )
     reply.header('ETag', result.etag)
     return reply.send({ data: result.content })
@@ -91,7 +91,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       parsePublication(request.body),
       idempotencyKey(request),
       request.id,
-      { anthropicModel: options.config.anthropicModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, clock: options.clock },
     )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContentAssetThumbnail from '../components/content/ContentAssetThumbnail.vue'
@@ -11,8 +11,10 @@ import BaseModal from '../components/ui/BaseModal.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
+import { useCalendarStore } from '../stores/calendar'
 import { useProductsStore } from '../stores/products'
 import { useCompanyContextStore } from '../stores/companyContext'
 import { useUiStore } from '../stores/ui'
@@ -23,17 +25,17 @@ import type {
   ContentPlatform,
 } from '../types/content'
 import type { SelectOption, Tone } from '../types/ui'
-import { contentLifecycle, contentStatus } from '../utils/contentRecords'
+import { contentStatus } from '../utils/contentRecords'
 
 type CalendarViewMode = 'month' | 'week'
 
 const router = useRouter()
 const library = useContentLibraryStore()
 const workflow = useContentWorkflowStore()
+const calendar = useCalendarStore()
 const ui = useUiStore()
 const products = useProductsStore()
 const companyContext = useCompanyContextStore()
-library.syncScheduledWorkflow(workflow)
 
 const viewMode = ref<CalendarViewMode>('month')
 const anchorDate = ref(startOfDay(new Date()))
@@ -68,39 +70,7 @@ const contextOptions = computed<SelectOption[]>(() => [
   ...products.products.map((product) => ({ value: product.name, label: product.name })),
 ])
 
-function contextName(record: { context: 'company' | 'product'; productId?: string }) {
-  return record.context === 'company' ? companyContext.companyProfile.name : products.nameFor(record.productId)
-}
-
-const entries = computed<ContentCalendarEntry[]>(() => {
-  const result: ContentCalendarEntry[] = []
-  library.records.forEach((record) => {
-    record.platforms.forEach((platform) => {
-      const schedule = contentLifecycle(record).schedules[platform]
-      if (!schedule) return
-      const scheduledAt = parseDateTime(schedule.date, schedule.time)
-      const publication = library.getPublicationRecord(record.id, platform)
-      const status: ContentCalendarStatus = publication
-        ? 'Published'
-        : scheduledAt.getTime() <= Date.now()
-          ? 'Ready to Publish'
-          : 'Scheduled'
-      result.push({
-        id: `${record.id}-${platform}`,
-        contentId: record.id,
-        title: record.title,
-        platform,
-        contextName: contextName(record),
-        pillar: record.pillar,
-        scheduledDate: schedule.date,
-        scheduledTime: schedule.time,
-        scheduledAt,
-        status,
-      })
-    })
-  })
-  return result.sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
-})
+const entries = computed<ContentCalendarEntry[]>(() => calendar.entries)
 const filteredEntries = computed(() => entries.value.filter((entry) =>
   (platformFilter.value === 'all' || entry.platform === platformFilter.value) &&
   (statusFilter.value === 'all' || entry.status === statusFilter.value) &&
@@ -165,10 +135,6 @@ function timeKey(value: Date) {
   return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
 }
 
-function parseDateTime(date: string, time: string) {
-  return new Date(`${date}T${time}:00`)
-}
-
 function formatShortDate(value: Date, includeYear = false) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(includeYear ? { year: 'numeric' as const } : {}) }).format(value)
 }
@@ -211,6 +177,7 @@ function calendarTone(status: ContentCalendarStatus): Tone {
 
 function openEntry(entry: ContentCalendarEntry) {
   selectedEntryId.value = entry.id
+  void library.getById(entry.contentId)
 }
 
 function entryCopy(entry: ContentCalendarEntry) {
@@ -253,13 +220,14 @@ function openPublication(entry: ContentCalendarEntry) {
   publicationModalOpen.value = true
 }
 
-function confirmPublication() {
+async function confirmPublication() {
   if (!publicationEntry.value) return
+  const publishedPlatform = publicationEntry.value.platform
   if (!publishedDate.value || !publishedTime.value) {
     publicationError.value = 'Published date and time are required.'
     return
   }
-  const publishedAt = `${publishedDate.value}T${publishedTime.value}:00`
+  const publishedAt = `${publishedDate.value}T${publishedTime.value}:00+07:00`
   if (Number.isNaN(new Date(publishedAt).getTime())) {
     publicationError.value = 'Enter a valid published date and time.'
     return
@@ -274,7 +242,7 @@ function confirmPublication() {
       return
     }
   }
-  const updated = library.markPublished(publicationEntry.value.contentId, publicationEntry.value.platform, {
+  const updated = await library.markPublished(publicationEntry.value.contentId, publicationEntry.value.platform, {
     publishedAt,
     postUrl: normalizedPostUrl,
   })
@@ -284,8 +252,21 @@ function confirmPublication() {
   }
   publicationModalOpen.value = false
   publicationError.value = ''
-  ui.notify(`${platformLabel(publicationEntry.value.platform)} marked as published.`, 'success')
+  await loadCalendar()
+  ui.notify(`${platformLabel(publishedPlatform)} marked as published.`, 'success')
 }
+
+const rangeStart = computed(() => viewMode.value === 'month' ? new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth(), 1) : startOfWeek(anchorDate.value))
+const rangeEnd = computed(() => viewMode.value === 'month' ? new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth() + 1, 1) : addDays(rangeStart.value, 7))
+async function loadCalendar() {
+  await Promise.all([companyContext.load(), products.load()])
+  await calendar.load(dateKey(rangeStart.value), dateKey(rangeEnd.value), {
+    platform: platformFilter.value === 'all' ? undefined : platformFilter.value as ContentPlatform,
+    status: statusFilter.value === 'all' ? undefined : statusFilter.value === 'Ready to Publish' ? 'ready_to_publish' : statusFilter.value.toLowerCase() as 'scheduled' | 'published',
+  })
+}
+watch([viewMode, anchorDate, platformFilter, statusFilter], () => { void loadCalendar() })
+onMounted(() => { void loadCalendar() })
 </script>
 
 <template>
@@ -293,6 +274,8 @@ function confirmPublication() {
     <PageHeader title="Content Calendar" description="Plan and track approved content across Instagram and LinkedIn." :breadcrumbs="[{ label: 'Planning & Insights' }, { label: 'Content Calendar' }]">
       <template #actions><BaseButton variant="secondary" @click="resetToday">Today</BaseButton><div class="calendar-period-actions"><BaseButton variant="ghost" aria-label="Previous period" @click="navigatePeriod(-1)"><AppIcon name="arrow-left" :size="16" /></BaseButton><BaseButton variant="ghost" aria-label="Next period" @click="navigatePeriod(1)"><AppIcon name="arrow-right" :size="16" /></BaseButton></div></template>
     </PageHeader>
+    <InlineAlert v-if="calendar.loading" title="Loading calendar">Reading schedules from the backend…</InlineAlert>
+    <InlineAlert v-else-if="calendar.error" title="Calendar unavailable" tone="danger">{{ calendar.error }}</InlineAlert>
 
     <BaseCard class="calendar-toolbar">
       <div class="calendar-toolbar__row">
@@ -307,9 +290,9 @@ function confirmPublication() {
       </div>
     </BaseCard>
 
-    <BaseCard v-if="entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Approved content will appear here after a publication date and time are selected."><BaseButton @click="workflow.startNewWorkflow(); router.push('/content/create')">Create Content</BaseButton><BaseButton variant="secondary" @click="router.push('/content')">View Content Library</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-if="calendar.loaded && !calendar.loading && !calendar.error && entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Approved content will appear here after a publication date and time are selected."><BaseButton @click="workflow.startNewWorkflow(); router.push('/content/create')">Create Content</BaseButton><BaseButton variant="secondary" @click="router.push('/content')">View Content Library</BaseButton></EmptyState></BaseCard>
 
-    <div v-else class="calendar-layout">
+    <div v-else-if="calendar.loaded && !calendar.loading && !calendar.error" class="calendar-layout">
       <main class="calendar-main">
         <div v-if="filteredEntries.length === 0" class="calendar-filter-empty"><EmptyState icon="search" title="No scheduled content matches these filters." description="Adjust the platform, status, or product filter to see calendar entries."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></div>
 
@@ -353,7 +336,7 @@ function confirmPublication() {
       <template #footer><div class="calendar-modal-actions"><BaseButton variant="ghost" @click="publicationModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmPublication">Confirm Publication</BaseButton></div></template>
     </BaseModal>
 
-    <BaseModal v-model="previewModalOpen" title="Creative Preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="calendar-large-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Product creative</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>{{ previewAsset.type }} · {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
+    <BaseModal v-model="previewModalOpen" title="Creative Preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="calendar-large-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Creative placeholder</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>{{ previewAsset.type }} · {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
   </div>
 </template>
 

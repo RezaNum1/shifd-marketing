@@ -18,7 +18,7 @@ const routes: RouteRecordRaw[] = pages.map((page) => ({
             ? () => import('../views/ContentIdeasView.vue')
             : page.name === 'create-content'
               ? () => import('../views/ContentCreateView.vue')
-              : page.name === 'content-library'
+              : page.name === 'content-library' || page.name === 'content-library-alias'
                 ? () => import('../views/ContentLibraryView.vue')
                 : page.name === 'content-detail'
                   ? () => import('../views/ContentDetailView.vue')
@@ -76,8 +76,9 @@ export const router = createRouter({
   scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  await auth.bootstrap()
   if (to.name === 'login') return auth.isAuthenticated ? { path: '/' } : true
   if (!auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } }
   return true

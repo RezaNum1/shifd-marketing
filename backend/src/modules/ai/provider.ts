@@ -1,5 +1,6 @@
 export interface AiProviderRequest {
   model: string
+  outputSchemaVersion: string
   systemPrompt: string
   userPrompt: string
   maxOutputTokens: number

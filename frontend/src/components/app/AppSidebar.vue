@@ -8,8 +8,8 @@ import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const router = useRouter()
-function signOut() {
-  auth.logout()
+async function signOut() {
+  await auth.logout()
   router.replace('/login')
 }
 </script>

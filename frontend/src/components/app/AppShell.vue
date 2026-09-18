@@ -24,8 +24,8 @@ function onViewportChange() {
   if (desktop?.matches) workspace.closeNavigation()
 }
 
-function signOut() {
-  auth.logout()
+async function signOut() {
+  await auth.logout()
   workspace.closeNavigation()
   router.replace('/login')
 }

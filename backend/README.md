@@ -25,12 +25,12 @@ Set `DATABASE_URL` to a PostgreSQL database and keep `ALLOWED_ORIGIN` explicit. 
 
 Phase 5 asset configuration is validated at startup. `ASSET_STORAGE_ROOT` selects a private persistent local filesystem directory (default `./data/assets`); it is never returned to clients or served statically. The D-05 prototype defaults are `ASSET_MAX_BYTES=10485760`, `ASSET_MAX_WIDTH=8192`, `ASSET_MAX_HEIGHT=8192`, and `ASSET_UNATTACHED_GRACE_HOURS=168`.
 
-Phase 6 AI configuration is server-only. `ANTHROPIC_API_KEY` and
-`ANTHROPIC_MODEL` are optional at startup and are never accepted from HTTP
-requests or stored in PostgreSQL. `AI_REQUEST_TIMEOUT_MS` defaults to `60000`
-and `AI_MAX_OUTPUT_TOKENS` defaults to `2048`; both are validated at startup.
-The company AI setting stores only generation language for the user. Provider,
-model, and mode remain operator-controlled.
+Current AI configuration is server-only. `OPENAI_API_KEY` is optional at
+startup; `OPENAI_MODEL` defaults to `gpt-5.6-luna` in `.env.example`. Neither is
+accepted from HTTP requests or stored in PostgreSQL. `AI_REQUEST_TIMEOUT_MS`
+defaults to `60000` and `AI_MAX_OUTPUT_TOKENS` defaults to `2048`; both are
+validated at startup. The company AI setting stores only generation language
+for the user. Provider, model, and mode remain operator-controlled.
 
 ## Local PostgreSQL
 
@@ -89,9 +89,9 @@ npm run build
 - `npm run test:context` — required database-backed Phase 3 Company/Product Context integration tests
 - `npm run test:content` — required database-backed Phase 4 Ideas and Content integration tests
 - `npm run test:assets` — required real PostgreSQL plus private-filesystem Phase 5 Asset integration tests
-- `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; it never calls Anthropic
-- `npm run test:adapt` — required real PostgreSQL M3 integration tests using the same test-only injected provider; it never calls Anthropic
-- `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; it never calls Anthropic
+- `npm run test:ai` — required real PostgreSQL M2 integration tests using an injected deterministic FakeAiProvider; they never call OpenAI
+- `npm run test:adapt` — required real PostgreSQL M3 integration tests using the same test-only injected provider; they never call OpenAI
+- `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; they never call OpenAI
 - `npm run test:review` — required real PostgreSQL Phase 9 Human Review integration tests; it never calls an AI provider
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
 - `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v1 prompt metadata/digests
@@ -162,7 +162,7 @@ Asset attachment and reuse commands use the parent Content ETag/`If-Match`, incr
 
 Phase 5 completes the approved D-03 compatibility gate without inventing Human Review: when `designStatus` is not `ready`, asset absence does not block `ready_for_review`; when it is `ready`, each enabled Variant needs at least one effective creative Asset, and reuse counts. Master and current enabled Variant adaptations remain required. Approval, assessment, and asset-specific future workflow remain deferred.
 
-## Phase 6 M2 Claude generation
+## M2 generation (current provider: OpenAI)
 
 M2 is the only AI execution implemented. `POST /api/contents/:id/generate`
 accepts `{}` only and requires the authenticated session, valid Origin, CSRF,
@@ -172,13 +172,15 @@ prompt version. It writes one validated Master and Visual Direction document;
 it does not generate platform variants, call M3/M4, approve Content, or create
 images. Saving a Content or reading context does not call AI.
 
-The production boundary is `AiProvider`; `AnthropicAiProvider` uses the
-official `@anthropic-ai/sdk` with server-only credentials, a bounded timeout,
-the configured output-token limit, and retries disabled. The provider receives
-only a prompt composed from a canonical input snapshot. Company/Product/Brief
-text is placed in explicit DATA sections, with no browsing, tools, URL fetches,
-or external enrichment. An injected deterministic provider is used only by
-`tests/ai.test.ts`; normal tests never incur Claude cost.
+The production boundary remains `AiProvider`; `OpenAiAiProvider` uses the
+official `openai` SDK and Responses API with server-only credentials, model
+`gpt-5.6-luna`, bounded timeout/output tokens, low reasoning effort,
+`maxRetries: 0`, and `store: false`. M2/M3/M4 use strict server-owned JSON
+Schemas and retain the server-side contract validators. The provider receives
+the immutable server instruction separately from the untrusted user-data input.
+No browsing, tools, URL fetches, or external enrichment are enabled. An
+injected deterministic provider is used only by integration tests; normal tests
+never incur OpenAI cost. See [OpenAI Provider Migration](../docs/OPENAI_PROVIDER_MIGRATION.md).
 
 `POST /api/contents/:id/generate` uses a short Phase A transaction to lock and
 validate Content, resolve context/settings/prompt, hash and store the protected
@@ -210,7 +212,7 @@ an existing immutable version. `GET /api/ai-requests` and its detail route
 expose sanitized execution metadata without input snapshots, hashes, raw
 prompts, or secrets. `GET /api/ai-usage` is Company scoped, separates `real`
 and `demo`, uses a half-open period, sums only known token/cost values, and
-reports unknown coverage; no unverified Claude pricing is seeded, so runtime
+reports unknown coverage; no unverified OpenAI pricing is seeded, so runtime
 cost remains null until a verified rate is configured.
 
 ## Phase 7 M3 cross-platform adaptation
@@ -287,7 +289,7 @@ assessment pointer. It does not change Variant copy/revision, Master,
 editorialRevision, Assets, creative reuse, design status, or editorial stage.
 It appends one `ai_brand_checked` event and never creates approval records.
 Aligned does not mean Approved. M4 checks textual copy and
-`visualRecommendation`; it never sends Asset bytes or URLs to Claude and does
+`visualRecommendation`; it never sends Asset bytes or URLs to OpenAI and does
 not inspect Canva artwork, use OCR, or perform vision analysis.
 
 The M4 prompt uses explicit server-instruction and DATA sections, has no tools,

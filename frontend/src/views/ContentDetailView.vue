@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContentAssetThumbnail from '../components/content/ContentAssetThumbnail.vue'
@@ -9,8 +9,10 @@ import AccessibleTabs from '../components/ui/AccessibleTabs.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
+import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import type { ContentAssetRecord, ContentLifecycleStatus, ContentPlatform } from '../types/content'
@@ -28,14 +30,18 @@ const library = useContentLibraryStore()
 const workflow = useContentWorkflowStore()
 const products = useProductsStore()
 const companyContext = useCompanyContextStore()
-library.syncScheduledWorkflow(workflow)
+const ideas = useContentIdeasStore()
 const activeTab = ref<DetailTab>('overview')
 const previewAsset = ref<ContentAssetRecord | null>(null)
 const previewModalOpen = ref(false)
 const archiveModalOpen = ref(false)
+const revisionModalOpen = ref(false)
+const revisionReason = ref('')
+const revisionError = ref('')
+const detailLoading = ref(true)
 
 const record = computed(() => library.records.find((item) => item.id === String(route.params.id)))
-const sourceIdea = computed(() => useContentIdeasStore().ideas.find((idea) => idea.id === record.value?.ideaId))
+const sourceIdea = computed(() => ideas.ideas.find((idea) => idea.id === record.value?.ideaId))
 const resolvedProductName = computed(() => record.value?.productId ? products.nameFor(record.value.productId) : '—')
 const resolvedContextName = computed(() => {
   if (!record.value) return ''
@@ -77,13 +83,13 @@ function statusTone(value: ContentLifecycleStatus): Tone {
   return 'neutral'
 }
 
-function resumeStep() {
+async function resumeStep() {
   if (!record.value) return
   if (contentStatus(record.value) === 'Scheduled') {
     router.push('/calendar')
     return
   }
-  if (!workflow.resumeContent(record.value)) return
+  if (!(await workflow.load(record.value.id))) return
   router.push('/content/create')
 }
 
@@ -92,16 +98,33 @@ function startNewContent() {
   router.push('/content/create')
 }
 
-function duplicateRecord() {
+async function duplicateRecord() {
   if (!record.value) return
-  const duplicate = library.duplicate(record.value.id)
+  const duplicate = await library.duplicate(record.value.id)
   if (duplicate) router.push(`/content/${duplicate.id}`)
 }
 
-function archiveRecord() {
+async function archiveRecord() {
   if (!record.value) return
-  library.archive(record.value.id)
+  await library.archive(record.value.id)
   archiveModalOpen.value = false
+}
+
+function openRevisionRequest() {
+  revisionReason.value = ''
+  revisionError.value = ''
+  revisionModalOpen.value = true
+}
+
+async function requestRevision() {
+  const reason = revisionReason.value.trim()
+  if (!reason) { revisionError.value = 'A revision reason is required.'; return }
+  if (!record.value) return
+  if (!(await workflow.load(record.value.id, true))) { revisionError.value = workflow.error || 'Unable to load the latest Content version.'; return }
+  if (!(await workflow.requestRevision(reason))) { revisionError.value = workflow.error || 'Unable to request a revision.'; return }
+  await library.getById(record.value.id, true)
+  revisionModalOpen.value = false
+  router.push('/content/create')
 }
 
 function openPreview(asset: ContentAssetRecord) {
@@ -122,13 +145,26 @@ function formatDateTime(date: string, time?: string) {
     ...(includeTime ? { hour: '2-digit' as const, minute: '2-digit' as const } : {}),
   }).format(value)
 }
+
+async function loadDetail(id: string) {
+  detailLoading.value = true
+  await Promise.all([library.load(), products.load(), companyContext.load(), ideas.load()])
+  await library.getById(id, true)
+  detailLoading.value = false
+}
+
+onMounted(() => { void loadDetail(String(route.params.id)) })
+watch(() => String(route.params.id), (id, previousId) => {
+  if (previousId !== undefined && id !== previousId) void loadDetail(id)
+})
 </script>
 
 <template>
-  <div v-if="record" class="page-stack content-detail-page">
+  <div v-if="record && !detailLoading" class="page-stack content-detail-page">
     <PageHeader :title="record.title" :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Content Library', to: '/content' }, { label: record.title }]">
       <template #actions>
         <BaseButton v-if="primaryAction" @click="resumeStep"><AppIcon :name="primaryAction.icon" :size="16" />{{ primaryAction.label }}</BaseButton>
+        <BaseButton v-if="['Approved', 'Scheduled'].includes(contentStatus(record))" variant="secondary" @click="openRevisionRequest">Request Revision</BaseButton>
         <BaseButton variant="secondary" @click="duplicateRecord"><AppIcon name="plus" :size="15" />Duplicate</BaseButton>
         <BaseButton v-if="contentStatus(record) !== 'Archived'" variant="ghost" @click="archiveModalOpen = true">Archive</BaseButton>
       </template>
@@ -234,7 +270,7 @@ function formatDateTime(date: string, time?: string) {
     </div>
 
     <div v-else-if="activeTab === 'history'" id="detail-panel-history" class="history-layout" role="tabpanel" aria-labelledby="detail-tab-history">
-      <BaseCard title="Review History" description="Content lifecycle activity recorded in this frontend session or mock record.">
+      <BaseCard title="Review History" description="Content lifecycle activity recorded by the backend.">
         <ol class="audit-timeline">
           <li v-for="event in record.details.history" :key="event.id"><span class="audit-timeline__marker" aria-hidden="true" /><div><div class="audit-timeline__title"><strong>{{ event.event }}</strong><StatusBadge v-if="event.platform" tone="neutral">{{ formatPlatform(event.platform) }}</StatusBadge></div><p v-if="event.metadata">{{ event.metadata }}</p><small>{{ event.actor }} · {{ event.timestamp }}</small></div></li>
         </ol>
@@ -246,12 +282,17 @@ function formatDateTime(date: string, time?: string) {
     </div>
 
     <BaseModal v-model="archiveModalOpen" title="Archive content" description="The content will remain available in the library under Archived."><p>Archive “{{ record.title }}”?</p><template #footer><div class="detail-modal-actions"><BaseButton variant="ghost" @click="archiveModalOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="archiveRecord">Archive</BaseButton></div></template></BaseModal>
-    <BaseModal v-model="previewModalOpen" title="Creative preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="large-asset-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Product creative</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>Preview {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
+    <BaseModal v-model="revisionModalOpen" title="Request a revision" description="This unlocks the review workflow and cancels any unpublished schedules. Published variants remain immutable."><BaseTextarea v-model="revisionReason" label="Revision reason" :rows="4" :error="revisionError" required /><template #footer><div class="detail-modal-actions"><BaseButton variant="ghost" @click="revisionModalOpen = false">Cancel</BaseButton><BaseButton @click="requestRevision">Request Revision</BaseButton></div></template></BaseModal>
+    <BaseModal v-model="previewModalOpen" title="Creative preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="large-asset-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Creative placeholder</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>Preview {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
   </div>
+
+  <div v-else-if="detailLoading || library.loading" class="page-stack"><InlineAlert title="Loading content">Loading the canonical Content record…</InlineAlert></div>
+
+  <div v-else-if="library.error" class="page-stack"><InlineAlert title="Content unavailable" tone="danger">{{ library.error }}</InlineAlert><BaseButton variant="secondary" @click="router.push('/content')">Back to Content Library</BaseButton></div>
 
   <div v-else class="page-stack">
     <PageHeader title="Content not found" description="The requested content record is not available." :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Content Library', to: '/content' }, { label: 'Not found' }]" />
-    <BaseCard><EmptyState icon="search" title="Content not found." description="The record may have been removed from this browser session or the link may be incorrect."><BaseButton variant="secondary" @click="router.push('/content')"><AppIcon name="arrow-left" :size="16" />Back to Content Library</BaseButton><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></EmptyState></BaseCard>
+    <BaseCard><EmptyState icon="search" title="Content not found." description="The record may have been archived or the link may be incorrect."><BaseButton variant="secondary" @click="router.push('/content')"><AppIcon name="arrow-left" :size="16" />Back to Content Library</BaseButton><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></EmptyState></BaseCard>
   </div>
 </template>
 

@@ -169,6 +169,7 @@ export async function brandCheckContent(
   try {
     providerResult = await provider.generate({
       model: prepared.model,
+      outputSchemaVersion: M4_OUTPUT_SCHEMA_VERSION,
       systemPrompt: M4_SYSTEM_PROMPT,
       userPrompt: prepared.userPrompt,
       maxOutputTokens: config.aiMaxOutputTokens,
@@ -260,7 +261,7 @@ async function buildBrandCheckInput(
   if (!settings) throw aiNotConfigured()
   const prompt = await tx.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
-  const configuredModel = settings.modelId ?? config.anthropicModel ?? undefined
+  const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
   const model = configuredModel ?? settings.modelDisplayName
   const mode = settings.mode as AiMode
   const language = settings.generationLanguage

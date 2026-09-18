@@ -8,7 +8,7 @@ Companion documents: [Database Schema](DATABASE_SCHEMA.md), [API Contract](API_C
 
 Translate the internal marketing workflow into durable, authenticated persistence while preserving the approved screens and six-step workflow at `/content/create`. Keep one owner for each business fact and make AI execution traceable for research without claiming causal marketing impact.
 
-Reviewed root/frontend AGENTS instructions, PRD, implementation notes, design rules/decisions, frontend plan/audit (including Final Fix Pass), every current domain type and Pinia store, router/navigation, workflow orchestration, lifecycle/publication selectors, and existing tooling. `backend/` is empty; D-01 now approves Node.js + strict TypeScript, Fastify, Prisma, PostgreSQL, the official Anthropic TypeScript SDK, and a modular monolith. `docs/PRD.md` is still empty. Earlier frontend planning proposals are historical; current code and subsequent locked product decisions take precedence. The frontend audit's compatibility mirrors are migration inputs, not database design requirements.
+Reviewed root/frontend AGENTS instructions, PRD, implementation notes, design rules/decisions, frontend plan/audit (including Final Fix Pass), every current domain type and Pinia store, router/navigation, workflow orchestration, lifecycle/publication selectors, and existing tooling. This architecture records the original D-01 baseline, which selected the Anthropic TypeScript SDK before backend implementation. The current production provider was subsequently migrated to the official OpenAI SDK and Responses API; see [OpenAI Provider Migration](OPENAI_PROVIDER_MIGRATION.md). Phase 6/7/8 and Phase 12 reports remain historical records of their execution dates. `docs/PRD.md` is still empty. Earlier frontend planning proposals are historical; current code and subsequent locked product decisions take precedence. The frontend audit's compatibility mirrors are migration inputs, not database design requirements.
 
 No source code, dependencies, database, credentials, or frontend behavior is changed by this plan. Existing frontend-only restrictions remain in force until a separate implementation task authorizes a phase.
 
@@ -20,7 +20,7 @@ An internal team operates one company, initially Shifd Labs. Company IDs scope r
 
 ## 3. Non-goals
 
-No automatic social posting, AI images, Canva integration, social inbox, OCR, CRM, competitor/trend research, AI predictions, M1/M5/M6 inference, public signup, billing, SSO, microservices, distributed queue, Kafka, Kubernetes, vector database, or premature caching. No production model or provider pricing is implied by the mock label “Claude Sonnet.”
+No automatic social posting, AI images, Canva integration, social inbox, OCR, CRM, competitor/trend research, AI predictions, M1/M5/M6 inference, public signup, billing, SSO, microservices, distributed queue, Kafka, Kubernetes, vector database, or premature caching. No production model or provider pricing is implied by legacy mock-fixture labels such as “Claude Sonnet.”
 
 ## 4. Recommended stack
 
@@ -30,7 +30,7 @@ No automatic social posting, AI images, Canva integration, social inbox, OCR, CR
 | HTTP | Fastify, modular route plugins, JSON Schema request/response validation | Small REST server with explicit schemas and typed handlers; avoids a second large application framework. [Fastify TypeScript](https://fastify.dev/docs/latest/Reference/TypeScript/) and [validation](https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/). |
 | Database | PostgreSQL | Relational references, transactions and unique constraints fit approvals, schedules, publications and metrics. JSONB is reserved for small structured documents, not relational IDs. [Constraints](https://www.postgresql.org/docs/current/ddl-constraints.html). |
 | Data access | Prisma ORM and reviewed SQL migrations | Typed PostgreSQL access, inspectable schema/migrations. Use SQL migrations for constraints the selected Prisma release cannot express; do not introduce a generic repository for every table. [PostgreSQL connector](https://docs.prisma.io/docs/orm/core-concepts/supported-databases/postgresql). |
-| AI | Official Anthropic TypeScript SDK behind one server adapter | Fits the same runtime and isolates vendor-specific request/response handling. [SDK](https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript). |
+| AI | Official OpenAI Node/TypeScript SDK (`openai`) behind one server adapter | Uses the Responses API while isolating provider-specific request/response handling. [OpenAI SDK quickstart](https://developers.openai.com/api/docs/quickstart). |
 | Tests | Vitest, Fastify injection, real disposable PostgreSQL integration database; existing Playwright smoke suite later | Builds on frontend testing tools; database concurrency must be tested against PostgreSQL, not SQLite mocks. |
 | Deployment | One long-lived Node process, PostgreSQL, private persistent file volume, same-origin reverse proxy | Simple operational model; static Vue assets and `/api` share an origin. No cloud vendor selected. |
 
@@ -45,8 +45,8 @@ flowchart TD
   APP --> DB[(PostgreSQL)]
   APP --> FILES[Private AssetStorage boundary]
   APP --> AI[Context composer and prompt builder]
-  AI --> CLAUDE[Server-only Claude adapter]
-  CLAUDE --> VALIDATE[Structured output validation]
+  AI --> OPENAI[Server-only OpenAI Responses adapter]
+  OPENAI --> VALIDATE[Structured output validation]
   VALIDATE --> APP
 ```
 
@@ -120,8 +120,8 @@ Authenticate → authorize company → lock content then variant/schedule → va
 2. Validate stored inputs, enabled platform, write eligibility, and company authorization.
 3. In a short transaction create pending request log and capture input/editorial revisions, resolved context, prompt version, model ID, language and schema version.
 4. Release database transaction. Compose prompt with explicit boundaries between instructions and user/company/product content. No tools or external browsing by the model.
-5. Call Claude server-side with a bounded timeout, token budget and explicitly configured retry policy. No DB lock is held during network I/O.
-6. Validate structured result against a server-owned operation schema and semantic constraints; reject refusals, truncation, missing/invalid fields. Provider structured output support does not replace application validation. [Structured output reference](https://platform.claude.com/docs/en/build-with-claude/structured-outputs).
+5. Call OpenAI's Responses API server-side with model `gpt-5.6-luna`, bounded timeout/token budget, low reasoning effort, `store:false`, and SDK retries disabled. No DB lock is held during network I/O.
+6. Request strict, server-owned JSON Schema Structured Outputs for M2/M3/M4, then validate the result again against the existing domain schemas and semantic constraints; reject refusals, truncation, missing/invalid fields. Provider schema enforcement does not replace application validation. [Responses API](https://developers.openai.com/api/reference/cli/resources/responses/methods/create), [GPT-5.6 Luna capabilities](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
 7. Re-lock and compare captured revisions. If inputs changed, store a stale/failed request outcome without overwriting the content; return 409. Otherwise save result, increment affected revisions and finalize request usage/event atomically.
 8. Return the canonical updated content plus request ID. M4 only saves an assessment; the human approve endpoint remains separate.
 
@@ -173,7 +173,7 @@ Server authorization applies to every referenced ID including files, evidence, A
 
 ## 16. Configuration and secrets
 
-Server environment/host secrets: database URL, session/CSRF configuration, Anthropic key, allowlisted production model ID, storage root, allowed origin, timeout/token limits. Public metadata: provider display label, configured model display, language, prompt versions and readiness. Never serialize environment variables or keys. Separate test/demo data from research runs using an explicit dataset/source flag; mock usage must never become measured cost.
+Server environment/host secrets: database URL, session/CSRF configuration, optional `OPENAI_API_KEY`, server-selected `OPENAI_MODEL`, storage root, allowed origin, timeout/token limits. Public metadata: provider display label, configured model display, language, prompt versions and readiness. Never serialize environment variables or keys. Current provider metadata is OpenAI / GPT-5.6 Luna; with a missing key or model, the AI execution boundary returns `AI_NOT_CONFIGURED`. Separate test/demo data from research runs using an explicit dataset/source flag; mock usage must never become measured cost.
 
 ## 17. Performance contract
 
@@ -205,7 +205,7 @@ Auth moves from sessionStorage identity to `/auth/me`; remove mock credential ch
 
 | ID | Decision | Proposed default / consequence |
 | --- | --- | --- |
-| D-01 | Stack and deployment | **APPROVED:** Node.js + strict TypeScript, Fastify, Prisma, PostgreSQL, official Anthropic TypeScript SDK, modular monolith, with SQL migrations for PostgreSQL constraints Prisma cannot express cleanly. |
+| D-01 | Stack and deployment | **APPROVED BASELINE:** Node.js + strict TypeScript, Fastify, Prisma, PostgreSQL, official SDK behind a provider adapter, modular monolith, with SQL migrations for PostgreSQL constraints Prisma cannot express cleanly. Original Phase 6 provider was Anthropic; the current provider is OpenAI per [the provider migration](OPENAI_PROVIDER_MIGRATION.md). |
 | D-02 | Editing reviewed/scheduled content | **APPROVED:** Approved/Scheduled review-affecting edits require explicit Request Revision; approval is invalidated, unpublished schedules cancelled, publications/history preserved; published variants immutable. |
 | D-03 | Creative eligibility | **PRESERVE FOR NOW:** retain frontend-v1's conditional creative gate; reassess before Human Review backend implementation. Do not add a stricter asset requirement during foundation work. |
 | D-04 | Reporting time/intervals | **APPROVED WITH REVISION:** Asia/Jakarta; new research rows must use Monday–Sunday boundaries as `[Monday 00:00, next Monday 00:00)` with no same-account overlap. Legacy/demo intervals may be retained for migration. |
@@ -223,7 +223,7 @@ D-01, D-02, D-04, and D-06 are approved for implementation planning. D-03 is int
 | 3 | M1 company/brand/BMC/products and context composition | Nine blocks, dynamic inheritance, live names and isolated tone override. |
 | 4 | Ideas, Brief/content/variants, new/resume/duplicate/archive persistence | Stable IDs, validation, atomic idea linkage, optimistic concurrency. |
 | 5 | Asset storage boundary, attachments/order/reuse, evidence upload | Shared file remains valid after reset/duplicate; no orphan deletion of referenced assets. |
-| 6 | M2 Claude generation, prompts/logs/idempotency | Validated output, provider failures/stale writes tested, no implicit approval. |
+| 6 | M2 generation, prompts/logs/idempotency | Validated output, provider failures/stale writes tested, no implicit approval; current provider is OpenAI. |
 | 7 | M3 one-platform adaptation | Independent variants; regeneration never overwrites other platform. |
 | 8 | M4 advisory assessment | Revision-bound assessments, warning/recheck traceability. |
 | 9 | Implement approved D-02 human review, schedules/manual publication; reassess D-03 creative eligibility before this phase | Approval gate, per-platform uniqueness/concurrency and mixed status tests. No stricter asset gate is added during foundation work. |

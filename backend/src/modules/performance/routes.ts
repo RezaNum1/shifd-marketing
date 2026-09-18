@@ -89,14 +89,14 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
     const auth = await requireAuth(request, reply)
     const query = parsePerformanceQuery(request)
     const asOf = options.clock.now()
-    const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { anthropicModel: options.config.anthropicModel, asOf })
+    const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { openaiModel: options.config.openaiModel, asOf })
     return reply.send({ data: buildPerformanceReport(snapshot, query.weeks, query.platform, asOf) })
   })
 
   app.get('/overview', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const asOf = options.clock.now()
-    const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { anthropicModel: options.config.anthropicModel, asOf })
+    const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { openaiModel: options.config.openaiModel, asOf })
     return reply.send({ data: buildOverviewReport(snapshot, asOf) })
   })
 

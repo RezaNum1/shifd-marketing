@@ -62,7 +62,7 @@ export async function recordOverride(
   justification: string,
   idempotencyKey: string,
   requestId: string,
-  config: { anthropicModel: string | null },
+  config: { openaiModel: string | null },
 ) {
   return executeIdempotent(prisma, {
     companyId,
@@ -122,7 +122,7 @@ export async function approveContent(
   checklist: ReviewChecklist,
   idempotencyKey: string,
   requestId: string,
-  config: { anthropicModel: string | null },
+  config: { openaiModel: string | null },
 ) {
   return executeIdempotent(prisma, {
     companyId,
@@ -201,7 +201,7 @@ export async function requestRevision(
   reason: string,
   idempotencyKey: string,
   requestId: string,
-  config: { anthropicModel: string | null },
+  config: { openaiModel: string | null },
   clock: Clock = systemClock,
 ) {
   return executeIdempotent(prisma, {
@@ -284,7 +284,7 @@ export async function listReviewActions(prisma: PrismaClient, companyId: string,
   }
 }
 
-async function assertEditableReviewState(db: Db, companyId: string, content: CompleteContentRow, config: { anthropicModel: string | null }, allowApproved: boolean) {
+async function assertEditableReviewState(db: Db, companyId: string, content: CompleteContentRow, config: { openaiModel: string | null }, allowApproved: boolean) {
   if (content.archivedAt) throw conflict('Archived Content cannot be changed.')
   const freshness = await assessmentFreshness(db, companyId, content, config)
   if (!allowApproved && await approvalIsCurrent(db, companyId, content, freshness)) throw reviewLocked()

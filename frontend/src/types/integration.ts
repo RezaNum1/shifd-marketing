@@ -7,6 +7,9 @@ export interface InstagramIntegration {
   accountName?: string
   futureSource: string
   lastSync?: string
+  mode?: 'demo' | 'manual' | 'api'
+  currentSource?: string
+  version?: number
 }
 
 export interface ManualIntegration {
@@ -15,4 +18,7 @@ export interface ManualIntegration {
   status: 'manual'
   dataSource: string
   purpose: string
+  mode?: 'demo' | 'manual' | 'api'
+  currentSource?: string
+  version?: number
 }
