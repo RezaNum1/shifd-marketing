@@ -415,13 +415,13 @@ export interface BackendWeeklyMetric {
   weekEnd: string
   followers: number
   reach: number | null
-  impressions: number
-  likes: number
-  comments: number
-  saves: number
+  impressions: number | null
+  likes: number | null
+  comments: number | null
+  saves: number | null
   publishedPosts: number
   source: string
-  engagements?: number
+  engagements?: number | null
   engagementRate?: number | null
   evidenceAsset?: BackendAsset | null
   evidence?: BackendAsset | null
@@ -442,8 +442,8 @@ export interface BackendInquiryMetric {
 
 export interface BackendPerformanceSummary {
   latestWeeklyReach: number | null
-  impressions: number
-  engagements: number
+  impressions: number | null
+  engagements: number | null
   engagementRate: number | null
   published: { explicitPosts: number; reportedPosts: number; effectivePosts: number; basis: string }
 }
@@ -516,11 +516,12 @@ export interface BackendOverviewReport {
       weekStart: string
       weekEnd: string
       reach: number | null
-      impressions: number
-      engagements: number
+      impressions: number | null
+      engagements: number | null
       source: string
       scope: 'platform_account_week'
     } | null
+    postMetrics: BackendPublicationMetrics | null
   }>
   readyToPublish: number
   ideas: { readyCount: number; latest: BackendIdea[] }
@@ -531,6 +532,22 @@ export interface BackendPublicationFeedItem {
   publication: BackendPublication
   content: { id: string; title: string }
   platformMetricsForPublicationWeek: BackendOverviewReport['recentlyPublished'][number]['platformMetricsForPublicationWeek']
+  postMetrics: BackendPublicationMetrics | null
+}
+
+export interface BackendPublicationMetrics {
+  scope: 'publication'
+  source: 'instagram_api'
+  externalMediaId: string
+  views: number | null
+  reach: number | null
+  likes: number | null
+  comments: number | null
+  saves: number | null
+  shares: number | null
+  totalInteractions: number | null
+  observedAt: string
+  version: number
 }
 
 export interface BackendIntegration {

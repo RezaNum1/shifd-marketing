@@ -386,9 +386,38 @@ model PublicationRecord {
   variant             PlatformVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   schedule            ContentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
   marker              User            @relation("PublicationMarkedBy", fields: [markedBy], references: [id], onDelete: Restrict)
+  metrics             PublicationMetric[]
 
   @@index([publishedAt])
   @@map("publication_records")
+}
+
+model PublicationMetric {
+  id                  String            @id @default(uuid()) @db.Uuid
+  publicationRecordId String            @map("publication_record_id") @db.Uuid
+  socialAccountId     String            @map("social_account_id") @db.Uuid
+  externalMediaId     String            @map("external_media_id")
+  platform            String
+  observedAt          DateTime          @map("observed_at") @db.Timestamptz(3)
+  views               BigInt?
+  reach               BigInt?
+  likes               BigInt?
+  comments            BigInt?
+  saves               BigInt?
+  shares              BigInt?
+  totalInteractions   BigInt?           @map("total_interactions")
+  source              String
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version             Int               @default(1)
+  publicationRecord   PublicationRecord @relation(fields: [publicationRecordId], references: [id], onDelete: Restrict)
+  socialAccount       SocialAccount     @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([publicationRecordId, source])
+  @@unique([socialAccountId, externalMediaId, source])
+  @@index([publicationRecordId, observedAt])
+  @@index([socialAccountId, observedAt])
+  @@map("publication_metrics")
 }
 
 model VariantAsset {
@@ -554,6 +583,7 @@ model SocialAccount {
   company               Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   weeklyMetrics         WeeklyMetric[]
   inquiryMetrics        InboundInquiryMetric[]
+  publicationMetrics    PublicationMetric[]
 
   @@unique([companyId, platform])
   @@index([companyId, platform])
@@ -567,10 +597,10 @@ model WeeklyMetric {
   weekEnd               DateTime      @map("week_end") @db.Date
   followers             BigInt
   reach                 BigInt?
-  impressions           BigInt
-  likes                 BigInt         @default(0)
-  comments              BigInt         @default(0)
-  saves                 BigInt         @default(0)
+  impressions           BigInt?
+  likes                 BigInt?
+  comments              BigInt?
+  saves                 BigInt?
   reportedPublishedPosts Int          @map("reported_published_posts")
   source                String
   evidenceAssetId       String?       @map("evidence_asset_id") @db.Uuid

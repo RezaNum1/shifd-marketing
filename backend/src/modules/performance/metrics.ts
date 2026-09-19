@@ -293,10 +293,10 @@ export function mapWeeklyMetric(row: {
   weekEnd: Date
   followers: bigint
   reach: bigint | null
-  impressions: bigint
-  likes: bigint
-  comments: bigint
-  saves: bigint
+  impressions: bigint | null
+  likes: bigint | null
+  comments: bigint | null
+  saves: bigint | null
   reportedPublishedPosts: number
   source: string
   evidenceAssetId: string | null
@@ -309,8 +309,8 @@ export function mapWeeklyMetric(row: {
   evidenceAsset?: Parameters<typeof mapAsset>[0] | null
   recorder?: { id: string; name: string } | null
 }) {
-  const engagements = Number(row.likes + row.comments + row.saves)
-  const impressions = Number(row.impressions)
+  const engagements = row.likes === null || row.comments === null || row.saves === null ? null : Number(row.likes + row.comments + row.saves)
+  const impressions = row.impressions === null ? null : Number(row.impressions)
   return {
     id: row.id,
     socialAccountId: row.socialAccountId,
@@ -324,7 +324,7 @@ export function mapWeeklyMetric(row: {
     comments: Number(row.comments),
     saves: Number(row.saves),
     engagements,
-    engagementRate: impressions > 0 ? (engagements / impressions) * 100 : null,
+    engagementRate: impressions !== null && impressions > 0 && engagements !== null ? (engagements / impressions) * 100 : null,
     publishedPosts: row.reportedPublishedPosts,
     reportedPublishedPosts: row.reportedPublishedPosts,
     source: row.source,

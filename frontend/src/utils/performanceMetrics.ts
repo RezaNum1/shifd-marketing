@@ -3,7 +3,7 @@ import type { WeeklyMetric } from '../types/performance'
 export const WEEKLY_POST_TARGET = 2
 
 export function engagementCount(metric: Pick<WeeklyMetric, 'likes' | 'comments' | 'saves'>) {
-  return metric.likes + metric.comments + metric.saves
+  return metric.likes === null || metric.comments === null || metric.saves === null ? null : metric.likes + metric.comments + metric.saves
 }
 
 export function calculateEngagementRate(impressions: number, engagements: number) {

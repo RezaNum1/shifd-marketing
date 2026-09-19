@@ -14,10 +14,10 @@ type MetricRow = {
   weekEnd: Date
   followers: bigint
   reach: bigint | null
-  impressions: bigint
-  likes: bigint
-  comments: bigint
-  saves: bigint
+  impressions: bigint | null
+  likes: bigint | null
+  comments: bigint | null
+  saves: bigint | null
   reportedPublishedPosts: number
   source: string
   evidenceAssetId: string | null
@@ -66,6 +66,23 @@ type PublicationRow = {
       brief: { topic: string; pillarCode: string } | null
     }
   }
+  metrics: Array<PublicationMetricRow>
+}
+
+type PublicationMetricRow = {
+  id: string
+  externalMediaId: string
+  platform: string
+  observedAt: Date
+  views: bigint | null
+  reach: bigint | null
+  likes: bigint | null
+  comments: bigint | null
+  saves: bigint | null
+  shares: bigint | null
+  totalInteractions: bigint | null
+  source: string
+  version: number
 }
 
 type ScheduleRow = {
@@ -152,6 +169,7 @@ export async function loadReportingSnapshot(prisma: PrismaClient, companyId: str
       where: { variant: { content: { companyId } } },
       include: {
         marker: { select: { id: true, name: true } },
+        metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
         variant: { select: { id: true, platform: true, content: { select: { id: true, companyId: true, masterContent: true, brief: { select: { topic: true, pillarCode: true } } } } } },
       },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -208,9 +226,9 @@ export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWee
   })
   const summary = {
     latestWeeklyReach: weekly.at(-1)?.reach ?? null,
-    impressions: sum(relevantMetrics.map((metric) => Number(metric.impressions))),
-    engagements: sum(relevantMetrics.map(engagements)),
-    engagementRate: percentage(sum(relevantMetrics.map(engagements)), sum(relevantMetrics.map((metric) => Number(metric.impressions)))),
+    impressions: sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions))),
+    engagements: sumNullable(relevantMetrics.map(engagements)),
+    engagementRate: percentage(sumNullable(relevantMetrics.map(engagements)), sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions)))),
     published,
   }
   const periodStart = bounds ? bounds.start : null
@@ -293,6 +311,7 @@ export async function listRecentPublications(prisma: PrismaClient, companyId: st
     where: { AND: filters },
     include: {
       marker: { select: { id: true, name: true } },
+      metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
       variant: { select: { id: true, platform: true, content: { select: { id: true, companyId: true, masterContent: true, brief: { select: { topic: true, pillarCode: true } } } } } },
     },
     orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -337,8 +356,8 @@ function selectRecordedWeeks(metrics: MetricRow[], requestedWeeks: number) {
 function weeklyRow(metrics: MetricRow[], weekStart: string, platform: ReportPlatform) {
   const candidates = metrics.filter((metric) => dateOnly(metric.weekStart) === weekStart && (platform === 'combined' ? isPerformancePlatform(metric.socialAccount.platform) : metric.socialAccount.platform === platform))
   const reference = candidates[0] ?? metrics.find((metric) => dateOnly(metric.weekStart) === weekStart)
-  const impressions = candidates.length ? sum(candidates.map((metric) => Number(metric.impressions))) : null
-  const engagement = candidates.length ? sum(candidates.map(engagements)) : null
+  const impressions = candidates.length ? sumNullable(candidates.map((metric) => metric.impressions === null ? null : Number(metric.impressions))) : null
+  const engagement = candidates.length ? sumNullable(candidates.map(engagements)) : null
   const reachValues = candidates.map((metric) => metric.reach).filter((value): value is bigint => value !== null)
   const reach = candidates.length && reachValues.length ? sum(reachValues.map(Number)) : null
   const sources = [...new Set(candidates.map((metric) => metric.source))]
@@ -422,11 +441,12 @@ function recentPublication(row: PublicationRow, metrics: MetricRow[], accounts: 
       weekStart: dateOnly(metric.weekStart),
       weekEnd: dateOnly(metric.weekEnd),
       reach: metric.reach === null ? null : Number(metric.reach),
-      impressions: Number(metric.impressions),
+      impressions: metric.impressions === null ? null : Number(metric.impressions),
       engagements: engagements(metric),
       source: metric.source,
       scope: 'platform_account_week' as const,
     } : null,
+    postMetrics: row.metrics[0] ? mapPublicationMetric(row.metrics[0]) : null,
   }
 }
 
@@ -527,6 +547,7 @@ function titleFrom(value: Prisma.JsonValue | null, fallback: string) {
 }
 
 function engagements(metric: Pick<MetricRow, 'likes' | 'comments' | 'saves'>) {
+  if (metric.likes === null || metric.comments === null || metric.saves === null) return null
   return Number(metric.likes + metric.comments + metric.saves)
 }
 
@@ -534,6 +555,29 @@ function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0)
 }
 
-function percentage(numerator: number, denominator: number) {
-  return denominator === 0 ? null : (numerator / denominator) * 100
+function percentage(numerator: number | null, denominator: number | null) {
+  return numerator === null || denominator === null || denominator === 0 ? null : (numerator / denominator) * 100
+}
+
+function sumNullable(values: Array<number | null>) {
+  if (values.length === 0 || values.some((value) => value === null)) return null
+  const present = values.filter((value): value is number => value !== null)
+  return present.reduce((total, value) => total + value, 0)
+}
+
+function mapPublicationMetric(row: PublicationMetricRow) {
+  return {
+    scope: 'publication' as const,
+    source: row.source,
+    externalMediaId: row.externalMediaId,
+    views: row.views === null ? null : Number(row.views),
+    reach: row.reach === null ? null : Number(row.reach),
+    likes: row.likes === null ? null : Number(row.likes),
+    comments: row.comments === null ? null : Number(row.comments),
+    saves: row.saves === null ? null : Number(row.saves),
+    shares: row.shares === null ? null : Number(row.shares),
+    totalInteractions: row.totalInteractions === null ? null : Number(row.totalInteractions),
+    observedAt: row.observedAt.toISOString(),
+    version: row.version,
+  }
 }

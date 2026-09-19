@@ -1,7 +1,9 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
-import { conflict, integrationNotConfigured, notFound, revisionConflict } from '../../shared/errors/AppError.js'
+import { conflict, notFound, revisionConflict } from '../../shared/errors/AppError.js'
 import { etag } from '../context/service.js'
 import type { Clock } from '../../shared/time/clock.js'
+import type { InstagramInsightsProvider } from './instagram/provider.js'
+import { connectInstagram, syncInstagram as syncInstagramApi } from './instagram/sync.js'
 
 type IntegrationPlatform = 'instagram' | 'linkedin' | 'whatsapp'
 type IntegrationDb = PrismaClient | Prisma.TransactionClient
@@ -36,7 +38,10 @@ export async function updateInstagramIntegration(
   expectedVersion: number,
   action: 'connect' | 'disconnect' | 'sync',
   clock: Clock,
+  provider: InstagramInsightsProvider,
 ) {
+  if (action === 'connect') return connectInstagram(prisma, companyId, expectedVersion, provider)
+  if (action === 'sync') return syncInstagramApi(prisma, companyId, expectedVersion, provider, clock)
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<Array<{ id: string; version: number }>>`
       SELECT "id", "version"
@@ -50,26 +55,13 @@ export async function updateInstagramIntegration(
     const account = await tx.socialAccount.findUnique({ where: { id: locked.id } })
     if (!account) throw notFound()
 
-    if (action === 'connect') {
-      if (account.mode === 'api') throw integrationNotConfigured()
-      if (account.mode !== 'demo') throw conflict('Only the demo Instagram boundary can be connected in this deployment.')
-      if (account.connectionStatus === 'connected') return { integration: mapIntegration(account), etag: etag(account.version) }
-      const updated = await tx.socialAccount.update({ where: { id: account.id }, data: { connectionStatus: 'connected', version: { increment: 1 } } })
-      return { integration: mapIntegration(updated), etag: etag(updated.version) }
-    }
-
     if (action === 'disconnect') {
       if (account.connectionStatus === 'disconnected') return { integration: mapIntegration(account), etag: etag(account.version) }
       const updated = await tx.socialAccount.update({ where: { id: account.id }, data: { connectionStatus: 'disconnected', version: { increment: 1 } } })
       return { integration: mapIntegration(updated), etag: etag(updated.version) }
     }
 
-    if (account.connectionStatus !== 'connected') throw conflict('The Instagram integration must be connected before sync.')
-    if (account.mode !== 'demo') throw integrationNotConfigured()
-    // No demo metric fixtures exist in this deployment. A sync that persists
-    // no observation is not a successful measurement sync, so it must not move
-    // lastSuccessfulSyncAt or the account version.
-    return { integration: mapIntegration(account), mode: account.mode, metricsChanged: false, etag: etag(account.version) }
+    throw conflict('The Instagram integration action is invalid.')
   })
 }
 

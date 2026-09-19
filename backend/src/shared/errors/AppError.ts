@@ -31,6 +31,8 @@ export const csrfInvalid = () => new AppError(403, 'CSRF_INVALID', 'The CSRF tok
 export const forbidden = (message = 'The request origin is not allowed.') => new AppError(403, 'FORBIDDEN', message)
 export const aiNotConfigured = () => new AppError(503, 'AI_NOT_CONFIGURED', 'The AI provider is not configured.')
 export const integrationNotConfigured = () => new AppError(503, 'INTEGRATION_NOT_CONFIGURED', 'The integration is not configured.')
+export const instagramAccountInvalid = () => new AppError(422, 'INSTAGRAM_ACCOUNT_INVALID', 'The configured Instagram account could not be validated.')
+export const instagramProviderError = () => new AppError(502, 'INSTAGRAM_PROVIDER_ERROR', 'The Instagram API request could not be completed.')
 export const aiTimeout = () => new AppError(504, 'AI_TIMEOUT', 'The AI provider did not respond within the configured timeout.')
 export const aiProviderError = () => new AppError(502, 'AI_PROVIDER_ERROR', 'The AI provider request failed.')
 export const aiOutputInvalid = (message = 'The AI provider returned an invalid structured result.') => new AppError(502, 'AI_OUTPUT_INVALID', message)

@@ -19,6 +19,10 @@ export interface AppConfig {
   assetUnattachedGraceHours: number
   openaiApiKey: string | null
   openaiModel: string | null
+  instagramAccessToken?: string | null
+  instagramAppSecret?: string | null
+  instagramAppId?: string | null
+  instagramUserId?: string | null
   aiRequestTimeoutMs: number
   aiMaxOutputTokens: number
 }
@@ -88,8 +92,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const assetUnattachedGraceHours = parsePositiveInteger('ASSET_UNATTACHED_GRACE_HOURS', env.ASSET_UNATTACHED_GRACE_HOURS, 168, fields)
   const openaiApiKey = optionalConfigText('OPENAI_API_KEY', env.OPENAI_API_KEY, fields)
   const openaiModel = optionalConfigText('OPENAI_MODEL', env.OPENAI_MODEL, fields)
+  const instagramAccessToken = optionalConfigText('INSTAGRAM_ACCESS_TOKEN', env.INSTAGRAM_ACCESS_TOKEN, fields)
+  const instagramAppSecret = optionalConfigText('INSTAGRAM_APP_SECRET', env.INSTAGRAM_APP_SECRET, fields)
+  const instagramAppId = optionalConfigText('INSTAGRAM_APP_ID', env.INSTAGRAM_APP_ID, fields)
+  const instagramUserId = optionalConfigText('INSTAGRAM_USER_ID', env.INSTAGRAM_USER_ID, fields)
   const aiRequestTimeoutMs = parseBoundedPositiveInteger('AI_REQUEST_TIMEOUT_MS', env.AI_REQUEST_TIMEOUT_MS, 60_000, 300_000, fields)
   const aiMaxOutputTokens = parseBoundedPositiveInteger('AI_MAX_OUTPUT_TOKENS', env.AI_MAX_OUTPUT_TOKENS, 2_048, 32_768, fields)
   if (Object.keys(fields).length) throw new ConfigError(fields)
-  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, aiRequestTimeoutMs, aiMaxOutputTokens }
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, instagramAccessToken, instagramAppSecret, instagramAppId, instagramUserId, aiRequestTimeoutMs, aiMaxOutputTokens }
 }

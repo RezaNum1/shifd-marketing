@@ -21,13 +21,15 @@ import {
 } from './metrics.js'
 import { buildOverviewReport, buildPerformanceReport, listRecentPublications, loadReportingSnapshot, type ReportPlatform } from './reporting.js'
 import type { Clock } from '../../shared/time/clock.js'
+import type { InstagramInsightsProvider } from './instagram/provider.js'
+import type { InstagramSyncResult } from './instagram/sync.js'
 
 const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts', 'evidenceAssetId', 'notes'] as const
 const inquiryKeys = ['weekStart', 'weekEnd', 'count'] as const
 const reportPlatforms = ['combined', 'instagram', 'linkedin'] as const
 const metricPlatforms = ['instagram', 'linkedin'] as const
 
-export async function performanceRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock }) {
+export async function performanceRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock; instagramProvider: InstagramInsightsProvider }) {
   app.get('/metrics/linkedin', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = parseMetricQuery(request, 'LinkedIn metric query')
@@ -111,10 +113,11 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
       const auth = await requireAuth(request, reply)
       await requireCsrf(request)
       requireEmptyBody(request.body)
-      const result = await updateInstagramIntegration(app.prisma, auth.user.companyId, ifMatch(request), action, options.clock)
+      const result = await updateInstagramIntegration(app.prisma, auth.user.companyId, ifMatch(request), action, options.clock, options.instagramProvider)
       reply.header('ETag', result.etag)
       if (action === 'sync') {
-        return reply.send({ data: { integration: result.integration, mode: result.mode, metricsChanged: result.metricsChanged } })
+        const syncResult = result as InstagramSyncResult
+        return reply.send({ data: { integration: syncResult.integration, mode: syncResult.mode, metricsChanged: syncResult.metricsChanged, matchedPublications: syncResult.matchedPublications, needsSelection: syncResult.needsSelection } })
       }
       return reply.send({ data: result.integration })
     })

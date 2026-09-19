@@ -21,12 +21,15 @@ import type { AiProvider } from './modules/ai/provider.js'
 import { systemClock, type Clock } from './shared/time/clock.js'
 import { schedulingRoutes } from './modules/scheduling/routes.js'
 import { performanceRoutes } from './modules/performance/routes.js'
+import { MetaInstagramInsightsProvider } from './modules/performance/instagram/meta.js'
+import type { InstagramInsightsProvider } from './modules/performance/instagram/provider.js'
 
 export interface BuildAppOptions {
   config: AppConfig
   logger?: boolean
   connectDatabase?: boolean
   aiProvider?: AiProvider
+  instagramProvider?: InstagramInsightsProvider
   clock?: Clock
 }
 
@@ -55,9 +58,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
   const aiProvider = options.aiProvider ?? new OpenAiAiProvider(options.config)
   const clock = options.clock ?? systemClock
+  const instagramProvider = options.instagramProvider ?? new MetaInstagramInsightsProvider(options.config)
   await app.register(contentRoutes, { config: options.config, aiProvider, clock, prefix: '/api' })
   await app.register(schedulingRoutes, { config: options.config, clock, prefix: '/api' })
-  await app.register(performanceRoutes, { config: options.config, clock, prefix: '/api' })
+  await app.register(performanceRoutes, { config: options.config, clock, instagramProvider, prefix: '/api' })
   await app.register(aiRoutes, { config: options.config, prefix: '/api' })
   await app.register(assetRoutes, { config: options.config, storage: assetStorage, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })

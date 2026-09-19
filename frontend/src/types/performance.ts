@@ -16,12 +16,12 @@ export interface WeeklyMetric {
   weekEnd: string
   followers: number
   reach: number | null
-  impressions: number
-  likes: number
-  comments: number
-  saves: number
+  impressions: number | null
+  likes: number | null
+  comments: number | null
+  saves: number | null
   /** Backend-calculated engagement total and rate for this account-week. */
-  engagements?: number
+  engagements?: number | null
   engagementRate?: number | null
   publishedPosts: number
   source: PerformanceSource

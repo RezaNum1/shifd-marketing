@@ -8,6 +8,7 @@ import { bootstrapOperator } from '../src/modules/auth/bootstrap.js'
 import { seedM2Prompt } from '../src/modules/ai/seed.js'
 import type { AiProvider, AiProviderRequest, AiProviderResult } from '../src/modules/ai/provider.js'
 import type { Clock } from '../src/shared/time/clock.js'
+import type { InstagramInsightsProvider } from '../src/modules/performance/instagram/provider.js'
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL
 if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for database-backed tests.')
@@ -31,6 +32,13 @@ let instagramAccountId = ''
 let linkedinAccountId = ''
 let whatsappAccountId = ''
 
+class FakeInstagramProvider implements InstagramInsightsProvider {
+  async getProfile() { return { userId: '17841447520550815', username: 'shifdlabs', name: 'Shifd Labs', accountType: 'BUSINESS', followersCount: 6, mediaCount: 0 } }
+  async listMedia() { return [] }
+  async getMediaInsights(_mediaId: string) { return { views: null, reach: null, likes: null, comments: null, saves: null, shares: null, totalInteractions: null } }
+  async getAccountReach() { return { metric: 'reach' as const, period: 'week' as const, values: [] } }
+}
+
 class FakeAiProvider implements AiProvider {
   isConfigured() { return true }
   async generate(_request: AiProviderRequest): Promise<AiProviderResult> {
@@ -39,6 +47,7 @@ class FakeAiProvider implements AiProvider {
 }
 
 const fake = new FakeAiProvider()
+const fakeInstagram = new FakeInstagramProvider()
 type Auth = { cookie: string; csrf: string }
 type AnyRecord = Record<string, any>
 
@@ -152,6 +161,7 @@ async function createEvidenceAsset(purpose: 'creative' | 'metric_evidence', owni
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.publicationMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
   await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
   await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
   await prisma.publicationRecord.deleteMany({ where: { variant: { content: { companyId: id } } } })
@@ -183,7 +193,7 @@ async function removeCompany(id: string) {
 runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
   beforeAll(async () => {
     await prisma.$connect()
-    app = await buildApp({ config, logger: false, aiProvider: fake, clock })
+    app = await buildApp({ config, logger: false, aiProvider: fake, instagramProvider: fakeInstagram, clock })
     await seedM2Prompt(app.prisma)
     const primary = await bootstrapOperator(app.prisma, { companyName: 'Phase 11 Company', companyDescription: 'A reporting company.', userName: 'Phase 11 Founder', userEmail: email, userPassword: 'correct-password' })
     const other = await bootstrapOperator(app.prisma, { companyName: 'Phase 11 Other', companyDescription: 'Another reporting company.', userName: 'Other Founder', userEmail: otherEmail, userPassword: 'correct-password' })
@@ -393,27 +403,25 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(after).toEqual(before)
   })
 
-  it('I1000-I1003: keeps the Instagram boundary explicit and never fabricates research measurements', async () => {
+  it('I1000-I1003: validates the read-only Instagram boundary and preserves selection safety', async () => {
     const auth = await session(email)
     const initial = await app.inject({ method: 'GET', url: '/api/integrations', headers: { cookie: auth.cookie } })
     const account = initial.json().data.instagram as AnyRecord
     const connected = await app.inject({ method: 'POST', url: '/api/integrations/instagram/connect', headers: headers(auth, account.version), payload: {} })
     expect(connected.statusCode).toBe(200)
-    expect(connected.json().data).toMatchObject({ mode: 'demo', status: 'connected' })
+    expect(connected.json().data).toMatchObject({ mode: 'api', status: 'connected', currentSource: 'instagram_api' })
     const beforeSync = await prisma.socialAccount.findUniqueOrThrow({ where: { id: instagramAccountId } })
     const before = await prisma.weeklyMetric.count({ where: { socialAccount: { companyId } } })
     const sync = await app.inject({ method: 'POST', url: '/api/integrations/instagram/sync', headers: headers(auth, connected.json().data.version), payload: {} })
     expect(sync.statusCode).toBe(200)
-    expect(sync.json().data).toMatchObject({ mode: 'demo', metricsChanged: false })
-    expect(await prisma.weeklyMetric.count({ where: { socialAccount: { companyId } } })).toBe(before)
-    expect(await prisma.socialAccount.findUniqueOrThrow({ where: { id: instagramAccountId } })).toMatchObject({ version: beforeSync.version, lastSuccessfulSyncAt: beforeSync.lastSuccessfulSyncAt })
+    expect(sync.json().data).toMatchObject({ mode: 'api', metricsChanged: true, matchedPublications: 0 })
+    expect(sync.json().data.needsSelection.length).toBeGreaterThanOrEqual(2)
+    expect(await prisma.weeklyMetric.count({ where: { socialAccount: { companyId } } })).toBe(before + 1)
+    expect(await prisma.socialAccount.findUniqueOrThrow({ where: { id: instagramAccountId } })).toMatchObject({ version: beforeSync.version + 1 })
+    expect(await prisma.socialAccount.findUniqueOrThrow({ where: { id: instagramAccountId } })).not.toMatchObject({ lastSuccessfulSyncAt: beforeSync.lastSuccessfulSyncAt })
     const disconnected = await app.inject({ method: 'POST', url: '/api/integrations/instagram/disconnect', headers: headers(auth, sync.json().data.integration.version), payload: {} })
     expect(disconnected.statusCode).toBe(200)
     expect(disconnected.json().data.status).toBe('disconnected')
-    await prisma.socialAccount.update({ where: { id: instagramAccountId }, data: { mode: 'api', connectionStatus: 'connected' } })
-    const unconfigured = await app.inject({ method: 'POST', url: '/api/integrations/instagram/sync', headers: headers(auth, (await prisma.socialAccount.findUniqueOrThrow({ where: { id: instagramAccountId } })).version), payload: {} })
-    expect(unconfigured.statusCode).toBe(503)
-    expect(unconfigured.json().error.code).toBe('INTEGRATION_NOT_CONFIGURED')
     await prisma.socialAccount.update({ where: { id: instagramAccountId }, data: { mode: 'demo', connectionStatus: 'disconnected' } })
   })
 })

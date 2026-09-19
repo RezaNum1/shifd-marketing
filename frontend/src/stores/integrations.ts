@@ -75,7 +75,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
 })
 
 function toInstagram(value: BackendIntegration): InstagramIntegration {
-  return { id: 'instagram', platform: 'Instagram', status: value.status === 'connected' ? 'connected' : 'disconnected', accountName: value.accountName ?? undefined, futureSource: value.futureSource === 'instagram_api' ? 'Instagram Graph API' : 'Not configured', lastSync: value.lastSync ?? undefined, mode: value.mode, currentSource: value.currentSource, version: value.version }
+  return { id: 'instagram', platform: 'Instagram', status: value.status === 'connected' ? 'connected' : 'disconnected', accountName: value.accountName ?? undefined, futureSource: value.currentSource === 'instagram_api' ? 'Instagram Graph API' : 'Not configured', lastSync: value.lastSync ?? undefined, mode: value.mode, currentSource: value.currentSource, version: value.version }
 }
 
 function toManual(value: BackendIntegration, platform: 'LinkedIn' | 'WhatsApp Business'): ManualIntegration {

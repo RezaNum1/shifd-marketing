@@ -151,6 +151,8 @@ function messageFor(code: string, backendMessage: string) {
     case 'REVIEW_LOCKED': return 'This approved content is locked. Request Revision before editing it.'
     case 'INPUT_CHANGED': return 'The saved inputs changed while the AI request was running. Regenerate intentionally.'
     case 'INTEGRATION_NOT_CONFIGURED': return 'This integration is not configured in the current environment.'
+    case 'INSTAGRAM_ACCOUNT_INVALID': return 'The configured Instagram account could not be validated.'
+    case 'INSTAGRAM_PROVIDER_ERROR': return 'Instagram metrics could not be synchronized.'
     case 'INVALID_CREDENTIALS': return 'Incorrect email or password.'
     case 'CSRF_INVALID': return 'Your session security token is out of date. Reload and try again.'
     case 'RATE_LIMITED': return 'Too many requests. Wait a moment before trying again.'
