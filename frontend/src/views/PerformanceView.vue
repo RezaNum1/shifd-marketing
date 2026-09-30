@@ -69,7 +69,7 @@ const publishedCount = computed(() => getEffectivePublishedPostCount(performance
   ...selectedPeriodBounds.value,
   ...(platform.value === 'combined' ? {} : { platform: platform.value }),
 }))
-const latestWeekLabel = computed(() => selectedMetrics.value.weeks.at(-1) ? formatDate(selectedMetrics.value.weeks.at(-1)!, { month: 'short', day: 'numeric' }) : '—')
+const latestWeekLabel = computed(() => selectedMetrics.value.weeks.at(-1) ? formatDate(selectedMetrics.value.weeks.at(-1)!, { month: 'short', day: 'numeric' }) : 'No recorded week')
 const consistency = computed(() => (['instagram', 'linkedin'] as PerformancePlatform[]).map((item) => {
   const published = getEffectivePublishedPostCount(performance.weeklyMetrics, library.publicationRecords, { platform: item, ...selectedPeriodBounds.value })
   const result = calculateConsistency(published, periodWeeks.value)
@@ -119,7 +119,7 @@ function platformLabel(value: PlatformFilter | PerformancePlatform) { return val
 function formatNumber(value: number) { return value.toLocaleString() }
 function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) { return new Intl.DateTimeFormat(undefined, options).format(new Date(`${value}T00:00:00`)) }
 function formatPercent(value: number) { return `${value.toFixed(1)}%` }
-function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? '—' : formatNumber(value) }
+function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
 function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
 function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: selectedMetrics.value.weeks.at(-1) ?? '2026-09-07', followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
@@ -146,22 +146,28 @@ const followerSummary = computed(() => report.value?.followers ?? [])
 const selectedFollower = computed(() => platform.value === 'combined' ? undefined : followerSummary.value.find((item) => item.platform === platform.value))
 const followerChangeLabel = computed(() => {
   const values = platform.value === 'combined' ? followerSummary.value : selectedFollower.value ? [selectedFollower.value] : []
-  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${signedNumber(item.change)}`).join(' · ') : '—'
+  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${signedNumber(item.change)}`).join(' · ') : 'No observations'
 })
 const followerChangeDetail = computed(() => {
   const values = platform.value === 'combined' ? followerSummary.value : selectedFollower.value ? [selectedFollower.value] : []
-  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.changePercent)}`).join(' · ') : 'No follower observations'
+  if (!values.length) return 'No follower observations'
+  const available = values.filter((item) => item.changePercent !== null).map((item) => `${platformLabel(item.platform)} ${formatPercent(item.changePercent)}`)
+  const unavailable = values.filter((item) => item.changePercent === null).map((item) => `${platformLabel(item.platform)} percentage unavailable`)
+  return [...available, ...unavailable].join(' · ')
 })
 const latestReach = computed(() => report.value?.summary.latestWeeklyReach ?? null)
 const impressionsTotal = computed(() => report.value?.summary.impressions ?? null)
 const engagementRate = computed(() => report.value?.summary.engagementRate ?? null)
 const latestWeekLabel = computed(() => {
   const latest = report.value?.period.recordedWeekStarts.at(-1)
-  return latest ? formatDate(latest, { month: 'short', day: 'numeric' }) : '—'
+  return latest ? formatDate(latest, { month: 'short', day: 'numeric' }) : 'No recorded week'
 })
+const latestReachDetail = computed(() => latestReach.value === null ? 'No compatible weekly account observation' : `${latestWeekLabel.value} · latest reported week`)
+const impressionsDetail = computed(() => impressionsTotal.value === null ? 'No impressions returned by current sources' : `Total for ${period.value} weeks`)
+const engagementDetail = computed(() => engagementRate.value === null ? 'Unavailable: impressions are required' : 'Engagements ÷ impressions')
 const publishedCount = computed(() => report.value?.summary.published.effectivePosts ?? 0)
 const consistency = computed(() => report.value?.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
-const consistencyLabel = computed(() => consistency.value.length ? consistency.value.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.percent)}`).join(' · ') : '—')
+const consistencyLabel = computed(() => consistency.value.length ? consistency.value.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.percent)}`).join(' · ') : 'No observations')
 const executionSummary = computed(() => ({
   planned: report.value?.execution.planned ?? 0,
   published: report.value?.execution.publishedWithinCohort ?? 0,
@@ -196,11 +202,12 @@ const inquiryWindow = computed(() => report.value?.inquiries.weeks.slice(-period
 const inquiryTotal = computed(() => inquiryWindow.value.reduce((sum, item) => sum + item.count, 0))
 
 function platformLabel(value: PlatformFilter | PerformancePlatform) { return value === 'instagram' ? 'Instagram' : value === 'linkedin' ? 'LinkedIn' : 'Combined' }
-function formatNumber(value: number | null) { return value === null ? '—' : value.toLocaleString() }
+function formatNumber(value: number | null) { return value === null ? 'Not available' : value.toLocaleString() }
+function formatKpiNumber(value: number | null) { return value === null ? 'Not available' : value.toLocaleString() }
 function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) { return new Intl.DateTimeFormat(undefined, options).format(value.includes('T') ? new Date(value) : new Date(`${value}T00:00:00`)) }
-function formatPercent(value: number | null) { return value === null ? '—' : `${value.toFixed(1)}%` }
-function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? '—' : formatNumber(value) }
-function signedNumber(value: number | null) { return value === null ? '—' : `${value >= 0 ? '+' : ''}${formatNumber(value)}` }
+function formatPercent(value: number | null) { return value === null ? 'Not available' : `${value.toFixed(1)}%` }
+function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
+function signedNumber(value: number | null) { return value === null ? 'Not available' : `${value >= 0 ? '+' : ''}${formatNumber(value)}` }
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
 function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
 function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: report.value?.period.recordedWeekStarts.at(-1) ?? new Date().toISOString().slice(0, 10), followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
@@ -223,7 +230,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 <template>
   <div class="page-stack performance-page">
     <PageHeader title="Performance" description="Track content execution and social media performance over time." :breadcrumbs="[{ label: 'Planning & Insights' }, { label: 'Performance' }]">
-      <template #actions><BaseSelect v-model="period" label="Evaluation period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="exportReport"><AppIcon name="library" :size="16" />Export Report</BaseButton><BaseButton @click="openLog"><AppIcon name="plus" :size="16" />Log Weekly Metrics</BaseButton></template>
+      <template #actions><div class="performance-header-controls"><BaseSelect v-model="period" label="Evaluation period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="exportReport"><AppIcon name="library" :size="16" />Export Report</BaseButton><BaseButton @click="openLog"><AppIcon name="plus" :size="16" />Log Weekly Metrics</BaseButton></div></template>
     </PageHeader>
     <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
     <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
@@ -233,13 +240,13 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 
     <section class="kpi-grid" aria-label="Primary metrics">
       <BaseCard v-for="card in [
-        { label: 'Follower Growth', value: followerChangeLabel, detail: `${followerChangeDetail} · backend observations`, icon: 'company' },
-        { label: platform === 'combined' ? 'Combined Platform Reach' : 'Weekly Reach', value: formatNumber(latestReach), detail: `${latestWeekLabel} · latest reported week`, icon: 'chart' },
-        { label: 'Impressions', value: formatNumber(impressionsTotal), detail: `Total for ${period} weeks`, icon: 'overview' },
-        { label: 'Engagement Rate', value: formatPercent(engagementRate), detail: 'Engagements ÷ impressions', icon: 'idea' },
-        { label: 'Content Published', value: formatNumber(publishedCount), detail: 'Platform publication records', icon: 'library' },
-        { label: 'Posting Consistency', value: consistencyLabel, detail: 'Backend report by platform', icon: 'check' },
-      ]" :key="card.label" class="kpi-card"><div class="kpi-card__top"><span>{{ card.label }}</span><AppIcon :name="card.icon" :size="17" /></div><strong>{{ card.value }}</strong><small>{{ card.detail }}</small></BaseCard>
+        { label: 'Follower Growth', value: followerChangeLabel, detail: `${followerChangeDetail} · first-to-latest account observation`, icon: 'company' },
+        { label: platform === 'combined' ? 'Combined Platform Reach' : 'Weekly Reach', value: formatKpiNumber(latestReach), detail: latestReachDetail, icon: 'chart' },
+        { label: 'Impressions', value: formatKpiNumber(impressionsTotal), detail: impressionsDetail, icon: 'overview' },
+        { label: 'Engagement Rate', value: formatPercent(engagementRate), detail: engagementDetail, icon: 'idea' },
+        { label: 'Content Published', value: formatNumber(publishedCount), detail: 'Explicit platform publication records', icon: 'library' },
+        { label: 'Posting Consistency', value: consistencyLabel, detail: 'Published posts ÷ target (2/week/platform)', icon: 'check' },
+      ]" :key="card.label" class="kpi-card"><div class="kpi-card-content"><div class="kpi-card__top"><span>{{ card.label }}</span><AppIcon :name="card.icon" :size="17" /></div><strong>{{ card.value }}</strong><small>{{ card.detail }}</small></div></BaseCard>
     </section>
 
     <section class="chart-grid">
@@ -268,17 +275,19 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 
 <style scoped>
 .performance-page { max-width: 1280px; }
+.performance-header-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
 .performance-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-well); color: var(--color-muted); font-size: 12px; }
 .performance-toolbar__note, .performance-toolbar__source { display: flex; align-items: center; gap: 8px; }
 .performance-toolbar__source { flex-wrap: wrap; justify-content: flex-end; color: var(--color-subtle); font-size: 11px; }
 .performance-toolbar__source em { color: var(--color-muted); font-style: normal; }
 .performance-toolbar__source span + span::before { content: '·'; margin-right: 8px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
-.kpi-card { display: grid; gap: 10px; min-width: 0; }
-.kpi-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; color: var(--color-subtle); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.kpi-card__top .app-icon { color: var(--color-primary); }
-.kpi-card > strong { font-size: 25px; line-height: 1.1; letter-spacing: -.03em; }
-.kpi-card > small { color: var(--color-muted); font-size: 11px; line-height: 1.4; }
+.kpi-card { min-width: 0; height: 100%; }
+.kpi-card-content { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+.kpi-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; color: var(--color-subtle); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; min-height: 32px; }
+.kpi-card__top .app-icon { flex-shrink: 0; color: var(--color-primary); }
+.kpi-card-content > strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; color: var(--color-ink); font-size: 16px; font-weight: 700; line-height: 1.35; letter-spacing: -.01em; overflow-wrap: anywhere; margin: 0; }
+.kpi-card-content > small { display: block; color: var(--color-muted); font-size: 11px; line-height: 1.45; min-height: 32px; }
 .chart-grid, .performance-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--color-muted); font-size: 11px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -293,13 +302,13 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .progress-track span.is-complete { background: var(--color-success); }
 .summary-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-border); }
 .summary-list div { display: grid; gap: 6px; padding: 14px; background: var(--color-surface); }
-.summary-list dt { color: var(--color-subtle); font-size: 11px; }
-.summary-list dd { margin: 0; font-size: 20px; font-weight: 600; }
+.summary-list dt { color: var(--color-subtle); font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.summary-list dd { margin: 0; font-size: 18px; font-weight: 700; color: var(--color-ink); }
 .helper-text { margin-top: 14px; color: var(--color-subtle); font-size: 12px; line-height: 1.5; }
 .output-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.output-grid div { display: grid; gap: 4px; padding: 12px; border-radius: var(--radius-control); background: var(--color-well); }
-.output-grid strong { font-size: 20px; }
-.output-grid span { color: var(--color-muted); font-size: 11px; line-height: 1.3; }
+.output-grid div { display: flex; flex-direction: column; gap: 6px; padding: 14px 12px; border-radius: var(--radius-control); background: var(--color-well); }
+.output-grid strong { font-size: 18px; font-weight: 700; color: var(--color-ink); line-height: 1.2; }
+.output-grid span { color: var(--color-muted); font-size: 11px; line-height: 1.35; font-weight: 500; }
 .inquiry-total { color: var(--color-ink); font-size: 14px; }
 .inquiry-chart { display: flex; align-items: flex-end; gap: 8px; height: 130px; padding: 10px 4px 0; border-bottom: 1px solid var(--color-border); }
 .inquiry-bar { display: grid; flex: 1; align-items: end; justify-items: center; gap: 5px; height: 100%; min-width: 0; }
@@ -324,6 +333,6 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid { grid-template-columns: 1fr; } }
 </style>
