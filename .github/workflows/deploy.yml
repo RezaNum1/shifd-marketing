@@ -25,6 +25,7 @@ jobs:
           SSH_HOST: ${{ secrets.BIZNET_HOST }}
         run: |
           mkdir -p ~/.ssh
+
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
@@ -39,36 +40,110 @@ jobs:
           ssh "$SSH_USER@$SSH_HOST" << 'EOF'
             set -euo pipefail
 
+            APP_DIR="/var/www/shifd-marketing"
+            BACKEND_DIR="$APP_DIR/backend"
+            FRONTEND_DIR="$APP_DIR/frontend"
+
+            echo "========================================"
+            echo "Starting Shifd Marketing deployment"
+            echo "========================================"
+
+            echo ""
             echo "=== Updating source ==="
-            cd /var/www/shifd-marketing
+
+            cd "$APP_DIR"
+
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== Building backend ==="
-            cd /var/www/shifd-marketing/backend
+            echo ""
+            echo "=== Installing backend dependencies ==="
+
+            cd "$BACKEND_DIR"
+
             npm ci
+
+            echo ""
+            echo "=== Generating Prisma client ==="
+
             npm run db:generate
+
+            echo ""
+            echo "=== Building backend ==="
+
             npm run build
 
-            echo "=== Building frontend ==="
-            cd /var/www/shifd-marketing/frontend
+            echo ""
+            echo "=== Installing frontend dependencies ==="
+
+            cd "$FRONTEND_DIR"
+
             npm ci
+
+            echo ""
+            echo "=== Building frontend ==="
+
             npm run build
 
+            echo ""
             echo "=== Applying database migrations ==="
-            cd /var/www/shifd-marketing/backend
+
+            cd "$BACKEND_DIR"
+
             npm run db:deploy
 
+            echo ""
             echo "=== Restarting backend ==="
+
             pm2 restart shifd-marketing-api --update-env
             pm2 save
 
-            echo "=== Checking backend ==="
-            curl -sS -o /dev/null http://127.0.0.1:3000
+            echo ""
+            echo "=== Waiting for backend ==="
 
+            BACKEND_READY=false
+
+            for i in {1..15}; do
+              if curl -sS -o /dev/null http://127.0.0.1:3000/; then
+                echo "Backend is ready."
+                BACKEND_READY=true
+                break
+              fi
+
+              echo "Backend not ready yet. Attempt $i/15..."
+              sleep 2
+            done
+
+            if [ "$BACKEND_READY" != "true" ]; then
+              echo ""
+              echo "ERROR: Backend failed to start."
+
+              echo ""
+              echo "=== PM2 status ==="
+              pm2 status
+
+              echo ""
+              echo "=== PM2 logs ==="
+              pm2 logs shifd-marketing-api --lines 100 --nostream
+
+              exit 1
+            fi
+
+            echo ""
             echo "=== Checking frontend ==="
-            curl -fsS http://127.0.0.1 > /dev/null
 
-            echo "=== Deployment completed ==="
+            if ! curl -fsS http://127.0.0.1/ > /dev/null; then
+              echo "ERROR: Frontend health check failed."
+              exit 1
+            fi
+
+            echo ""
+            echo "=== Deployment completed successfully ==="
+
             pm2 status
+
+            echo ""
+            echo "========================================"
+            echo "Shifd Marketing deployment completed"
+            echo "========================================"
           EOF
