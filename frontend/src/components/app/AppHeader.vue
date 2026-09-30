@@ -33,10 +33,7 @@ const workspace = useWorkspaceStore()
           placeholder="Search workspace…"
         />
       </div>
-      <div class="app-header__utilities">
-        <IconButton icon="bell" label="Notifications (coming soon)" disabled />
-        <IconButton icon="help" label="Help (coming soon)" disabled />
-      </div>
+
       <div class="app-header__identity"><UserIdentity /></div>
     </div>
   </header>
