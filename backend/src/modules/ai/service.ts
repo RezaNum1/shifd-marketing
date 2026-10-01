@@ -447,11 +447,22 @@ async function finalizeFailedRequest(prisma: PrismaClient, aiRequestId: string, 
 
 export function mapProviderFailure(error: unknown): AppError {
   if (error instanceof AiProviderFailure) {
-    if (error.kind === 'not_configured') return aiNotConfigured()
-    if (error.kind === 'timeout') return aiTimeout()
-    if (error.kind === 'rate_limit') return rateLimited('The AI provider rate limit was reached.')
-    if (error.kind === 'invalid_response') return aiOutputInvalid()
-    return aiProviderError()
+    const mapped = error.kind === 'not_configured'
+      ? aiNotConfigured()
+      : error.kind === 'timeout'
+        ? aiTimeout()
+        : error.kind === 'rate_limit'
+          ? rateLimited('The AI provider rate limit was reached.')
+          : error.kind === 'invalid_response'
+            ? aiOutputInvalid()
+            : aiProviderError()
+    if (error.providerRequestId || error.diagnostics || error.responseDiagnostics) {
+      Object.defineProperty(mapped, 'providerDiagnostics', {
+        value: { requestId: error.providerRequestId, ...(error.diagnostics ?? {}), ...(error.responseDiagnostics ?? {}) },
+        enumerable: false,
+      })
+    }
+    return mapped
   }
   return aiProviderError()
 }

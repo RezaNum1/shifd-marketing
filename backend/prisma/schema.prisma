@@ -8,64 +8,76 @@ datasource db {
 }
 
 model Company {
-  id                   String               @id @default(uuid()) @db.Uuid
-  name                 String
-  description          String
-  industry             String?
-  businessTypes        String[]             @default([]) @map("business_types")
-  primaryMarket        String?              @map("primary_market")
-  website              String?
-  mission              String?
-  vision               String?
-  positioning          String?
-  coreValueProposition String?              @map("core_value_proposition")
-  differentiators      String[]             @default([])
-  customerSegments     String[]             @default([]) @map("customer_segments")
-  decisionMakers       String[]             @default([]) @map("decision_makers")
-  painPoints           String[]             @default([]) @map("pain_points")
-  reportingTimezone    String               @default("Asia/Jakarta") @map("reporting_timezone")
-  contextVersion       Int                  @default(1) @map("context_version")
-  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version              Int                  @default(1)
-  users                User[]
-  brandProfile         BrandProfile?
-  bmcBlocks            BmcBlock[]
-  products             Product[]
-  contentIdeas         ContentIdea[]
-  contents             Content[]
-  idempotencyRecords   RequestIdempotency[]
-  assets               CreativeAsset[]
-  aiSettings           AiSettings?
-  aiRequests           AiRequestLog[]
-  socialAccounts       SocialAccount[]
+  id                       String                   @id @default(uuid()) @db.Uuid
+  name                     String
+  description              String
+  industry                 String?
+  businessTypes            String[]                 @default([]) @map("business_types")
+  primaryMarket            String?                  @map("primary_market")
+  website                  String?
+  mission                  String?
+  vision                   String?
+  positioning              String?
+  coreValueProposition     String?                  @map("core_value_proposition")
+  differentiators          String[]                 @default([])
+  customerSegments         String[]                 @default([]) @map("customer_segments")
+  decisionMakers           String[]                 @default([]) @map("decision_makers")
+  painPoints               String[]                 @default([]) @map("pain_points")
+  reportingTimezone        String                   @default("Asia/Jakarta") @map("reporting_timezone")
+  contextVersion           Int                      @default(1) @map("context_version")
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                  Int                      @default(1)
+  users                    User[]
+  brandProfile             BrandProfile?
+  bmcBlocks                BmcBlock[]
+  products                 Product[]
+  contentIdeas             ContentIdea[]
+  contents                 Content[]
+  idempotencyRecords       RequestIdempotency[]
+  assets                   CreativeAsset[]
+  aiSettings               AiSettings?
+  aiRequests               AiRequestLog[]
+  socialAccounts           SocialAccount[]
+  creativeReferenceBatches CreativeReferenceBatch[]
+  topicDiscoveryRuns       TopicDiscoveryRun[]
+  topicCandidates          TopicCandidate[]
+  telegramIntegrations     TelegramIntegration[]
+  telegramLinkTokens       TelegramLinkToken[]
+  telegramThreads          TelegramIdeationThread[]
+  telegramIdeaDrafts       TelegramIdeaDraft[]
+  telegramUpdates          TelegramWebhookUpdate[]
 
   @@map("companies")
 }
 
 model User {
-  id             String          @id @default(uuid()) @db.Uuid
-  companyId      String          @map("company_id") @db.Uuid
-  name           String
-  email          String
-  passwordHash   String          @map("password_hash")
-  role           String          @default("founder")
-  active         Boolean         @default(true)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version        Int             @default(1)
-  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sessions       AuthSession[]
-  contentIdeas   ContentIdea[]
-  contents       Content[]
-  contentEvents  ContentEvent[]
-  uploadedAssets CreativeAsset[]
-  aiRequests     AiRequestLog[]
-  approvalActions ApprovalAction[]
-  createdSchedules   ContentSchedule[] @relation("ScheduleCreatedBy")
-  markedPublications PublicationRecord[] @relation("PublicationMarkedBy")
-  recordedMetrics    WeeklyMetric[] @relation("MetricRecordedBy")
-  recordedInquiries  InboundInquiryMetric[] @relation("InquiryRecordedBy")
+  id                   String                   @id @default(uuid()) @db.Uuid
+  companyId            String                   @map("company_id") @db.Uuid
+  name                 String
+  email                String
+  passwordHash         String                   @map("password_hash")
+  role                 String                   @default("founder")
+  active               Boolean                  @default(true)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version              Int                      @default(1)
+  company              Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sessions             AuthSession[]
+  contentIdeas         ContentIdea[]
+  contents             Content[]
+  contentEvents        ContentEvent[]
+  uploadedAssets       CreativeAsset[]
+  aiRequests           AiRequestLog[]
+  approvalActions      ApprovalAction[]
+  createdSchedules     ContentSchedule[]        @relation("ScheduleCreatedBy")
+  markedPublications   PublicationRecord[]      @relation("PublicationMarkedBy")
+  recordedMetrics      WeeklyMetric[]           @relation("MetricRecordedBy")
+  recordedInquiries    InboundInquiryMetric[]   @relation("InquiryRecordedBy")
+  telegramIntegrations TelegramIntegration[]
+  telegramLinkTokens   TelegramLinkToken[]
+  telegramThreads      TelegramIdeationThread[]
+  telegramIdeaDrafts   TelegramIdeaDraft[]
 
   @@index([companyId])
   @@map("users")
@@ -123,21 +135,27 @@ model BmcBlock {
 }
 
 model Product {
-  id           String          @id @default(uuid()) @db.Uuid
-  companyId    String          @map("company_id") @db.Uuid
-  name         String
-  slug         String
-  description  String
-  category     String?
-  status       String
-  url          String?
-  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version      Int             @default(1)
-  company      Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  profile      ProductProfile?
-  contentIdeas ContentIdea[]
-  contents     Content[]
+  id                     String                   @id @default(uuid()) @db.Uuid
+  companyId              String                   @map("company_id") @db.Uuid
+  name                   String
+  slug                   String
+  description            String
+  category               String?
+  status                 String
+  url                    String?
+  createdAt              DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                Int                      @default(1)
+  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profile                ProductProfile?
+  contentIdeas           ContentIdea[]
+  contents               Content[]
+  topicDiscoveryRuns     TopicDiscoveryRun[]
+  topicCandidates        TopicCandidate[]
+  telegramIntegrations   TelegramIntegration[]
+  telegramThreads        TelegramIdeationThread[]
+  telegramIdeaDrafts     TelegramIdeaDraft[]
+  telegramCallbackTokens TelegramCallbackToken[]
 
   @@unique([companyId, slug])
   @@unique([companyId, id])
@@ -172,37 +190,43 @@ model ProductProfile {
 }
 
 model ContentPillar {
-  code          String         @id
-  label         String
-  sortOrder     Int            @unique @map("sort_order")
-  active        Boolean        @default(true)
-  contentIdeas  ContentIdea[]
-  contentBriefs ContentBrief[]
+  code               String              @id
+  label              String
+  sortOrder          Int                 @unique @map("sort_order")
+  active             Boolean             @default(true)
+  contentIdeas       ContentIdea[]
+  contentBriefs      ContentBrief[]
+  telegramIdeaDrafts TelegramIdeaDraft[]
 
   @@unique([label])
   @@map("content_pillars")
 }
 
 model ContentIdea {
-  id             String        @id @default(uuid()) @db.Uuid
-  companyId      String        @map("company_id") @db.Uuid
-  title          String
-  contextType    String        @map("context_type")
-  productId      String?       @map("product_id") @db.Uuid
-  pillarCode     String        @map("pillar_code")
-  objective      String
-  targetAudience String?       @map("target_audience")
-  notes          String?
-  status         String        @default("ready")
-  createdBy      String        @map("created_by") @db.Uuid
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version        Int           @default(1)
-  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  product        Product?      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  pillar         ContentPillar @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
-  creator        User          @relation(fields: [createdBy], references: [id], onDelete: Restrict)
-  sourceContents Content[]     @relation("ContentSourceIdea")
+  id              String              @id @default(uuid()) @db.Uuid
+  companyId       String              @map("company_id") @db.Uuid
+  title           String
+  contextType     String              @map("context_type")
+  productId       String?             @map("product_id") @db.Uuid
+  pillarCode      String              @map("pillar_code")
+  objective       String
+  targetAudience  String?             @map("target_audience")
+  notes           String?
+  sourceType      String?             @map("source_type")
+  sourceReference String?             @map("source_reference")
+  sourceSummary   String?             @map("source_summary")
+  status          String              @default("ready")
+  createdBy       String              @map("created_by") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version         Int                 @default(1)
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product         Product?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  pillar          ContentPillar       @relation(fields: [pillarCode], references: [code], onDelete: Restrict)
+  creator         User                @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  sourceContents  Content[]           @relation("ContentSourceIdea")
+  topicCandidates TopicCandidate[]
+  telegramDrafts  TelegramIdeaDraft[]
 
   @@unique([companyId, id])
   @@index([companyId, updatedAt, id])
@@ -213,36 +237,179 @@ model ContentIdea {
   @@map("content_ideas")
 }
 
+model TelegramIntegration {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  companyId                String                   @map("company_id") @db.Uuid
+  userId                   String                   @map("user_id") @db.Uuid
+  telegramUserId           String                   @unique @map("telegram_user_id")
+  telegramChatId           String                   @unique @map("telegram_chat_id")
+  telegramUsernameSnapshot String?                  @map("telegram_username_snapshot")
+  activeProductId          String?                  @map("active_product_id") @db.Uuid
+  status                   String                   @default("active")
+  linkedAt                 DateTime                 @default(now()) @map("linked_at") @db.Timestamptz(3)
+  unlinkedAt               DateTime?                @map("unlinked_at") @db.Timestamptz(3)
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  company                  Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user                     User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  activeProduct            Product?                 @relation(fields: [activeProductId], references: [id], onDelete: Restrict)
+  threads                  TelegramIdeationThread[]
+  callbackTokens           TelegramCallbackToken[]
+
+  @@index([companyId, status])
+  @@index([userId, status])
+  @@map("telegram_integrations")
+}
+
+model TelegramLinkToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, expiresAt])
+  @@map("telegram_link_tokens")
+}
+
+model TelegramIdeationThread {
+  id            String                    @id @default(uuid()) @db.Uuid
+  integrationId String                    @map("integration_id") @db.Uuid
+  companyId     String                    @map("company_id") @db.Uuid
+  userId        String                    @map("user_id") @db.Uuid
+  productId     String?                   @map("product_id") @db.Uuid
+  status        String                    @default("active")
+  revision      Int                       @default(0)
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  closedAt      DateTime?                 @map("closed_at") @db.Timestamptz(3)
+  integration   TelegramIntegration       @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  company       Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product       Product?                  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  messages      TelegramIdeationMessage[]
+  drafts        TelegramIdeaDraft[]
+
+  @@index([integrationId, status, updatedAt])
+  @@index([companyId, userId, status])
+  @@map("telegram_ideation_threads")
+}
+
+model TelegramIdeationMessage {
+  id                String                 @id @default(uuid()) @db.Uuid
+  threadId          String                 @map("thread_id") @db.Uuid
+  role              String
+  telegramMessageId String?                @map("telegram_message_id")
+  text              String
+  aiRequestLogId    String?                @map("ai_request_log_id") @db.Uuid
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  thread            TelegramIdeationThread @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  aiRequestLog      AiRequestLog?          @relation(fields: [aiRequestLogId], references: [id], onDelete: Restrict)
+
+  @@unique([threadId, role, telegramMessageId])
+  @@index([threadId, createdAt, id])
+  @@map("telegram_ideation_messages")
+}
+
+model TelegramIdeaDraft {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  threadId             String                  @map("thread_id") @db.Uuid
+  companyId            String                  @map("company_id") @db.Uuid
+  userId               String                  @map("user_id") @db.Uuid
+  productId            String?                 @map("product_id") @db.Uuid
+  title                String
+  summary              String
+  targetAudience       String                  @map("target_audience")
+  contentAngle         String                  @map("content_angle")
+  contentPillarCode    String?                 @map("content_pillar_code")
+  objective            String                  @default("education")
+  conversationSummary  String                  @map("conversation_summary")
+  conversationRevision Int                     @map("conversation_revision")
+  status               String                  @default("pending_confirmation")
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  confirmedAt          DateTime?               @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt          DateTime?               @map("cancelled_at") @db.Timestamptz(3)
+  ideaId               String?                 @unique @map("idea_id") @db.Uuid
+  thread               TelegramIdeationThread  @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user                 User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product              Product?                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  idea                 ContentIdea?            @relation(fields: [ideaId], references: [id], onDelete: Restrict)
+  contentPillar        ContentPillar?          @relation(fields: [contentPillarCode], references: [code], onDelete: Restrict)
+  callbackTokens       TelegramCallbackToken[]
+
+  @@index([threadId, status])
+  @@index([companyId, userId, status])
+  @@map("telegram_idea_drafts")
+}
+
+model TelegramWebhookUpdate {
+  id          String    @id @default(uuid()) @db.Uuid
+  updateId    BigInt    @unique @map("update_id")
+  status      String    @default("received")
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+  companyId   String?   @map("company_id") @db.Uuid
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([status, receivedAt])
+  @@map("telegram_webhook_updates")
+}
+
+model TelegramCallbackToken {
+  id            String              @id @default(uuid()) @db.Uuid
+  integrationId String              @map("integration_id") @db.Uuid
+  draftId       String?             @map("draft_id") @db.Uuid
+  productId     String?             @map("product_id") @db.Uuid
+  tokenHash     String              @unique @map("token_hash")
+  action        String
+  expiresAt     DateTime            @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime?           @map("used_at") @db.Timestamptz(3)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  integration   TelegramIntegration @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  draft         TelegramIdeaDraft?  @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  product       Product?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([integrationId, action, expiresAt])
+  @@map("telegram_callback_tokens")
+}
+
 model Content {
-  id                String            @id @default(uuid()) @db.Uuid
-  companyId         String            @map("company_id") @db.Uuid
-  sourceIdeaId      String?           @map("source_idea_id") @db.Uuid
-  contextType       String            @map("context_type")
-  productId         String?           @map("product_id") @db.Uuid
-  editorialStage    String            @default("draft") @map("editorial_stage")
-  editorialRevision Int               @default(1) @map("editorial_revision")
-  masterRevision    Int               @default(0) @map("master_revision")
-  designStatus      String            @default("not_started") @map("design_status")
-  archivedAt        DateTime?         @map("archived_at") @db.Timestamptz(3)
-  createdBy         String            @map("created_by") @db.Uuid
-  masterContent     Json?             @map("master_content")
-  visualDirection   Json?             @map("visual_direction")
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version           Int               @default(1)
-  company           Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sourceIdea        ContentIdea?      @relation("ContentSourceIdea", fields: [sourceIdeaId], references: [id], onDelete: Restrict)
-  product           Product?          @relation(fields: [productId], references: [id], onDelete: Restrict)
-  creator           User              @relation(fields: [createdBy], references: [id], onDelete: Restrict)
-  brief             ContentBrief?
-  variants          PlatformVariant[]
-  events            ContentEvent[]
-  aiRequests        AiRequestLog[]
-  approvalActions   ApprovalAction[]   @relation("ContentApprovalActions")
-  currentApprovalId String?            @map("current_approval_id") @db.Uuid
+  id                       String                   @id @default(uuid()) @db.Uuid
+  companyId                String                   @map("company_id") @db.Uuid
+  sourceIdeaId             String?                  @map("source_idea_id") @db.Uuid
+  contextType              String                   @map("context_type")
+  productId                String?                  @map("product_id") @db.Uuid
+  editorialStage           String                   @default("draft") @map("editorial_stage")
+  editorialRevision        Int                      @default(1) @map("editorial_revision")
+  masterRevision           Int                      @default(0) @map("master_revision")
+  designStatus             String                   @default("not_started") @map("design_status")
+  archivedAt               DateTime?                @map("archived_at") @db.Timestamptz(3)
+  createdBy                String                   @map("created_by") @db.Uuid
+  masterContent            Json?                    @map("master_content")
+  visualDirection          Json?                    @map("visual_direction")
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                  Int                      @default(1)
+  company                  Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sourceIdea               ContentIdea?             @relation("ContentSourceIdea", fields: [sourceIdeaId], references: [id], onDelete: Restrict)
+  product                  Product?                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  creator                  User                     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  brief                    ContentBrief?
+  variants                 PlatformVariant[]
+  events                   ContentEvent[]
+  aiRequests               AiRequestLog[]
+  creativeReferenceBatches CreativeReferenceBatch[]
+  approvalActions          ApprovalAction[]         @relation("ContentApprovalActions")
+  currentApprovalId        String?                  @map("current_approval_id") @db.Uuid
   // Keep Prisma's client-side relation scalar-only; the Phase 9 migration's
   // composite FK still enforces that the pointed action belongs to this Content.
-  currentApproval   ApprovalAction?    @relation("ContentCurrentApproval", fields: [currentApprovalId], references: [id], onDelete: Restrict)
+  currentApproval          ApprovalAction?          @relation("ContentCurrentApproval", fields: [currentApprovalId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, id])
   @@index([companyId, updatedAt, id])
@@ -272,32 +439,32 @@ model ContentBrief {
 }
 
 model PlatformVariant {
-  id                         String            @id @default(uuid()) @db.Uuid
-  contentId                  String            @map("content_id") @db.Uuid
+  id                         String             @id @default(uuid()) @db.Uuid
+  contentId                  String             @map("content_id") @db.Uuid
   platform                   String
-  enabled                    Boolean           @default(true)
+  enabled                    Boolean            @default(true)
   copy                       String?
   cta                        String?
   hashtags                   String?
-  visualRecommendation       String?           @map("visual_recommendation")
-  revision                   Int               @default(1)
-  adaptedFromMasterRevision  Int?              @map("adapted_from_master_revision")
-  reuseCreativeFromVariantId String?           @map("reuse_creative_from_variant_id") @db.Uuid
-  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  content                    Content           @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  visualRecommendation       String?            @map("visual_recommendation")
+  revision                   Int                @default(1)
+  adaptedFromMasterRevision  Int?               @map("adapted_from_master_revision")
+  reuseCreativeFromVariantId String?            @map("reuse_creative_from_variant_id") @db.Uuid
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  content                    Content            @relation(fields: [contentId], references: [id], onDelete: Restrict)
   events                     ContentEvent[]
   aiRequests                 AiRequestLog[]
   assetLinks                 VariantAsset[]
-  assessments                BrandAssessment[] @relation("VariantAssessments")
-  currentAssessmentId       String?           @map("current_assessment_id") @db.Uuid
+  assessments                BrandAssessment[]  @relation("VariantAssessments")
+  currentAssessmentId        String?            @map("current_assessment_id") @db.Uuid
   // Keep Prisma's client-side relation scalar-only; the Phase 8 migration's
   // composite FK still enforces that the pointed assessment belongs to this Variant.
-  currentAssessment          BrandAssessment?  @relation("VariantCurrentAssessment", fields: [currentAssessmentId], references: [id], onDelete: Restrict)
+  currentAssessment          BrandAssessment?   @relation("VariantCurrentAssessment", fields: [currentAssessmentId], references: [id], onDelete: Restrict)
   schedule                   ContentSchedule?
   publication                PublicationRecord?
-  reuseCreativeFromVariant   PlatformVariant?  @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
-  reusedByVariants           PlatformVariant[] @relation("VariantCreativeReuse")
+  reuseCreativeFromVariant   PlatformVariant?   @relation("VariantCreativeReuse", fields: [contentId, reuseCreativeFromVariantId], references: [contentId, id], onDelete: Restrict)
+  reusedByVariants           PlatformVariant[]  @relation("VariantCreativeReuse")
   approvalActions            ApprovalAction[]
 
   @@unique([contentId, platform])
@@ -307,20 +474,20 @@ model PlatformVariant {
 }
 
 model BrandAssessment {
-  id                    String           @id @default(uuid()) @db.Uuid
-  variantId             String           @map("variant_id") @db.Uuid
-  variantRevision       Int              @map("variant_revision")
-  inputHash             String           @map("input_hash")
-  aiRequestId           String           @unique @map("ai_request_id") @db.Uuid
-  score                 Int
-  result                String
-  recommendation        String
-  checks                Json
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  variant               PlatformVariant  @relation("VariantAssessments", fields: [variantId], references: [id], onDelete: Restrict)
-  aiRequest             AiRequestLog     @relation(fields: [aiRequestId], references: [id], onDelete: Restrict)
-  currentForVariants    PlatformVariant[] @relation("VariantCurrentAssessment")
-  approvalActions       ApprovalAction[]
+  id                 String            @id @default(uuid()) @db.Uuid
+  variantId          String            @map("variant_id") @db.Uuid
+  variantRevision    Int               @map("variant_revision")
+  inputHash          String            @map("input_hash")
+  aiRequestId        String            @unique @map("ai_request_id") @db.Uuid
+  score              Int
+  result             String
+  recommendation     String
+  checks             Json
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  variant            PlatformVariant   @relation("VariantAssessments", fields: [variantId], references: [id], onDelete: Restrict)
+  aiRequest          AiRequestLog      @relation(fields: [aiRequestId], references: [id], onDelete: Restrict)
+  currentForVariants PlatformVariant[] @relation("VariantCurrentAssessment")
+  approvalActions    ApprovalAction[]
 
   @@unique([variantId, id])
   @@index([variantId, createdAt])
@@ -351,20 +518,20 @@ model CreativeAsset {
 }
 
 model ContentSchedule {
-  id                 String           @id @default(uuid()) @db.Uuid
-  variantId          String           @unique @map("variant_id") @db.Uuid
-  scheduledAt        DateTime         @map("scheduled_at") @db.Timestamptz(3)
+  id                 String             @id @default(uuid()) @db.Uuid
+  variantId          String             @unique @map("variant_id") @db.Uuid
+  scheduledAt        DateTime           @map("scheduled_at") @db.Timestamptz(3)
   timezone           String
-  approvalActionId   String           @map("approval_action_id") @db.Uuid
-  createdBy          String           @map("created_by") @db.Uuid
-  cancelledAt        DateTime?        @map("cancelled_at") @db.Timestamptz(3)
-  cancellationReason String?          @map("cancellation_reason")
-  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version            Int              @default(1)
-  variant            PlatformVariant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  approvalAction     ApprovalAction   @relation(fields: [approvalActionId], references: [id], onDelete: Restrict)
-  creator            User             @relation("ScheduleCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  approvalActionId   String             @map("approval_action_id") @db.Uuid
+  createdBy          String             @map("created_by") @db.Uuid
+  cancelledAt        DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  cancellationReason String?            @map("cancellation_reason")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version            Int                @default(1)
+  variant            PlatformVariant    @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  approvalAction     ApprovalAction     @relation(fields: [approvalActionId], references: [id], onDelete: Restrict)
+  creator            User               @relation("ScheduleCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
   publication        PublicationRecord?
 
   @@unique([id, variantId])
@@ -373,19 +540,19 @@ model ContentSchedule {
 }
 
 model PublicationRecord {
-  id                  String          @id @default(uuid()) @db.Uuid
-  variantId           String          @unique @map("variant_id") @db.Uuid
-  scheduleId          String          @unique @map("schedule_id") @db.Uuid
-  scheduledAtSnapshot DateTime        @map("scheduled_at_snapshot") @db.Timestamptz(3)
-  publishedAt         DateTime        @map("published_at") @db.Timestamptz(3)
-  postUrl             String?         @map("post_url")
-  markedBy            String          @map("marked_by") @db.Uuid
-  recordedAt          DateTime        @default(now()) @map("recorded_at") @db.Timestamptz(3)
-  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version             Int             @default(1)
-  variant             PlatformVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  schedule            ContentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
-  marker              User            @relation("PublicationMarkedBy", fields: [markedBy], references: [id], onDelete: Restrict)
+  id                  String              @id @default(uuid()) @db.Uuid
+  variantId           String              @unique @map("variant_id") @db.Uuid
+  scheduleId          String              @unique @map("schedule_id") @db.Uuid
+  scheduledAtSnapshot DateTime            @map("scheduled_at_snapshot") @db.Timestamptz(3)
+  publishedAt         DateTime            @map("published_at") @db.Timestamptz(3)
+  postUrl             String?             @map("post_url")
+  markedBy            String              @map("marked_by") @db.Uuid
+  recordedAt          DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version             Int                 @default(1)
+  variant             PlatformVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  schedule            ContentSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  marker              User                @relation("PublicationMarkedBy", fields: [markedBy], references: [id], onDelete: Restrict)
   metrics             PublicationMetric[]
 
   @@index([publishedAt])
@@ -456,23 +623,72 @@ model ContentEvent {
 }
 
 model RequestIdempotency {
-  id             String   @id @default(uuid()) @db.Uuid
-  companyId      String   @map("company_id") @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
+  companyId      String        @map("company_id") @db.Uuid
   operation      String
   key            String
-  requestHash    String   @map("request_hash")
-  responseStatus Int      @map("response_status")
-  responseBody   Json     @map("response_body")
-  resourceId     String   @map("resource_id") @db.Uuid
-  responseEtag   String?  @map("response_etag")
-  aiRequestId    String?  @unique @map("ai_request_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  requestHash    String        @map("request_hash")
+  responseStatus Int           @map("response_status")
+  responseBody   Json          @map("response_body")
+  resourceId     String        @map("resource_id") @db.Uuid
+  responseEtag   String?       @map("response_etag")
+  aiRequestId    String?       @unique @map("ai_request_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   aiRequest      AiRequestLog? @relation("RequestIdempotencyAiRequest", fields: [aiRequestId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, operation, key])
   @@index([companyId, createdAt])
   @@map("request_idempotency")
+}
+
+model TopicDiscoveryRun {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @map("company_id") @db.Uuid
+  productId      String?          @map("product_id") @db.Uuid
+  market         String
+  timeframe      String
+  focus          String?
+  status         String
+  aiRequestLogId String           @unique @map("ai_request_log_id") @db.Uuid
+  searchedAt     DateTime         @map("searched_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product        Product?         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  aiRequestLog   AiRequestLog     @relation(fields: [aiRequestLogId], references: [id], onDelete: Restrict)
+  candidates     TopicCandidate[]
+
+  @@index([companyId, createdAt, id])
+  @@index([companyId, status, createdAt])
+  @@map("topic_discovery_runs")
+}
+
+model TopicCandidate {
+  id                 String            @id @default(uuid()) @db.Uuid
+  runId              String            @map("run_id") @db.Uuid
+  companyId          String            @map("company_id") @db.Uuid
+  productId          String?           @map("product_id") @db.Uuid
+  position           Int
+  title              String
+  summary            String
+  whyCurrent         String            @map("why_current")
+  relevanceToCompany String            @map("relevance_to_company")
+  contentAngle       String            @map("content_angle")
+  suggestedObjective String            @map("suggested_objective")
+  suggestedPlatforms String[]          @map("suggested_platforms")
+  sourceEvidence     Json              @map("source_evidence")
+  selectedAt         DateTime?         @map("selected_at") @db.Timestamptz(3)
+  createdIdeaId      String?           @unique @map("created_idea_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  run                TopicDiscoveryRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product            Product?          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdIdea        ContentIdea?      @relation(fields: [createdIdeaId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, position])
+  @@index([companyId, createdAt, id])
+  @@index([runId, position])
+  @@map("topic_candidates")
 }
 
 model AiSettings {
@@ -491,17 +707,17 @@ model AiSettings {
 }
 
 model PromptVersion {
-  id                 String         @id @default(uuid()) @db.Uuid
-  module             String
-  operation          String
-  version            String
-  status             String
-  templateReference  String         @map("template_reference")
-  templateDigest     String         @map("template_digest")
-  outputSchemaVersion String        @map("output_schema_version")
-  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  aiRequests         AiRequestLog[]
+  id                  String         @id @default(uuid()) @db.Uuid
+  module              String
+  operation           String
+  version             String
+  status              String
+  templateReference   String         @map("template_reference")
+  templateDigest      String         @map("template_digest")
+  outputSchemaVersion String         @map("output_schema_version")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  aiRequests          AiRequestLog[]
 
   @@unique([module, version])
   @@index([module, status])
@@ -509,40 +725,44 @@ model PromptVersion {
 }
 
 model AiRequestLog {
-  id                 String          @id @default(uuid()) @db.Uuid
-  companyId          String          @map("company_id") @db.Uuid
-  contentId          String?         @map("content_id") @db.Uuid
-  variantId          String?         @map("variant_id") @db.Uuid
-  requestedBy        String          @map("requested_by") @db.Uuid
-  promptVersionId    String          @map("prompt_version_id") @db.Uuid
-  module             String
-  operation          String
-  provider           String
-  model              String
-  mode               String
-  language           String
-  editorialRevision  Int?            @map("editorial_revision")
-  variantRevision    Int?            @map("variant_revision")
-  inputHash          String          @map("input_hash")
-  inputSnapshot      Json            @map("input_snapshot")
-  inputTokens        BigInt?         @map("input_tokens")
-  outputTokens       BigInt?         @map("output_tokens")
-  estimatedCostUsd   Decimal?        @map("estimated_cost_usd") @db.Decimal(18, 8)
-  costBasis          Json?           @map("cost_basis")
-  latencyMs          Int?            @map("latency_ms")
-  status             String
-  errorCode          String?         @map("error_code")
-  errorMessage       String?         @map("error_message")
-  providerRequestId  String?         @map("provider_request_id")
-  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  completedAt        DateTime?       @map("completed_at") @db.Timestamptz(3)
-  company            Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  content            Content?        @relation(fields: [contentId], references: [id], onDelete: Restrict)
-  variant            PlatformVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  requester          User            @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
-  promptVersion      PromptVersion   @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
-  idempotency        RequestIdempotency? @relation("RequestIdempotencyAiRequest")
-  brandAssessment    BrandAssessment?
+  id                              String                    @id @default(uuid()) @db.Uuid
+  companyId                       String                    @map("company_id") @db.Uuid
+  contentId                       String?                   @map("content_id") @db.Uuid
+  variantId                       String?                   @map("variant_id") @db.Uuid
+  requestedBy                     String                    @map("requested_by") @db.Uuid
+  promptVersionId                 String                    @map("prompt_version_id") @db.Uuid
+  module                          String
+  operation                       String
+  provider                        String
+  model                           String
+  mode                            String
+  language                        String
+  editorialRevision               Int?                      @map("editorial_revision")
+  variantRevision                 Int?                      @map("variant_revision")
+  inputHash                       String                    @map("input_hash")
+  inputSnapshot                   Json                      @map("input_snapshot")
+  inputTokens                     BigInt?                   @map("input_tokens")
+  outputTokens                    BigInt?                   @map("output_tokens")
+  estimatedCostUsd                Decimal?                  @map("estimated_cost_usd") @db.Decimal(18, 8)
+  costBasis                       Json?                     @map("cost_basis")
+  latencyMs                       Int?                      @map("latency_ms")
+  status                          String
+  errorCode                       String?                   @map("error_code")
+  errorMessage                    String?                   @map("error_message")
+  providerRequestId               String?                   @map("provider_request_id")
+  createdAt                       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt                     DateTime?                 @map("completed_at") @db.Timestamptz(3)
+  company                         Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  content                         Content?                  @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  variant                         PlatformVariant?          @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  requester                       User                      @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  promptVersion                   PromptVersion             @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  idempotency                     RequestIdempotency?       @relation("RequestIdempotencyAiRequest")
+  brandAssessment                 BrandAssessment?
+  creativeReferenceConceptBatches CreativeReferenceBatch[]  @relation("CreativeReferenceConceptPlanner")
+  creativeReferenceImages         CreativeReference[]       @relation("CreativeReferenceImage")
+  topicDiscoveryRuns              TopicDiscoveryRun[]
+  telegramMessages                TelegramIdeationMessage[]
 
   @@index([companyId, createdAt, id])
   @@index([contentId, createdAt])
@@ -550,16 +770,67 @@ model AiRequestLog {
   @@map("ai_request_logs")
 }
 
+model CreativeReferenceBatch {
+  id                           String              @id @default(uuid()) @db.Uuid
+  contentId                    String              @map("content_id") @db.Uuid
+  companyId                    String              @map("company_id") @db.Uuid
+  platform                     String
+  style                        String
+  mood                         String
+  requestedAspectRatio         String              @map("requested_aspect_ratio")
+  actualGeneratedSize          String              @map("actual_generated_size")
+  additionalInstruction        String?             @map("additional_instruction")
+  status                       String
+  conceptPlannerAiRequestLogId String?             @map("concept_planner_ai_request_log_id") @db.Uuid
+  createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt                  DateTime?           @map("completed_at") @db.Timestamptz(3)
+  content                      Content             @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  company                      Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  conceptPlannerAiRequest      AiRequestLog?       @relation("CreativeReferenceConceptPlanner", fields: [conceptPlannerAiRequestLogId], references: [id], onDelete: Restrict)
+  references                   CreativeReference[]
+
+  @@index([companyId, contentId, platform, createdAt])
+  @@index([contentId, platform, createdAt])
+  @@map("creative_reference_batches")
+}
+
+model CreativeReference {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  batchId             String                 @map("batch_id") @db.Uuid
+  conceptIndex        Int                    @map("concept_index")
+  conceptName         String                 @map("concept_name")
+  rationale           String
+  layoutNotes         String                 @map("layout_notes")
+  visualFocus         String                 @map("visual_focus")
+  typographyDirection String                 @map("typography_direction")
+  imagePrompt         String                 @map("image_prompt")
+  storageKey          String                 @unique @map("storage_key")
+  mimeType            String                 @map("mime_type")
+  fileSize            BigInt                 @map("file_size")
+  width               Int?
+  height              Int?
+  imageAiRequestLogId String?                @map("image_ai_request_log_id") @db.Uuid
+  selectedAt          DateTime?              @map("selected_at") @db.Timestamptz(3)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  batch               CreativeReferenceBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  imageAiRequest      AiRequestLog?          @relation("CreativeReferenceImage", fields: [imageAiRequestLogId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, conceptIndex])
+  @@index([batchId, selectedAt])
+  @@map("creative_references")
+}
+
 model AiRateVersion {
-  id                 String   @id @default(uuid()) @db.Uuid
-  provider           String
-  model              String
-  version            String
+  id                  String   @id @default(uuid()) @db.Uuid
+  provider            String
+  model               String
+  version             String
   inputUsdPerMillion  Decimal  @map("input_usd_per_million") @db.Decimal(18, 8)
   outputUsdPerMillion Decimal  @map("output_usd_per_million") @db.Decimal(18, 8)
-  effectiveFrom      DateTime @map("effective_from") @db.Timestamptz(3)
-  sourceReference    String   @map("source_reference")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  effectiveFrom       DateTime @map("effective_from") @db.Timestamptz(3)
+  sourceReference     String   @map("source_reference")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([provider, model, version])
   @@index([provider, model, effectiveFrom])
@@ -567,23 +838,23 @@ model AiRateVersion {
 }
 
 model SocialAccount {
-  id                    String       @id @default(uuid()) @db.Uuid
-  companyId             String       @map("company_id") @db.Uuid
-  platform              String
-  accountName           String?      @map("account_name")
-  externalAccountId     String?      @map("external_account_id")
-  mode                  String
-  connectionStatus      String       @map("connection_status")
-  reportingTimezone     String       @map("reporting_timezone")
-  lastSuccessfulSyncAt  DateTime?    @map("last_successful_sync_at") @db.Timestamptz(3)
-  credentialReference   String?      @map("credential_reference")
-  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version               Int          @default(1)
-  company               Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  weeklyMetrics         WeeklyMetric[]
-  inquiryMetrics        InboundInquiryMetric[]
-  publicationMetrics    PublicationMetric[]
+  id                   String                 @id @default(uuid()) @db.Uuid
+  companyId            String                 @map("company_id") @db.Uuid
+  platform             String
+  accountName          String?                @map("account_name")
+  externalAccountId    String?                @map("external_account_id")
+  mode                 String
+  connectionStatus     String                 @map("connection_status")
+  reportingTimezone    String                 @map("reporting_timezone")
+  lastSuccessfulSyncAt DateTime?              @map("last_successful_sync_at") @db.Timestamptz(3)
+  credentialReference  String?                @map("credential_reference")
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version              Int                    @default(1)
+  company              Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  weeklyMetrics        WeeklyMetric[]
+  inquiryMetrics       InboundInquiryMetric[]
+  publicationMetrics   PublicationMetric[]
 
   @@unique([companyId, platform])
   @@index([companyId, platform])
@@ -591,27 +862,27 @@ model SocialAccount {
 }
 
 model WeeklyMetric {
-  id                    String        @id @default(uuid()) @db.Uuid
-  socialAccountId      String        @map("social_account_id") @db.Uuid
-  weekStart             DateTime      @map("week_start") @db.Date
-  weekEnd               DateTime      @map("week_end") @db.Date
-  followers             BigInt
-  reach                 BigInt?
-  impressions           BigInt?
-  likes                 BigInt?
-  comments              BigInt?
-  saves                 BigInt?
-  reportedPublishedPosts Int          @map("reported_published_posts")
-  source                String
-  evidenceAssetId       String?       @map("evidence_asset_id") @db.Uuid
-  notes                 String?
-  recordedBy            String?       @map("recorded_by") @db.Uuid
-  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version               Int           @default(1)
-  socialAccount         SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
-  evidenceAsset         CreativeAsset? @relation(fields: [evidenceAssetId], references: [id], onDelete: Restrict)
-  recorder              User?         @relation("MetricRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
+  id                     String         @id @default(uuid()) @db.Uuid
+  socialAccountId        String         @map("social_account_id") @db.Uuid
+  weekStart              DateTime       @map("week_start") @db.Date
+  weekEnd                DateTime       @map("week_end") @db.Date
+  followers              BigInt
+  reach                  BigInt?
+  impressions            BigInt?
+  likes                  BigInt?
+  comments               BigInt?
+  saves                  BigInt?
+  reportedPublishedPosts Int            @map("reported_published_posts")
+  source                 String
+  evidenceAssetId        String?        @map("evidence_asset_id") @db.Uuid
+  notes                  String?
+  recordedBy             String?        @map("recorded_by") @db.Uuid
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                Int            @default(1)
+  socialAccount          SocialAccount  @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  evidenceAsset          CreativeAsset? @relation(fields: [evidenceAssetId], references: [id], onDelete: Restrict)
+  recorder               User?          @relation("MetricRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
 
   @@unique([socialAccountId, weekStart, weekEnd])
   @@index([socialAccountId, weekStart])
@@ -620,18 +891,18 @@ model WeeklyMetric {
 }
 
 model InboundInquiryMetric {
-  id               String        @id @default(uuid()) @db.Uuid
+  id              String        @id @default(uuid()) @db.Uuid
   socialAccountId String        @map("social_account_id") @db.Uuid
-  weekStart        DateTime      @map("week_start") @db.Date
-  weekEnd          DateTime      @map("week_end") @db.Date
-  count            Int
-  source           String
-  recordedBy       String?       @map("recorded_by") @db.Uuid
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version          Int           @default(1)
-  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
-  recorder         User?         @relation("InquiryRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
+  weekStart       DateTime      @map("week_start") @db.Date
+  weekEnd         DateTime      @map("week_end") @db.Date
+  count           Int
+  source          String
+  recordedBy      String?       @map("recorded_by") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version         Int           @default(1)
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  recorder        User?         @relation("InquiryRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
 
   @@unique([socialAccountId, weekStart, weekEnd])
   @@index([socialAccountId, weekStart])

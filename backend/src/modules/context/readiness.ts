@@ -33,3 +33,36 @@ export function productContextReadiness(input: {
   return { ready: missing.length === 0, missing }
 }
 
+/**
+ * Discovery happens before Content exists. Its gate intentionally covers only
+ * the M1 facts needed to make a useful topic search, not downstream brand or
+ * Content-generation requirements.
+ */
+export function companyTopicDiscoveryReadiness(input: {
+  description: string
+  customerSegments: string[]
+  decisionMakers: string[]
+  painPoints: string[]
+}): ReadinessResult {
+  const missing: string[] = []
+  if (!input.description.trim()) missing.push('company.description')
+  if (input.customerSegments.length === 0 && input.decisionMakers.length === 0) missing.push('company.audience')
+  if (input.painPoints.length === 0) missing.push('company.painPoints')
+  return { ready: missing.length === 0, missing }
+}
+
+export function productTopicDiscoveryReadiness(input: {
+  name: string
+  description: string
+  targetUsers: string[]
+  targetOrganizations: string[]
+  problemsAddressed: string[]
+  valueProposition: string | null
+}): ReadinessResult {
+  const missing: string[] = []
+  if (!input.name.trim()) missing.push('product.name')
+  if (!input.description.trim()) missing.push('product.description')
+  if (input.targetUsers.length === 0 && input.targetOrganizations.length === 0) missing.push('profile.audience')
+  if (input.problemsAddressed.length === 0 && !input.valueProposition?.trim()) missing.push('profile.relevance')
+  return { ready: missing.length === 0, missing }
+}

@@ -110,6 +110,23 @@ export const useContentIdeasStore = defineStore('contentIdeas', () => {
     return Boolean(await mutateIdea(() => ideasApi.restoreIdea(id, etag), 'Unable to restore the idea.'))
   }
 
+  async function remove(id: string) {
+    const etag = etags.value[id] ?? versions.value[id]
+    if (etag === undefined) return false
+    error.value = ''
+    try {
+      await ideasApi.deleteIdea(id, etag)
+      ideas.value = ideas.value.filter((item) => item.id !== id)
+      delete etags.value[id]
+      delete versions.value[id]
+      return true
+    } catch (reason: unknown) {
+      error.value = errorMessage(reason, 'Unable to delete the idea.')
+      if (error.value.includes('changed elsewhere')) await load(true)
+      return false
+    }
+  }
+
   // Idea usage is committed by the backend transaction that creates Content.
   // This compatibility method intentionally does not mutate canonical state.
   function markUsed(_id: string) { return false }
@@ -138,5 +155,5 @@ export const useContentIdeasStore = defineStore('contentIdeas', () => {
     }
   }
 
-  return { ideas, etags, versions, loading, loaded, error, recentReadyIdeas, load, save, duplicate, archive, restore, markUsed, linkContent }
+  return { ideas, etags, versions, loading, loaded, error, recentReadyIdeas, load, save, duplicate, archive, restore, remove, markUsed, linkContent }
 })

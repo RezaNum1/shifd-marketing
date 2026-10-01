@@ -141,6 +141,9 @@ export interface BackendIdea {
   objective: string
   targetAudience: string | null
   notes: string | null
+  sourceType?: string | null
+  sourceReference?: string | null
+  sourceSummary?: string | null
   status: BackendIdeaStatus
   relatedContentIds: string[]
   version: number
@@ -172,6 +175,44 @@ export interface BackendVisualDirection {
   concept: string
   structure: string[]
   notes: string
+}
+
+export type CreativeReferencePlatform = 'instagram' | 'linkedin'
+export type CreativeReferenceStyle = 'modern_minimal' | 'corporate' | 'editorial' | 'bold_typography' | 'product_ui_focused' | 'abstract_technology'
+export type CreativeReferenceMood = 'professional' | 'confident' | 'approachable' | 'innovative' | 'clean'
+export type CreativeReferenceAspectRatio = 'portrait_4_5' | 'square_1_1' | 'landscape'
+
+export interface BackendCreativeReference {
+  id: string
+  conceptIndex: number
+  conceptName: string
+  rationale: string
+  layoutNotes: string
+  visualFocus: string
+  typographyDirection: string
+  imageUrl: string
+  mimeType: 'image/png'
+  fileSize: number
+  width: number | null
+  height: number | null
+  selected: boolean
+  selectedAt: string | null
+  createdAt: string
+}
+
+export interface BackendCreativeReferenceBatch {
+  id: string
+  contentId: string
+  platform: CreativeReferencePlatform
+  style: CreativeReferenceStyle
+  mood: CreativeReferenceMood
+  requestedAspectRatio: CreativeReferenceAspectRatio
+  actualGeneratedSize: string
+  additionalInstruction: string | null
+  status: 'pending' | 'completed' | 'partial' | 'failed'
+  createdAt: string
+  completedAt: string | null
+  references: BackendCreativeReference[]
 }
 
 export interface BackendAsset {
@@ -564,3 +605,10 @@ export interface BackendIntegration {
 }
 
 export type BackendIntegrations = Partial<Record<'instagram' | 'linkedin' | 'whatsapp', BackendIntegration>>
+
+export interface BackendTelegramIntegration {
+  status: 'connected' | 'disconnected'
+  telegramUsername: string | null
+  activeProduct: { id: string; name: string } | null
+  linkedAt: string | null
+}

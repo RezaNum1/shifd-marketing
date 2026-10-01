@@ -14,6 +14,7 @@ import type { Tone } from '../types/ui'
 const router = useRouter()
 const integrations = useIntegrationsStore()
 const disconnectOpen = ref(false)
+const telegramDisconnectOpen = ref(false)
 const instagram = computed(() => integrations.instagram ?? { id: 'instagram' as const, platform: 'Instagram' as const, status: 'disconnected' as const, futureSource: 'Not configured' })
 
 function instagramTone(): Tone { return instagram.value.status === 'connected' ? 'success' : 'neutral' }
@@ -51,6 +52,15 @@ onMounted(() => { void integrations.load() })
       </BaseCard>
 
       <BaseCard class="integration-card">
+        <template #header><div class="integration-card__header"><div class="integration-card__identity"><span class="integration-card__icon is-telegram"><AppIcon name="idea" :size="20" /></span><div><h2 class="text-headline-sm font-semibold">Telegram</h2><p class="text-body-sm text-muted">Conversational M2 ideation</p></div></div><StatusBadge :tone="integrations.telegram.status === 'connected' ? 'success' : 'neutral'" dot>{{ integrations.telegram.status === 'connected' ? 'Connected' : 'Not Connected' }}</StatusBadge></div></template>
+        <div class="integration-card__body">
+          <dl class="integration-details"><div><dt>Linked account</dt><dd>{{ integrations.telegram.telegramUsername ? `@${integrations.telegram.telegramUsername}` : '—' }}</dd></div><div><dt>Active context</dt><dd>{{ integrations.telegram.activeProduct?.name || 'Company-level' }}</dd></div><div><dt>Purpose</dt><dd>Text-only idea brainstorming and confirmation</dd></div></dl>
+          <p v-if="integrations.telegramLink" class="integration-helper">Link expires {{ new Date(integrations.telegramLink.expiresAt).toLocaleString() }}. Open Telegram and complete /start.</p>
+          <div class="integration-actions"><BaseButton v-if="integrations.telegram.status !== 'connected'" @click="integrations.connectTelegram">Connect Telegram</BaseButton><BaseButton v-else variant="secondary" @click="integrations.connectTelegram">Reconnect</BaseButton><BaseButton v-if="integrations.telegram.status === 'connected'" variant="ghost" @click="telegramDisconnectOpen = true">Disconnect</BaseButton></div>
+        </div>
+      </BaseCard>
+
+      <BaseCard class="integration-card">
         <template #header><div class="integration-card__header"><div class="integration-card__identity"><span class="integration-card__icon is-linkedin"><AppIcon name="library" :size="20" /></span><div><h2 class="text-headline-sm font-semibold">LinkedIn</h2><p class="text-body-sm text-muted">Manual performance data</p></div></div><StatusBadge tone="info" dot>Manual Entry</StatusBadge></div></template>
         <div class="integration-card__body"><dl class="integration-details"><div><dt>Data Source</dt><dd>Manual Entry</dd></div><div><dt>Data Used</dt><dd>Followers, reach, impressions, engagements, published posts</dd></div><div><dt>Purpose</dt><dd>Weekly LinkedIn performance tracking</dd></div></dl><div class="integration-actions"><BaseButton variant="secondary" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="15" /></BaseButton></div></div>
       </BaseCard>
@@ -64,6 +74,7 @@ onMounted(() => { void integrations.load() })
     <BaseCard title="Data Source Summary" description="The current configuration keeps source modes explicit and lightweight."><div class="source-summary"><div><span class="source-summary__dot" :class="instagram.status === 'connected' ? 'is-connected' : 'is-manual'" /><div><strong>Instagram</strong><small>{{ instagram.mode === 'api' ? 'Instagram API source' : instagram.mode === 'demo' ? 'Demo source' : 'Not configured' }}</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>LinkedIn</strong><small>{{ integrations.linkedin?.dataSource || 'Manual Entry' }}</small></div></div><div><span class="source-summary__dot is-manual" /><div><strong>WhatsApp Business</strong><small>{{ integrations.whatsapp?.dataSource || 'Manual Entry' }}</small></div></div></div></BaseCard>
 
     <BaseModal v-model="disconnectOpen" title="Disconnect Instagram?" description="Performance data already recorded in Shifd Marketing will remain available. Future synchronization will stop."><template #footer><BaseButton variant="ghost" @click="disconnectOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="integrations.disconnectInstagram(); disconnectOpen = false">Disconnect</BaseButton></template></BaseModal>
+    <BaseModal v-model="telegramDisconnectOpen" title="Disconnect Telegram?" description="Telegram access will stop. Ideas already saved in Shifd Marketing will remain available."><template #footer><BaseButton variant="ghost" @click="telegramDisconnectOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="integrations.disconnectTelegram(); telegramDisconnectOpen = false">Disconnect</BaseButton></template></BaseModal>
     </template>
   </div>
 </template>
@@ -81,6 +92,7 @@ onMounted(() => { void integrations.load() })
 .integration-card__icon.is-instagram { color: #7c3aed; }
 .integration-card__icon.is-linkedin { color: #2563eb; }
 .integration-card__icon.is-whatsapp { color: #047857; }
+.integration-card__icon.is-telegram { color: #0284c7; }
 .integration-card__body { display: grid; gap: 16px; }
 .integration-details { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-border); }
 .integration-details div { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); gap: 12px; padding: 11px 12px; background: var(--color-surface); font-size: 12px; line-height: 1.4; }

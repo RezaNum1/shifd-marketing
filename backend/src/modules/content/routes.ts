@@ -6,7 +6,7 @@ import { OBJECTIVES, PILLARS } from '../context/constants.js'
 import { allowedKeys, enumValue, object, optionalText, requiredText, textList } from '../context/normalize.js'
 import { DESIGN_STATUSES, IDEA_CONTEXT_TYPES, IDEA_STATUSES, PLATFORM_CODES, PROGRESS_STAGES, type DesignStatus, type IdeaContextType, type IdeaStatus, type ObjectiveCode, type PlatformCode, type ProgressStage } from './constants.js'
 import {
-  archiveContent, archiveIdea, createContent, createIdea, duplicateContent, duplicateIdea, listContentEvents,
+  archiveContent, archiveIdea, createContent, createIdea, deleteIdea, duplicateContent, duplicateIdea, listContentEvents,
   listContents, listIdeas, progressContent, readContent, restoreIdea, type BriefInput, type ContentCreateInput,
   type ContentPatchInput, type IdeaInput, type MasterInput, type VariantCopyInput, type VisualDirectionInput, updateContent,
   updateIdea, updateVariantCopy,
@@ -91,6 +91,15 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const idea = await restoreIdea(app.prisma, auth.user.companyId, routeId(request), ifMatch(request))
     reply.header('ETag', etag(idea.version))
     return reply.send({ data: idea })
+  })
+
+  app.delete('/content-ideas/:id', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    requireEmptyBody(request.body)
+    await deleteIdea(app.prisma, auth.user.companyId, routeId(request), ifMatch(request))
+    return reply.status(204).send()
   })
 
   app.get('/contents', async (request, reply) => {

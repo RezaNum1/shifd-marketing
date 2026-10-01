@@ -19,12 +19,22 @@ export interface AppConfig {
   assetUnattachedGraceHours: number
   openaiApiKey: string | null
   openaiModel: string | null
+  openaiImageModel?: string
+  openaiImageQuality?: 'low' | 'medium' | 'high'
+  openaiImageFormat?: 'png'
   instagramAccessToken?: string | null
   instagramAppSecret?: string | null
   instagramAppId?: string | null
   instagramUserId?: string | null
   aiRequestTimeoutMs: number
   aiMaxOutputTokens: number
+  topicDiscoveryMaxOutputTokens: number
+  telegramBotToken?: string | null
+  telegramBotUsername?: string | null
+  telegramWebhookSecret?: string | null
+  telegramPublicWebhookUrl?: string | null
+  telegramLinkTokenTtlMinutes?: number
+  telegramIdeationMaxOutputTokens?: number
 }
 
 export class ConfigError extends Error {
@@ -61,7 +71,7 @@ function parseBoundedPositiveInteger(name: string, value: string | undefined, de
 function optionalConfigText(name: string, value: string | undefined, fields: Record<string, string>) {
   const trimmed = value?.trim() || null
   if (trimmed?.includes('\0') || trimmed?.includes('\r') || trimmed?.includes('\n')) fields[name] = 'Must not contain control characters.'
-  if (trimmed && ((name === 'OPENAI_API_KEY' && trimmed.length > 5000) || (name === 'OPENAI_MODEL' && trimmed.length > 200))) fields[name] = 'Value is too long.'
+  if (trimmed && ((name === 'OPENAI_API_KEY' && trimmed.length > 5000) || (name === 'OPENAI_MODEL' && trimmed.length > 200) || (name === 'OPENAI_IMAGE_MODEL' && trimmed.length > 200) || (name.startsWith('TELEGRAM_') && trimmed.length > 5000))) fields[name] = 'Value is too long.'
   return trimmed
 }
 
@@ -92,12 +102,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const assetUnattachedGraceHours = parsePositiveInteger('ASSET_UNATTACHED_GRACE_HOURS', env.ASSET_UNATTACHED_GRACE_HOURS, 168, fields)
   const openaiApiKey = optionalConfigText('OPENAI_API_KEY', env.OPENAI_API_KEY, fields)
   const openaiModel = optionalConfigText('OPENAI_MODEL', env.OPENAI_MODEL, fields)
+  const openaiImageModel = optionalConfigText('OPENAI_IMAGE_MODEL', env.OPENAI_IMAGE_MODEL, fields) || 'gpt-image-2'
+  const openaiImageQuality = (env.OPENAI_IMAGE_QUALITY?.trim() || 'medium') as 'low' | 'medium' | 'high'
+  if (!['low', 'medium', 'high'].includes(openaiImageQuality)) fields.OPENAI_IMAGE_QUALITY = 'Must be low, medium, or high.'
+  const openaiImageFormat = 'png' as const
+  if (env.OPENAI_IMAGE_FORMAT?.trim() && env.OPENAI_IMAGE_FORMAT.trim() !== 'png') fields.OPENAI_IMAGE_FORMAT = 'Only png is supported for visual references.'
   const instagramAccessToken = optionalConfigText('INSTAGRAM_ACCESS_TOKEN', env.INSTAGRAM_ACCESS_TOKEN, fields)
   const instagramAppSecret = optionalConfigText('INSTAGRAM_APP_SECRET', env.INSTAGRAM_APP_SECRET, fields)
   const instagramAppId = optionalConfigText('INSTAGRAM_APP_ID', env.INSTAGRAM_APP_ID, fields)
   const instagramUserId = optionalConfigText('INSTAGRAM_USER_ID', env.INSTAGRAM_USER_ID, fields)
   const aiRequestTimeoutMs = parseBoundedPositiveInteger('AI_REQUEST_TIMEOUT_MS', env.AI_REQUEST_TIMEOUT_MS, 60_000, 300_000, fields)
   const aiMaxOutputTokens = parseBoundedPositiveInteger('AI_MAX_OUTPUT_TOKENS', env.AI_MAX_OUTPUT_TOKENS, 2_048, 32_768, fields)
+  const topicDiscoveryMaxOutputTokens = parseBoundedPositiveInteger('TOPIC_DISCOVERY_MAX_OUTPUT_TOKENS', env.TOPIC_DISCOVERY_MAX_OUTPUT_TOKENS, 4_096, 32_768, fields)
+  const telegramBotToken = optionalConfigText('TELEGRAM_BOT_TOKEN', env.TELEGRAM_BOT_TOKEN, fields)
+  const telegramBotUsername = optionalConfigText('TELEGRAM_BOT_USERNAME', env.TELEGRAM_BOT_USERNAME, fields)
+  const telegramWebhookSecret = optionalConfigText('TELEGRAM_WEBHOOK_SECRET', env.TELEGRAM_WEBHOOK_SECRET, fields)
+  const telegramPublicWebhookUrl = optionalConfigText('TELEGRAM_PUBLIC_WEBHOOK_URL', env.TELEGRAM_PUBLIC_WEBHOOK_URL, fields)
+  if (telegramPublicWebhookUrl) {
+    try {
+      const parsed = new URL(telegramPublicWebhookUrl)
+      if (nodeEnv === 'production' && parsed.protocol !== 'https:') fields.TELEGRAM_PUBLIC_WEBHOOK_URL = 'Must use HTTPS in production.'
+    } catch { fields.TELEGRAM_PUBLIC_WEBHOOK_URL = 'Must be a valid webhook URL.' }
+  }
+  const telegramLinkTokenTtlMinutes = parseBoundedPositiveInteger('TELEGRAM_LINK_TOKEN_TTL_MINUTES', env.TELEGRAM_LINK_TOKEN_TTL_MINUTES, 10, 60, fields)
+  const telegramIdeationMaxOutputTokens = parseBoundedPositiveInteger('TELEGRAM_IDEATION_MAX_OUTPUT_TOKENS', env.TELEGRAM_IDEATION_MAX_OUTPUT_TOKENS, 800, 8_192, fields)
   if (Object.keys(fields).length) throw new ConfigError(fields)
-  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, instagramAccessToken, instagramAppSecret, instagramAppId, instagramUserId, aiRequestTimeoutMs, aiMaxOutputTokens }
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, openaiImageModel, openaiImageQuality, openaiImageFormat, instagramAccessToken, instagramAppSecret, instagramAppId, instagramUserId, aiRequestTimeoutMs, aiMaxOutputTokens, topicDiscoveryMaxOutputTokens, telegramBotToken, telegramBotUsername, telegramWebhookSecret, telegramPublicWebhookUrl, telegramLinkTokenTtlMinutes, telegramIdeationMaxOutputTokens }
 }

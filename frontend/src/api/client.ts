@@ -159,6 +159,9 @@ function messageFor(code: string, backendMessage: string) {
     case 'UNSUPPORTED_MEDIA_TYPE': return 'Only PNG and JPEG creative files are supported.'
     case 'AI_NOT_CONFIGURED': return 'AI generation is not configured for this environment.'
     case 'AI_TIMEOUT': return 'The AI provider timed out. Try this action again intentionally.'
+    case 'DISCOVERY_COMPANY_CONTEXT_INCOMPLETE': return 'Complete the Company Context before discovering topics.'
+    case 'DISCOVERY_PRODUCT_CONTEXT_INCOMPLETE': return 'Complete the selected Product Context before discovering topics.'
+    case 'DISCOVERY_NOT_CONFIGURED': return 'Current Topic Discovery is not configured for this environment.'
     default: return backendMessage || 'The request could not be completed.'
   }
 }

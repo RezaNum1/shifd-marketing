@@ -17,3 +17,4 @@ export function updateIdea(id: string, input: IdeaInput, etag: string | number) 
 export function duplicateIdea(id: string, etag: string | number, idempotencyKey = createRequestKey('idea.duplicate')) { return request<BackendIdea>(`/content-ideas/${id}/duplicate`, { method: 'POST', json: {}, ifMatch: etag, idempotencyKey }) }
 export function archiveIdea(id: string, etag: string | number) { return request<BackendIdea>(`/content-ideas/${id}/archive`, { method: 'POST', json: {}, ifMatch: etag }) }
 export function restoreIdea(id: string, etag: string | number) { return request<BackendIdea>(`/content-ideas/${id}/restore`, { method: 'POST', json: {}, ifMatch: etag }) }
+export function deleteIdea(id: string, etag: string | number) { return request<void>(`/content-ideas/${id}`, { method: 'DELETE', json: {}, ifMatch: etag }) }

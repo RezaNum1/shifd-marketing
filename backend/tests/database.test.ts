@@ -24,6 +24,7 @@ const config: AppConfig = {
   openaiModel: null,
   aiRequestTimeoutMs: 60_000,
   aiMaxOutputTokens: 2_048,
+  topicDiscoveryMaxOutputTokens: 4_096,
 }
 
 describe('PostgreSQL foundation', () => {

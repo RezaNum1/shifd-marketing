@@ -9,7 +9,7 @@ const valid = {
 
 describe('configuration validation', () => {
   it('loads valid required configuration', () => {
-    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN, sessionIdleMinutes: 480, sessionAbsoluteHours: 24, loginRateLimitMax: 5, loginRateLimitWindowMinutes: 15, openaiApiKey: null, openaiModel: null, aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048 })
+    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN, sessionIdleMinutes: 480, sessionAbsoluteHours: 24, loginRateLimitMax: 5, loginRateLimitWindowMinutes: 15, openaiApiKey: null, openaiModel: null, openaiImageModel: 'gpt-image-2', openaiImageQuality: 'medium', openaiImageFormat: 'png', aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048, topicDiscoveryMaxOutputTokens: 4_096 })
   })
 
   it('fails fast for invalid required values', () => {
@@ -29,9 +29,11 @@ describe('configuration validation', () => {
   })
 
   it('allows absent AI credentials but validates bounded AI settings', () => {
-    expect(loadConfig(valid)).toMatchObject({ openaiApiKey: null, openaiModel: null, aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048 })
-    expect(loadConfig({ ...valid, OPENAI_API_KEY: ' secret ', OPENAI_MODEL: 'gpt-5.6-luna', AI_REQUEST_TIMEOUT_MS: '1000', AI_MAX_OUTPUT_TOKENS: '512' })).toMatchObject({ openaiApiKey: 'secret', openaiModel: 'gpt-5.6-luna', aiRequestTimeoutMs: 1000, aiMaxOutputTokens: 512 })
+    expect(loadConfig(valid)).toMatchObject({ openaiApiKey: null, openaiModel: null, aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048, topicDiscoveryMaxOutputTokens: 4_096 })
+    expect(loadConfig({ ...valid, OPENAI_API_KEY: ' secret ', OPENAI_MODEL: 'gpt-5.6-luna', AI_REQUEST_TIMEOUT_MS: '1000', AI_MAX_OUTPUT_TOKENS: '512', TOPIC_DISCOVERY_MAX_OUTPUT_TOKENS: '8192' })).toMatchObject({ openaiApiKey: 'secret', openaiModel: 'gpt-5.6-luna', aiRequestTimeoutMs: 1000, aiMaxOutputTokens: 512, topicDiscoveryMaxOutputTokens: 8_192 })
     expect(() => loadConfig({ ...valid, AI_REQUEST_TIMEOUT_MS: '0' })).toThrow(ConfigError)
     expect(() => loadConfig({ ...valid, AI_MAX_OUTPUT_TOKENS: '999999' })).toThrow(ConfigError)
+    expect(() => loadConfig({ ...valid, TOPIC_DISCOVERY_MAX_OUTPUT_TOKENS: '0' })).toThrow(ConfigError)
+    expect(() => loadConfig({ ...valid, TOPIC_DISCOVERY_MAX_OUTPUT_TOKENS: '999999' })).toThrow(ConfigError)
   })
 })

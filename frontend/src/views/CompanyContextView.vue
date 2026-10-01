@@ -130,15 +130,7 @@ onMounted(() => { void store.load() })
 .context-list-grid > :last-child:nth-child(4) { grid-column: 1 / -1; }
 .brand-list-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .brand-list-grid > :last-child:nth-child(4) { grid-column: auto; }
-.context-list-editor { display: grid; gap: 10px; }
-.context-list-editor__heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.context-list-editor__hint, .bmc-hint { color: var(--color-subtle); font-size: 12px; }
-.context-list-editor__input { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
-.context-list-editor__input > :first-child { width: 100%; }
-.context-list-editor__input > .ui-button { align-self: flex-start; }
-.context-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.context-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px 5px 10px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-ink); background: var(--color-well); font-size: 12px; }
-.context-chip button { display: inline-flex; align-items: center; color: var(--color-subtle); }
+.bmc-hint { color: var(--color-subtle); font-size: 12px; }
 .context-choice-group { display: flex; gap: 8px; }
 .context-choice { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 7px 12px; border: 1px solid var(--color-control-border); border-radius: var(--radius-control); color: var(--color-muted); font-size: 13px; }
 .context-choice:has(input:checked) { border-color: var(--color-primary); background: var(--color-info-soft); color: var(--color-ink); }

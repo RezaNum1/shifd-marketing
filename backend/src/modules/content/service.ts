@@ -18,6 +18,9 @@ export interface IdeaInput {
   objective: ObjectiveCode
   targetAudience: string | null
   notes: string | null
+  sourceType?: string | null
+  sourceReference?: string | null
+  sourceSummary?: string | null
 }
 
 export interface BriefInput {
@@ -122,12 +125,23 @@ export async function createIdea(prisma: PrismaClient, companyId: string, actorI
     key: idempotencyKey,
     normalizedRequest: { actorId, idea: input },
     execute: async (tx) => {
-      await validateNewContextReference(tx, companyId, input.contextType, input.productId, input.pillarCode, input.objective)
-      const idea = await tx.contentIdea.create({ data: { companyId, ...input, createdBy: actorId } })
-      const mapped = await readIdea(tx, companyId, idea.id)
+      const mapped = await createIdeaInTransaction(tx, companyId, actorId, input)
+      const idea = { id: mapped.id }
       return { resourceId: idea.id, status: 201, body: { data: mapped }, etag: etag(mapped.version) }
     },
   })
+}
+
+/**
+ * Canonical Idea creation for callers that already own a transaction. The
+ * public createIdea command remains the normal path for manual Ideas; this
+ * helper lets source-backed discovery convert a candidate atomically without
+ * creating a parallel Idea persistence rule.
+ */
+export async function createIdeaInTransaction(db: Db, companyId: string, actorId: string, input: IdeaInput) {
+  await validateNewContextReference(db, companyId, input.contextType, input.productId, input.pillarCode, input.objective)
+  const idea = await db.contentIdea.create({ data: { companyId, ...input, createdBy: actorId } })
+  return readIdea(db, companyId, idea.id)
 }
 
 export async function readIdea(db: Db, companyId: string, ideaId: string) {
@@ -148,18 +162,22 @@ export async function listIdeas(prisma: PrismaClient, companyId: string, options
   if (options.pillarCode) filters.push({ pillarCode: options.pillarCode })
   if (options.objective) filters.push({ objective: options.objective })
   if (options.search) {
-    filters.push({ OR: [
-      { title: { contains: options.search, mode: 'insensitive' } },
-      { notes: { contains: options.search, mode: 'insensitive' } },
-      { targetAudience: { contains: options.search, mode: 'insensitive' } },
-      { product: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
-      { company: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
-    ] })
+    filters.push({
+      OR: [
+        { title: { contains: options.search, mode: 'insensitive' } },
+        { notes: { contains: options.search, mode: 'insensitive' } },
+        { targetAudience: { contains: options.search, mode: 'insensitive' } },
+        { product: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
+        { company: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
+      ]
+    })
   }
-  if (options.cursor) filters.push({ OR: [
-    { updatedAt: { lt: options.cursor.createdAt } },
-    { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
-  ] })
+  if (options.cursor) filters.push({
+    OR: [
+      { updatedAt: { lt: options.cursor.createdAt } },
+      { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
+    ]
+  })
   const rows = await prisma.contentIdea.findMany({
     where: { AND: filters },
     include: { sourceContents: { select: { id: true }, orderBy: { id: 'asc' } } },
@@ -205,6 +223,9 @@ export async function duplicateIdea(prisma: PrismaClient, companyId: string, act
           objective: source.objective,
           targetAudience: source.targetAudience,
           notes: source.notes,
+          sourceType: null,
+          sourceReference: null,
+          sourceSummary: null,
           status: 'ready',
           createdBy: actorId,
         },
@@ -231,6 +252,17 @@ export async function restoreIdea(prisma: PrismaClient, companyId: string, ideaI
     if (locked.status !== 'archived') throw conflict('Only Archived Ideas can be restored.')
     await tx.contentIdea.update({ where: { id: ideaId }, data: { status: 'ready', version: { increment: 1 } } })
     return readIdea(tx, companyId, ideaId)
+  })
+}
+
+export async function deleteIdea(prisma: PrismaClient, companyId: string, ideaId: string, expectedVersion: number) {
+  return prisma.$transaction(async (tx) => {
+    const locked = await lockIdea(tx, companyId, ideaId, expectedVersion)
+    if (locked.status !== 'ready') throw conflict('Only Ready Ideas can be deleted.')
+    // Clear FK references before hard-delete to avoid onDelete: Restrict violations
+    await tx.topicCandidate.updateMany({ where: { createdIdeaId: ideaId }, data: { createdIdeaId: null } })
+    await tx.telegramIdeaDraft.updateMany({ where: { ideaId }, data: { ideaId: null } })
+    await tx.contentIdea.delete({ where: { id: ideaId } })
   })
 }
 
@@ -294,17 +326,21 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   if (options.lifecycleStatus === 'Archived') filters.push({ archivedAt: { not: null } })
   else if (options.lifecycleStatus) filters.push({ archivedAt: null })
   if (options.search) {
-    filters.push({ OR: [
-      { brief: { is: { topic: { contains: options.search, mode: 'insensitive' } } } },
-      { company: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
-      { product: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
-      { masterContent: { path: ['title'], string_contains: options.search } },
-    ] })
+    filters.push({
+      OR: [
+        { brief: { is: { topic: { contains: options.search, mode: 'insensitive' } } } },
+        { company: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
+        { product: { is: { name: { contains: options.search, mode: 'insensitive' } } } },
+        { masterContent: { path: ['title'], string_contains: options.search } },
+      ]
+    })
   }
-  if (options.cursor) filters.push({ OR: [
-    { updatedAt: { lt: options.cursor.createdAt } },
-    { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
-  ] })
+  if (options.cursor) filters.push({
+    OR: [
+      { updatedAt: { lt: options.cursor.createdAt } },
+      { updatedAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
+    ]
+  })
   const requiresDerivedLifecycleFilter = options.lifecycleStatus !== undefined && options.lifecycleStatus !== 'Archived'
   const asOf = new Date()
   const rows = await prisma.content.findMany({
@@ -401,11 +437,13 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
       where: { id: variant.id },
       data: { ...input, revision: { increment: 1 }, adaptedFromMasterRevision: content.masterRevision },
     })
-    await tx.content.update({ where: { id: contentId }, data: {
-      version: { increment: 1 },
-      editorialRevision: { increment: 1 },
-      ...(copyChanged && content.editorialStage !== 'draft' ? { editorialStage: 'draft' } : {}),
-    } })
+    await tx.content.update({
+      where: { id: contentId }, data: {
+        version: { increment: 1 },
+        editorialRevision: { increment: 1 },
+        ...(copyChanged && content.editorialStage !== 'draft' ? { editorialStage: 'draft' } : {}),
+      }
+    })
     await appendEvent(tx, { contentId, variantId: variant.id, actorId, eventType: 'variant_updated', metadata: { platform, masterRevision: content.masterRevision, stageRegressed: copyChanged && content.editorialStage !== 'draft' }, requestId })
     return readContentFromDb(tx, companyId, contentId, config)
   })
@@ -451,14 +489,16 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
           createdBy: actorId,
           masterContent: master ? toJson(master) : Prisma.DbNull,
           visualDirection: direction ? toJson(direction) : Prisma.DbNull,
-          brief: { create: {
-            pillarCode: source.brief.pillarCode,
-            objective: source.brief.objective,
-            targetAudience: source.brief.targetAudience,
-            topic: source.brief.topic,
-            angle: source.brief.angle,
-            additionalInstructions: source.brief.additionalInstructions,
-          } },
+          brief: {
+            create: {
+              pillarCode: source.brief.pillarCode,
+              objective: source.brief.objective,
+              targetAudience: source.brief.targetAudience,
+              topic: source.brief.topic,
+              angle: source.brief.angle,
+              additionalInstructions: source.brief.additionalInstructions,
+            }
+          },
         },
       })
       const duplicatedVariants = new Map<string, string>()
@@ -509,10 +549,12 @@ export async function archiveContent(prisma: PrismaClient, companyId: string, co
 export async function listContentEvents(prisma: PrismaClient, companyId: string, contentId: string, options: { limit: number; cursor?: { createdAt: Date; id: string } | undefined }) {
   await getContentAggregate(prisma, companyId, contentId)
   const filters: Prisma.ContentEventWhereInput[] = [{ contentId }]
-  if (options.cursor) filters.push({ OR: [
-    { createdAt: { lt: options.cursor.createdAt } },
-    { createdAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
-  ] })
+  if (options.cursor) filters.push({
+    OR: [
+      { createdAt: { lt: options.cursor.createdAt } },
+      { createdAt: options.cursor.createdAt, id: { lt: options.cursor.id } },
+    ]
+  })
   const rows = await prisma.contentEvent.findMany({
     where: { AND: filters },
     include: { actor: { select: { id: true, name: true } } },
@@ -793,6 +835,9 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
     objective: idea.objective,
     targetAudience: idea.targetAudience,
     notes: idea.notes,
+    sourceType: idea.sourceType,
+    sourceReference: idea.sourceReference,
+    sourceSummary: idea.sourceSummary,
     status: idea.status,
     relatedContentIds: idea.sourceContents.map((content) => content.id),
     version: idea.version,

@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyError, FastifyRequest, FastifyReply } from 'fastify'
 import { AppError } from '../errors/AppError.js'
 
+type RuntimeEnvironment = 'development' | 'test' | 'production'
+type ProviderDiagnosticsError = AppError & { providerDiagnostics?: Record<string, unknown> }
+
 interface ErrorBody {
   error: {
     code: string
@@ -10,7 +13,7 @@ interface ErrorBody {
   }
 }
 
-export function registerErrorHandler(app: FastifyInstance) {
+export function registerErrorHandler(app: FastifyInstance, nodeEnv: RuntimeEnvironment = 'production') {
   app.setErrorHandler((error: FastifyError | AppError, request: FastifyRequest, reply: FastifyReply) => {
     const appError = error instanceof AppError ? error : undefined
     const statusCode = appError?.statusCode ?? (error.statusCode && error.statusCode >= 400 ? error.statusCode : 500)
@@ -22,7 +25,10 @@ export function registerErrorHandler(app: FastifyInstance) {
         requestId: request.id,
       },
     }
-    if (statusCode >= 500) request.log.error({ err: error }, 'Unhandled request error')
+    if (statusCode >= 500) {
+      const providerDiagnostics = nodeEnv === 'development' && appError ? (appError as ProviderDiagnosticsError).providerDiagnostics : undefined
+      request.log.error({ err: error, ...(providerDiagnostics ? { openai: providerDiagnostics } : {}) }, providerDiagnostics ? 'OpenAI API request failed' : 'Unhandled request error')
+    }
     else request.log.warn({ code: body.error.code }, 'Request rejected')
     return reply.status(statusCode).send(body)
   })

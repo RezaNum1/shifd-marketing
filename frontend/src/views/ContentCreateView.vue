@@ -28,6 +28,9 @@ import CreativeThumbnail from "../components/content/CreativeThumbnail.vue";
 import BrandAssessmentCard from "../components/content/BrandAssessmentCard.vue";
 import VisualDirectionCard from "../components/content/VisualDirectionCard.vue";
 import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
+import * as creativeReferenceApi from "../api/creativeReferences";
+import { createRequestKey, errorMessage } from "../api/client";
+import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
 
 const ui = useUiStore();
 const router = useRouter();
@@ -37,7 +40,6 @@ const companyContext = useCompanyContextStore();
 const productsStore = useProductsStore();
 const brief = workflow.brief;
 const activeStep = toRef(workflow, "activeStep");
-const isRefining = ref(false);
 const isSaving = ref(false);
 const savedAt = ref<string | null>(null);
 const isEditingDraft = ref(false);
@@ -67,6 +69,15 @@ const overrideJustification = ref("");
 const overrideError = ref("");
 const isScheduled = toRef(workflow, "isScheduled");
 const scheduleValidation = ref("");
+const creativeReferenceBatches = ref<BackendCreativeReferenceBatch[]>([]);
+const creativeReferencePlatform = ref<CreativeReferencePlatform>("instagram");
+const creativeReferenceStyle = ref<CreativeReferenceStyle>("modern_minimal");
+const creativeReferenceMood = ref<CreativeReferenceMood>("professional");
+const creativeReferenceAspectRatio = ref<CreativeReferenceAspectRatio>("portrait_4_5");
+const creativeReferenceInstruction = ref("");
+const creativeReferenceLoading = ref(false);
+const creativeReferenceError = ref("");
+const selectedCreativeReferenceId = ref<string | null>(null);
 const useSameSchedule = toRef(workflow, "useSameSchedule");
 const instagramSchedule = workflow.instagramSchedule;
 const linkedInSchedule = workflow.linkedInSchedule;
@@ -139,6 +150,32 @@ const creativeStatusTone = computed(() => {
   if (designStatus.value === "in-progress") return "info";
   return "neutral";
 });
+const creativeReferencePlatformOptions = [
+  { value: "instagram", label: "Instagram" },
+  { value: "linkedin", label: "LinkedIn" },
+];
+const creativeReferenceStyleOptions = [
+  { value: "modern_minimal", label: "Modern minimal" },
+  { value: "corporate", label: "Corporate" },
+  { value: "editorial", label: "Editorial" },
+  { value: "bold_typography", label: "Bold typography" },
+  { value: "product_ui_focused", label: "Product UI focused" },
+  { value: "abstract_technology", label: "Abstract technology" },
+];
+const creativeReferenceMoodOptions = [
+  { value: "professional", label: "Professional" },
+  { value: "confident", label: "Confident" },
+  { value: "approachable", label: "Approachable" },
+  { value: "innovative", label: "Innovative" },
+  { value: "clean", label: "Clean" },
+];
+const creativeReferenceAspectRatioOptions = [
+  { value: "portrait_4_5", label: "Portrait reference" },
+  { value: "square_1_1", label: "Square reference" },
+  { value: "landscape", label: "Landscape reference" },
+];
+const latestCreativeReferenceBatch = computed(() => creativeReferenceBatches.value.find((batch) => batch.platform === creativeReferencePlatform.value));
+const selectedCreativeReference = computed(() => creativeReferenceBatches.value.flatMap((batch) => batch.references).find((reference) => reference.selected));
 const missingCreativePlatforms = computed(() => {
   const missing: string[] = [];
   if (enabledPlatforms.instagram && instagramAssets.value.length === 0) {
@@ -381,6 +418,66 @@ function copyVisualBrief() {
     .catch(() => ui.notify("Visual brief is ready to copy manually.", "info"));
 }
 
+async function loadCreativeReferences() {
+  if (!workflow.contentId) return;
+  try {
+    const result = await creativeReferenceApi.listCreativeReferences(workflow.contentId);
+    creativeReferenceBatches.value = result.data;
+    const selected = result.data.flatMap((batch) => batch.references).find((reference) => reference.selected);
+    selectedCreativeReferenceId.value = selected?.id ?? null;
+  } catch (error) {
+    creativeReferenceError.value = errorMessage(error, "Unable to load visual references.");
+  }
+}
+
+async function generateCreativeReferences() {
+  if (creativeReferenceLoading.value || !workflow.contentId || isApproved.value) return;
+  if (creativeReferenceInstruction.value.trim().length > 500) {
+    creativeReferenceError.value = "Additional visual instruction must be 500 characters or fewer.";
+    return;
+  }
+  creativeReferenceLoading.value = true;
+  creativeReferenceError.value = "";
+  try {
+    const result = await creativeReferenceApi.createCreativeReferences(workflow.contentId, {
+      platform: creativeReferencePlatform.value,
+      style: creativeReferenceStyle.value,
+      mood: creativeReferenceMood.value,
+      aspectRatio: creativeReferenceAspectRatio.value,
+      additionalInstruction: creativeReferenceInstruction.value.trim() || null,
+    }, createRequestKey("creative-references.create"));
+    creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
+    selectedCreativeReferenceId.value = result.data.batch.references.find((reference) => reference.selected)?.id ?? selectedCreativeReferenceId.value;
+    ui.notify(result.data.batch.status === "partial" ? "Some visual references were generated." : "Three visual references are ready.", result.data.batch.status === "partial" ? "warning" : "success");
+  } catch (error) {
+    creativeReferenceError.value = errorMessage(error, "Unable to generate visual references.");
+  } finally {
+    creativeReferenceLoading.value = false;
+  }
+}
+
+async function selectCreativeReference(reference: BackendCreativeReference) {
+  if (!workflow.contentId || creativeReferenceLoading.value) return;
+  try {
+    const result = await creativeReferenceApi.selectCreativeReference(workflow.contentId, reference.id);
+    creativeReferenceBatches.value = creativeReferenceBatches.value.map((batch) => batch.id === result.data.id ? result.data : batch);
+    selectedCreativeReferenceId.value = reference.id;
+    await loadCreativeReferences();
+    ui.notify("Reference selected for Canva inspiration. Final creative upload is still required.", "success");
+  } catch (error) {
+    creativeReferenceError.value = errorMessage(error, "Unable to select this reference.");
+  }
+}
+
+function copyDesignNotes(reference: BackendCreativeReference) {
+  const notes = [`Concept: ${reference.conceptName}`, `Layout: ${reference.layoutNotes}`, `Visual focus: ${reference.visualFocus}`, `Typography direction: ${reference.typographyDirection}`].join("\n");
+  if (!navigator.clipboard) {
+    ui.notify("Design notes are ready to copy manually.", "info");
+    return;
+  }
+  navigator.clipboard.writeText(notes).then(() => ui.notify("Design notes copied for Canva.", "success")).catch(() => ui.notify("Design notes are ready to copy manually.", "info"));
+}
+
 async function continueToReview() {
   if (isApproved.value) {
     guardApprovedEditing();
@@ -610,6 +707,7 @@ async function continueToCreative() {
   if (!(await workflow.saveEditorial())) return;
   if (!(await workflow.progress("adapted"))) return;
   activeStep.value = "creative";
+  await loadCreativeReferences();
 }
 
 function addAudience(suggestion: string) {
@@ -617,10 +715,6 @@ function addAudience(suggestion: string) {
   if (!current.toLowerCase().includes(suggestion.toLowerCase())) {
     brief.audience = current ? `${current}, ${suggestion}` : suggestion;
   }
-}
-
-function autoRefine() {
-  ui.notify("Edit the thesis directly; no brief-refinement endpoint is configured.", "info");
 }
 
 async function saveDraft() {
@@ -642,7 +736,7 @@ async function saveDraft() {
 function cancelBrief() {
   workflow.startNewWorkflow();
   savedAt.value = null;
-  ui.notify("Draft changes reset to the starting brief.", "info");
+  void router.push("/");
 }
 
 async function continueToGenerate() {
@@ -660,6 +754,7 @@ async function continueToGenerate() {
 
 onMounted(() => {
   void Promise.all([ideas.load(), productsStore.load(), companyContext.load()]);
+  if (workflow.contentId) void loadCreativeReferences();
 });
 </script>
 
@@ -872,6 +967,53 @@ onMounted(() => {
           </div>
         </BaseCard>
       </div>
+
+      <BaseCard title="AI Visual Reference" description="Generate visual concepts as design references before creating the final creative in Canva.">
+        <div class="creative-reference-form">
+          <BaseSelect v-model="creativeReferencePlatform" label="Platform" :options="creativeReferencePlatformOptions" />
+          <BaseSelect v-model="creativeReferenceStyle" label="Style" :options="creativeReferenceStyleOptions" />
+          <BaseSelect v-model="creativeReferenceMood" label="Mood" :options="creativeReferenceMoodOptions" />
+          <BaseSelect v-model="creativeReferenceAspectRatio" label="Format" :options="creativeReferenceAspectRatioOptions" />
+          <BaseTextarea v-model="creativeReferenceInstruction" label="Additional visual instruction (optional)" :rows="2" maxlength="500" placeholder="Keep the visual hierarchy calm and suitable for a B2B audience." />
+        </div>
+        <div class="creative-reference-actions">
+          <div>
+            <strong>References only</strong>
+            <p>Generate 3 concepts and images with one explicit AI action. Use the selected inspiration to recreate the final design manually.</p>
+          </div>
+          <BaseButton size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
+            <AppIcon name="sparkles" :size="17" />Generate 3 References
+          </BaseButton>
+        </div>
+        <InlineAlert v-if="creativeReferenceLoading" title="Generating visual concepts">Generating visual concepts and references...</InlineAlert>
+        <InlineAlert v-if="creativeReferenceError" title="Visual reference" tone="warning">{{ creativeReferenceError }}</InlineAlert>
+        <div v-if="latestCreativeReferenceBatch" class="creative-reference-results">
+          <div class="creative-reference-batch-meta">
+            <span>{{ latestCreativeReferenceBatch.status === "partial" ? "Partial batch" : "Latest reference batch" }}</span>
+            <small>{{ latestCreativeReferenceBatch.actualGeneratedSize }} · {{ latestCreativeReferenceBatch.references.length }} of 3 available</small>
+          </div>
+          <div class="creative-reference-grid">
+            <article v-for="reference in latestCreativeReferenceBatch.references" :key="reference.id" class="creative-reference-card" :class="{ 'is-selected': reference.selected || selectedCreativeReferenceId === reference.id }">
+              <img :src="reference.imageUrl" :alt="`${reference.conceptName} visual reference`" class="creative-reference-image" />
+              <div class="creative-reference-card-body">
+                <div class="creative-reference-card-heading"><strong>{{ reference.conceptName }}</strong><StatusBadge v-if="reference.selected || selectedCreativeReferenceId === reference.id" tone="success">Selected Reference</StatusBadge></div>
+                <dl class="creative-reference-notes">
+                  <div><dt>Rationale</dt><dd>{{ reference.rationale }}</dd></div>
+                  <div><dt>Layout</dt><dd>{{ reference.layoutNotes }}</dd></div>
+                  <div><dt>Visual focus</dt><dd>{{ reference.visualFocus }}</dd></div>
+                  <div><dt>Typography</dt><dd>{{ reference.typographyDirection }}</dd></div>
+                </dl>
+                <div class="creative-reference-card-actions">
+                  <BaseButton size="compact" :disabled="reference.selected || selectedCreativeReferenceId === reference.id" @click="selectCreativeReference(reference)">{{ reference.selected || selectedCreativeReferenceId === reference.id ? "Selected" : "Select Reference" }}</BaseButton>
+                  <BaseButton variant="ghost" size="compact" @click="copyDesignNotes(reference)">Copy Design Notes</BaseButton>
+                </div>
+              </div>
+            </article>
+          </div>
+          <InlineAlert title="Keep the final creative separate" tone="info">Use this as inspiration in Canva. Upload your finished PNG/JPG design below; selecting a reference does not satisfy the final creative requirement.</InlineAlert>
+          <p v-if="selectedCreativeReference" class="creative-reference-selected-note">Selected reference: <strong>{{ selectedCreativeReference.conceptName }}</strong>. The final uploaded creative remains the source used by Review.</p>
+        </div>
+      </BaseCard>
 
       <div class="creative-platform-grid">
         <BaseCard title="Instagram Creative" description="Upload one or more PNG/JPG files for the carousel.">
@@ -1172,13 +1314,14 @@ onMounted(() => {
                     }}</StatusBadge
                   >
                 </div>
-                <BaseSelect
-                  v-model="brief.product"
-                  label="Product asset"
-                  :options="productOptions"
-                  :disabled="brief.context === 'company'"
-                  class="brief-compact-field"
-                />
+                <div class="brief-product-select">
+                  <BaseSelect
+                    v-model="brief.product"
+                    label="Product asset"
+                    :options="productOptions"
+                    :disabled="brief.context === 'company'"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1243,18 +1386,7 @@ onMounted(() => {
             <div class="brief-field-group">
               <div class="brief-field-heading">
                 <span class="brief-overline">Target Audience</span
-                ><button
-                  type="button"
-                  class="brief-text-action"
-                  @click="
-                    ui.notify(
-                      'Persona browsing will be available with the context engine.',
-                      'info',
-                    )
-                  "
-                >
-                  Browse Persona Matrix
-                </button>
+                ><span class="brief-help">Enter an audience or use Quick Add</span>
               </div>
               <BaseInput
                 v-model="brief.audience"
@@ -1285,16 +1417,7 @@ onMounted(() => {
             <div class="brief-field-group">
               <div class="brief-field-heading">
                 <span class="brief-overline">Content Angle &amp; Thesis</span
-                ><button
-                  type="button"
-                  class="brief-text-action"
-                  :disabled="isRefining"
-                  @click="autoRefine"
-                >
-                  <AppIcon name="sparkles" :size="14" />{{
-                    isRefining ? "Refining…" : "Auto-Refine Thesis"
-                  }}
-                </button>
+                ><span class="brief-help">Edit directly in the field</span>
               </div>
               <BaseTextarea
                 v-model="brief.thesis"

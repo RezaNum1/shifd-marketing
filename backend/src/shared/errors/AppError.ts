@@ -40,3 +40,6 @@ export const inputChanged = (aiRequestId: string) => new AppError(409, 'INPUT_CH
 export const requestInProgress = (aiRequestId: string) => new AppError(409, 'REQUEST_IN_PROGRESS', 'An AI request with this Idempotency-Key is already running.', { aiRequestId })
 export const productContextIncomplete = (missing: string[]) => new AppError(422, 'PRODUCT_CONTEXT_INCOMPLETE', 'Complete the Product Context before generating content.', { missing: missing.join(',') })
 export const inputNotReady = (missing: string[]) => new AppError(422, 'INPUT_NOT_READY', 'The saved Content Context is not ready for generation.', { missing: missing.join(',') })
+export const discoveryCompanyContextIncomplete = (missing: string[]) => new AppError(422, 'DISCOVERY_COMPANY_CONTEXT_INCOMPLETE', 'Complete the Company Context before discovering topics.', { missing: missing.join(',') })
+export const discoveryProductContextIncomplete = (missing: string[]) => new AppError(422, 'DISCOVERY_PRODUCT_CONTEXT_INCOMPLETE', 'Complete the selected Product Context before discovering topics.', { missing: missing.join(',') })
+export const discoveryPromptUnavailable = () => new AppError(503, 'DISCOVERY_NOT_CONFIGURED', 'Current Topic Discovery is not configured for this environment.')
