@@ -132,7 +132,9 @@ jobs:
             echo ""
             echo "=== Checking frontend ==="
 
-            if ! curl -fsS http://127.0.0.1/ > /dev/null; then
+            if ! curl -fsS \
+              --resolve shifdmarketing.site:443:127.0.0.1 \
+              https://shifdmarketing.site/ > /dev/null; then
               echo "ERROR: Frontend health check failed."
               exit 1
             fi
