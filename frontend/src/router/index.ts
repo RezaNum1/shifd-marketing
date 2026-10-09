@@ -6,6 +6,11 @@ const routes: RouteRecordRaw[] = pages.map((page) => ({
   path: page.path,
   name: page.name,
   component:
+    page.name === 'prospects'
+      ? () => import('../views/ProspectsView.vue')
+      : page.name === 'prospect-detail'
+        ? () => import('../views/ProspectDetailView.vue')
+      :
     page.name === 'overview'
       ? () => import('../views/OverviewView.vue')
       : page.name === 'company'

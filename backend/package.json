@@ -13,6 +13,7 @@
     "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:db": "node -r dotenv/config -e \"if (!process.env.TEST_DATABASE_URL) { console.error('TEST_DATABASE_URL is required for test:db'); process.exit(1) } if (process.env.TEST_DATABASE_URL === process.env.DATABASE_URL) { console.error('TEST_DATABASE_URL must not equal DATABASE_URL'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/database.test.ts",
+    "test:prospects": "node -r dotenv/config -e \"if (!process.env.TEST_DATABASE_URL) { console.error('TEST_DATABASE_URL is required for test:prospects'); process.exit(1) } if (process.env.TEST_DATABASE_URL === process.env.DATABASE_URL) { console.error('TEST_DATABASE_URL must not equal DATABASE_URL'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/prospects.test.ts tests/prospects.unit.test.ts",
     "test:telegram": "node -r dotenv/config -e \"if (!process.env.TEST_DATABASE_URL) { console.error('TEST_DATABASE_URL is required for test:telegram'); process.exit(1) } if (process.env.TEST_DATABASE_URL === process.env.DATABASE_URL) { console.error('TEST_DATABASE_URL must not equal DATABASE_URL'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/telegram.test.ts",
     "test:creative-references": "node -r dotenv/config -e \"if (!process.env.TEST_DATABASE_URL) { console.error('TEST_DATABASE_URL is required for test:creative-references'); process.exit(1) } if (process.env.TEST_DATABASE_URL === process.env.DATABASE_URL) { console.error('TEST_DATABASE_URL must not equal DATABASE_URL'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/creative-references.test.ts",
     "test:auth": "node -r dotenv/config -e \"if (!process.env.TEST_DATABASE_URL) { console.error('TEST_DATABASE_URL is required for test:auth'); process.exit(1) } if (process.env.TEST_DATABASE_URL === process.env.DATABASE_URL) { console.error('TEST_DATABASE_URL must not equal DATABASE_URL'); process.exit(1) }\" && REQUIRE_DATABASE=1 vitest run tests/auth.test.ts",
@@ -44,6 +45,7 @@
     "@prisma/client": "^6.19.0",
     "argon2": "^0.41.1",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "fastify": "^5.6.1",
     "fastify-plugin": "^5.0.1",
     "openai": "^6.49.0",
@@ -55,5 +57,8 @@
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "exceljs": { "uuid": "^11.1.1" }
   }
 }

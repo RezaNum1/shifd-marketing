@@ -47,37 +47,41 @@ model Company {
   telegramThreads          TelegramIdeationThread[]
   telegramIdeaDrafts       TelegramIdeaDraft[]
   telegramUpdates          TelegramWebhookUpdate[]
+  prospects                Prospect[]
+  prospectImportBatches    ProspectImportBatch[]
 
   @@map("companies")
 }
 
 model User {
-  id                   String                   @id @default(uuid()) @db.Uuid
-  companyId            String                   @map("company_id") @db.Uuid
-  name                 String
-  email                String
-  passwordHash         String                   @map("password_hash")
-  role                 String                   @default("founder")
-  active               Boolean                  @default(true)
-  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
-  version              Int                      @default(1)
-  company              Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sessions             AuthSession[]
-  contentIdeas         ContentIdea[]
-  contents             Content[]
-  contentEvents        ContentEvent[]
-  uploadedAssets       CreativeAsset[]
-  aiRequests           AiRequestLog[]
-  approvalActions      ApprovalAction[]
-  createdSchedules     ContentSchedule[]        @relation("ScheduleCreatedBy")
-  markedPublications   PublicationRecord[]      @relation("PublicationMarkedBy")
-  recordedMetrics      WeeklyMetric[]           @relation("MetricRecordedBy")
-  recordedInquiries    InboundInquiryMetric[]   @relation("InquiryRecordedBy")
-  telegramIntegrations TelegramIntegration[]
-  telegramLinkTokens   TelegramLinkToken[]
-  telegramThreads      TelegramIdeationThread[]
-  telegramIdeaDrafts   TelegramIdeaDraft[]
+  id                    String                   @id @default(uuid()) @db.Uuid
+  companyId             String                   @map("company_id") @db.Uuid
+  name                  String
+  email                 String
+  passwordHash          String                   @map("password_hash")
+  role                  String                   @default("founder")
+  active                Boolean                  @default(true)
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version               Int                      @default(1)
+  company               Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sessions              AuthSession[]
+  contentIdeas          ContentIdea[]
+  contents              Content[]
+  contentEvents         ContentEvent[]
+  uploadedAssets        CreativeAsset[]
+  aiRequests            AiRequestLog[]
+  approvalActions       ApprovalAction[]
+  createdSchedules      ContentSchedule[]        @relation("ScheduleCreatedBy")
+  markedPublications    PublicationRecord[]      @relation("PublicationMarkedBy")
+  recordedMetrics       WeeklyMetric[]           @relation("MetricRecordedBy")
+  recordedInquiries     InboundInquiryMetric[]   @relation("InquiryRecordedBy")
+  telegramIntegrations  TelegramIntegration[]
+  telegramLinkTokens    TelegramLinkToken[]
+  telegramThreads       TelegramIdeationThread[]
+  telegramIdeaDrafts    TelegramIdeaDraft[]
+  createdProspects      Prospect[]
+  prospectImportBatches ProspectImportBatch[]
 
   @@index([companyId])
   @@map("users")
@@ -99,6 +103,63 @@ model AuthSession {
   @@index([expiresAt])
   @@index([absoluteExpiresAt])
   @@map("auth_sessions")
+}
+
+model Prospect {
+  id                String               @id @default(uuid()) @db.Uuid
+  companyId         String               @map("company_id") @db.Uuid
+  name              String
+  normalizedName    String               @map("normalized_name")
+  normalizedDomain  String?              @map("normalized_domain")
+  importFingerprint String?              @map("import_fingerprint")
+  importBatchId     String?              @map("import_batch_id") @db.Uuid
+  industry          String?
+  website           String?
+  address           String?
+  employeeCount     Int?                 @map("employee_count")
+  employeeSize      String?              @map("employee_size")
+  contactName       String?              @map("contact_name")
+  contactEmail      String?              @map("contact_email")
+  contactPhone      String?              @map("contact_phone")
+  notes             String?
+  status            String               @default("lead")
+  source            String               @default("manual")
+  archivedAt        DateTime?            @map("archived_at") @db.Timestamptz(3)
+  createdBy         String               @map("created_by") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version           Int                  @default(1)
+  company           Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  creator           User                 @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  importBatch       ProspectImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, archivedAt, updatedAt, id])
+  @@index([companyId, industry, status])
+  @@index([companyId, createdBy])
+  @@index([companyId, normalizedName])
+  @@index([companyId, importFingerprint])
+  @@index([importBatchId])
+  @@map("prospects")
+}
+
+model ProspectImportBatch {
+  id          String     @id @default(uuid()) @db.Uuid
+  companyId   String     @map("company_id") @db.Uuid
+  createdBy   String     @map("created_by") @db.Uuid
+  tokenHash   String     @unique @map("token_hash")
+  fileDigest  String     @map("file_digest")
+  preview     Json
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz(3)
+  confirmedAt DateTime?  @map("confirmed_at") @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  creator     User       @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  prospects   Prospect[]
+
+  @@index([companyId, expiresAt])
+  @@index([createdBy, expiresAt])
+  @@map("prospect_import_batches")
 }
 
 model BrandProfile {

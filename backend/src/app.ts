@@ -28,6 +28,7 @@ import type { InstagramInsightsProvider } from './modules/performance/instagram/
 import { topicDiscoveryRoutes } from './modules/ideas/routes.js'
 import type { TopicDiscoveryProvider } from './modules/ai/provider.js'
 import { telegramRoutes } from './modules/integrations/telegram/routes.js'
+import { prospectRoutes } from './modules/prospects/routes.js'
 
 export interface BuildAppOptions {
   config: AppConfig
@@ -59,10 +60,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   if (options.connectDatabase ?? true) await app.register(prismaPlugin, { config: options.config })
   const assetStorage = new LocalAssetStorage(options.config.assetStorageRoot)
   await assetStorage.initialize()
-  await app.register(multipart, { throwFileSizeLimit: false, limits: { files: 1, fields: 1, parts: 2, fileSize: options.config.assetMaxBytes } })
+  await app.register(multipart, { throwFileSizeLimit: false, limits: { files: 1, fields: 2, parts: 3, fileSize: options.config.assetMaxBytes } })
   await app.register(authPlugin, { config: options.config })
   await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
+  await app.register(prospectRoutes, { config: options.config, prefix: '/api' })
   const aiProvider = options.aiProvider ?? new OpenAiAiProvider(options.config)
   const discoveryProvider = options.discoveryProvider ?? new OpenAiAiProvider(options.config)
   const imageProvider = options.imageProvider ?? new OpenAiAiProvider(options.config)

@@ -23,6 +23,7 @@ export const navigationGroups: NavigationGroup[] = [
       },
     ],
   },
+  { label: 'Prospect Management', items: [{ key: 'prospects', label: 'Prospects', to: '/prospects', icon: 'company' }] },
   {
     label: 'Planning & Insights',
     items: [
@@ -67,6 +68,8 @@ export const navigationGroups: NavigationGroup[] = [
 ]
 
 export const pages: PageDefinition[] = [
+  { path: '/prospects', name: 'prospects', title: 'Prospects', description: 'Manage target organizations and import prospect lists.', icon: 'company', navigationKey: 'prospects', group: 'Prospect Management' },
+  { path: '/prospects/:id', name: 'prospect-detail', title: 'Prospect Details', description: 'Review and update prospect organization information.', icon: 'company', navigationKey: 'prospects', group: 'Prospect Management', parent: { label: 'Prospects', to: '/prospects' } },
   {
     path: '/',
     name: 'overview',

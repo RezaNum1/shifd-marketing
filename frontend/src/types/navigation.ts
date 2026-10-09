@@ -11,6 +11,7 @@ export type NavigationKey =
   | 'products'
   | 'integrations'
   | 'ai'
+  | 'prospects'
 
 export interface NavigationItem {
   key: NavigationKey
