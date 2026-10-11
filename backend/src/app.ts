@@ -26,9 +26,10 @@ import { performanceRoutes } from './modules/performance/routes.js'
 import { MetaInstagramInsightsProvider } from './modules/performance/instagram/meta.js'
 import type { InstagramInsightsProvider } from './modules/performance/instagram/provider.js'
 import { topicDiscoveryRoutes } from './modules/ideas/routes.js'
-import type { TopicDiscoveryProvider } from './modules/ai/provider.js'
+import type { ProspectResearchProvider, TopicDiscoveryProvider } from './modules/ai/provider.js'
 import { telegramRoutes } from './modules/integrations/telegram/routes.js'
 import { prospectRoutes } from './modules/prospects/routes.js'
+import { prospectResearchRoutes } from './modules/prospects/research-routes.js'
 
 export interface BuildAppOptions {
   config: AppConfig
@@ -36,6 +37,7 @@ export interface BuildAppOptions {
   connectDatabase?: boolean
   aiProvider?: AiProvider
   discoveryProvider?: TopicDiscoveryProvider
+  prospectResearchProvider?: ProspectResearchProvider
   imageProvider?: AiImageProvider
   instagramProvider?: InstagramInsightsProvider
   clock?: Clock
@@ -67,11 +69,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(prospectRoutes, { config: options.config, prefix: '/api' })
   const aiProvider = options.aiProvider ?? new OpenAiAiProvider(options.config)
   const discoveryProvider = options.discoveryProvider ?? new OpenAiAiProvider(options.config)
+  const prospectResearchProvider = options.prospectResearchProvider ?? new OpenAiAiProvider(options.config)
   const imageProvider = options.imageProvider ?? new OpenAiAiProvider(options.config)
   const clock = options.clock ?? systemClock
   const instagramProvider = options.instagramProvider ?? new MetaInstagramInsightsProvider(options.config)
   await app.register(contentRoutes, { config: options.config, aiProvider, clock, prefix: '/api' })
   await app.register(topicDiscoveryRoutes, { config: options.config, provider: discoveryProvider, prefix: '/api' })
+  await app.register(prospectResearchRoutes, { config: options.config, provider: prospectResearchProvider, prefix: '/api' })
   await app.register(schedulingRoutes, { config: options.config, clock, prefix: '/api' })
   await app.register(performanceRoutes, { config: options.config, clock, instagramProvider, prefix: '/api' })
   await app.register(telegramRoutes, { config: options.config, aiProvider, prefix: '/api' })

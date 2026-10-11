@@ -1,8 +1,8 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
-import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION } from './constants.js'
-import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
+import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION } from './constants.js'
+import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
 
@@ -150,6 +150,25 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
       required: ['topics'],
     },
   },
+  [PROSPECT_RESEARCH_SCHEMA_VERSION]: {
+    name: 'm2_prospect_research_v1',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        summary: { type: 'string' },
+        identityStatus: { type: 'string', enum: ['matched', 'needs_confirmation'] },
+        identityExplanation: { type: 'string' },
+        limitations: { type: 'array', maxItems: 8, items: { type: 'string' } },
+        claims: { type: 'array', maxItems: 16, items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            text: { type: 'string' }, category: { type: 'string', enum: ['overview', 'industry', 'products_services', 'operations', 'market_segments', 'development', 'opportunity'] },
+            claimType: { type: 'string', enum: ['sourced_fact', 'hypothesis', 'unsupported'] }, sourceUrls: { type: 'array', maxItems: 5, items: { type: 'string' } },
+          }, required: ['text', 'category', 'claimType', 'sourceUrls'],
+        } },
+      }, required: ['summary', 'identityStatus', 'identityExplanation', 'limitations', 'claims'],
+    },
+  },
   [M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION]: {
     name: 'm2_telegram_ideation_chat_v1',
     schema: {
@@ -173,7 +192,7 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
   },
 }
 
-export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDiscoveryProvider {
+export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDiscoveryProvider, ProspectResearchProvider {
   private readonly client: OpenAI | null
 
   constructor(private readonly config: Pick<AppConfig, 'openaiApiKey' | 'openaiModel' | 'aiRequestTimeoutMs'>) {
@@ -295,6 +314,39 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         outputTokens: safeTokenCount(response.usage?.output_tokens),
         providerRequestId,
       }
+    } catch (error) {
+      if (error instanceof AiProviderFailure) throw error
+      if (error instanceof APIConnectionTimeoutError) throw new AiProviderFailure('timeout', 'The OpenAI provider request timed out.')
+      if (error instanceof APIError && error.status === 429) throw new AiProviderFailure('rate_limit', 'The OpenAI provider rate limit was reached.', safeRequestId(error.requestID), safeDiagnostics(error))
+      const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
+      throw new AiProviderFailure('provider', 'The OpenAI provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : null)
+    }
+  }
+
+  async researchProspect(request: ProspectResearchProviderRequest): Promise<ProspectResearchProviderResult> {
+    return this.runWebSearch(request, PROSPECT_RESEARCH_SCHEMA_VERSION, 'prospect research')
+  }
+
+  private async runWebSearch(request: TopicDiscoveryProviderRequest, schemaVersion: string, label: string): Promise<TopicDiscoveryProviderResult> {
+    if (!this.client || !request.model.trim()) throw new AiProviderFailure('not_configured', 'The OpenAI provider is not configured.')
+    const outputFormat = OUTPUT_FORMATS[schemaVersion]
+    if (!outputFormat) throw new AiProviderFailure('invalid_response', 'The provider output contract is unsupported.')
+    try {
+      const { data: response, request_id: sdkRequestId } = await this.client.responses.create({
+        model: request.model, instructions: request.systemPrompt,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: request.userPrompt }] }],
+        tools: [{ type: 'web_search', search_context_size: 'medium', user_location: { type: 'approximate', country: 'ID' } }],
+        include: ['web_search_call.action.sources'], max_output_tokens: request.maxOutputTokens,
+        reasoning: { effort: 'low' }, store: false,
+        text: { format: { type: 'json_schema', name: outputFormat.name, strict: true, schema: outputFormat.schema } },
+      }, { timeout: request.timeoutMs, maxRetries: 0 }).withResponse()
+      const providerRequestId = getProviderRequestId(sdkRequestId, response)
+      if (response.status !== 'completed' || !Array.isArray(response.output) || !response.output.length || hasRefusal(response.output)) throw new AiProviderFailure('invalid_response', `The provider returned an incomplete or unsupported ${label} response.`, providerRequestId)
+      const text = response.output_text
+      if (typeof text !== 'string' || !text.trim()) throw new AiProviderFailure('invalid_response', `The provider returned an empty ${label} response.`, providerRequestId)
+      try { if (!isRecord(JSON.parse(text))) throw new Error('invalid shape') } catch { throw new AiProviderFailure('invalid_response', `The provider returned invalid ${label} output.`, providerRequestId) }
+      const sourceExtraction = collectSources(response)
+      return { text, sources: sourceExtraction.sources, sourceDiagnostics: sourceExtraction.diagnostics, inputTokens: safeTokenCount(response.usage?.input_tokens), outputTokens: safeTokenCount(response.usage?.output_tokens), providerRequestId }
     } catch (error) {
       if (error instanceof AiProviderFailure) throw error
       if (error instanceof APIConnectionTimeoutError) throw new AiProviderFailure('timeout', 'The OpenAI provider request timed out.')

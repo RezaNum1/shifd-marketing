@@ -1,7 +1,7 @@
 import { APIConnectionError, APIConnectionTimeoutError, APIError } from 'openai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AppConfig } from '../src/config/env.js'
-import { M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
+import { M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
 import { OpenAiAiProvider } from '../src/modules/ai/openai.js'
 import { M4_CHECK_LABELS } from '../src/modules/ai/output.js'
 import { AiProviderFailure, type AiImageProviderRequest, type AiProviderRequest } from '../src/modules/ai/provider.js'
@@ -82,6 +82,18 @@ function withRejectedResponse(error: unknown) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('OpenAI Responses API adapter', () => {
+  it('uses the existing web-search provider for bounded source-backed prospect research', async () => {
+    const output = { summary: 'A source-backed company overview.', identityStatus: 'matched', identityExplanation: 'The official site and location match.', limitations: [], claims: [] }
+    const response = { ...completedResponse(JSON.stringify(output)), output: [{ type: 'web_search_call', action: { type: 'search', sources: [{ type: 'url', url: 'https://company.example/about' }] } }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }] }
+    const { provider, client, create } = withResponse(response)
+    const result = await provider.researchProspect({ ...discoveryRequest, maxOutputTokens: 3_500 })
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(client.maxRetries).toBe(0)
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ tools: [{ type: 'web_search', search_context_size: 'medium' }], max_output_tokens: 3_500, store: false, text: { format: { type: 'json_schema', name: 'm2_prospect_research_v1', strict: true } } })
+    expect(result.sources).toEqual([{ url: 'https://company.example/about', title: null, publisher: null, publishedAt: null }])
+    expect(PROSPECT_RESEARCH_SCHEMA_VERSION).toBe('m2.prospect_research.v1')
+  })
+
   it('uses one no-retry Responses web_search request and returns only provider source metadata', async () => {
     const output = { topics: [{ title: 'Approval workflow guidance', summary: 'A current discussion.', whyCurrent: 'Published this week.', relevanceToCompany: 'Relevant to approval teams.', contentAngle: 'Explain the operational question.', suggestedObjective: 'education', suggestedPlatforms: ['linkedin'], sources: [{ url: 'https://example.com/report', title: 'Report', publisher: 'Example', publishedAt: '2026-09-19' }] }] }
     const response = { ...completedResponse(JSON.stringify(output)), output: [{ type: 'web_search_call', action: { type: 'search', sources: [{ type: 'url', url: 'https://example.com/report' }] }, }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }] }

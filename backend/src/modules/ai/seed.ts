@@ -9,21 +9,34 @@ import {
 } from './prompt.js'
 import { M2_DISCOVERY_PROMPT_METADATA, M2_DISCOVERY_PROMPT_REFERENCE, m2DiscoveryPromptDigest } from './discovery-prompt.js'
 import { M2_TELEGRAM_PROMPT_METADATA } from './telegram-ideation-prompt.js'
+import { PROSPECT_RESEARCH_METADATA, prospectResearchPromptDigest } from './prospect-research-prompt.js'
 
 export async function seedM2Prompt(prisma: PrismaClient) {
-  const digest = promptDigest()
-  const discoveryDigest = m2DiscoveryPromptDigest()
-  const m3Digest = m3PromptDigest()
-  const m4Digest = m4PromptDigest()
+  const registry = promptSeedRegistry()
   return prisma.$transaction(async (tx) => {
-    const m2 = await ensurePrompt(tx, M2_PROMPT_METADATA, M2_PROMPT_REFERENCE, digest)
-    const discovery = await ensurePrompt(tx, M2_DISCOVERY_PROMPT_METADATA, M2_DISCOVERY_PROMPT_REFERENCE, discoveryDigest)
-    const m3 = await ensurePrompt(tx, M3_PROMPT_METADATA, M3_PROMPT_REFERENCE, m3Digest)
-    const m4 = await ensurePrompt(tx, M4_PROMPT_METADATA, M4_PROMPT_REFERENCE, m4Digest)
-    const telegram = []
-    for (const metadata of M2_TELEGRAM_PROMPT_METADATA) telegram.push(await ensurePrompt(tx, metadata, metadata.templateReference, metadata.digest))
-    return { id: m2.id, digest: m2.digest, discoveryId: discovery.id, discoveryDigest: discovery.digest, m3Id: m3.id, m3Digest: m3.digest, m4Id: m4.id, m4Digest: m4.digest, telegram }
+    const seeded = new Map<string, { id: string; digest: string }>()
+    for (const entry of registry) seeded.set(entry.key, await ensurePrompt(tx, entry.metadata, entry.reference, entry.digest))
+    const result = (key: string) => seeded.get(key)!
+    return {
+      id: result('m2').id, digest: result('m2').digest,
+      discoveryId: result('discovery').id, discoveryDigest: result('discovery').digest,
+      m3Id: result('m3').id, m3Digest: result('m3').digest,
+      m4Id: result('m4').id, m4Digest: result('m4').digest,
+      prospectResearchId: result('prospectResearch').id, prospectResearchDigest: result('prospectResearch').digest,
+      telegram: registry.filter((entry) => entry.key.startsWith('telegram:')).map((entry) => result(entry.key)),
+    }
   })
+}
+
+export function promptSeedRegistry() {
+  return [
+    { key: 'm2', metadata: M2_PROMPT_METADATA, reference: M2_PROMPT_REFERENCE, digest: promptDigest() },
+    { key: 'discovery', metadata: M2_DISCOVERY_PROMPT_METADATA, reference: M2_DISCOVERY_PROMPT_REFERENCE, digest: m2DiscoveryPromptDigest() },
+    { key: 'm3', metadata: M3_PROMPT_METADATA, reference: M3_PROMPT_REFERENCE, digest: m3PromptDigest() },
+    { key: 'm4', metadata: M4_PROMPT_METADATA, reference: M4_PROMPT_REFERENCE, digest: m4PromptDigest() },
+    { key: 'prospectResearch', metadata: PROSPECT_RESEARCH_METADATA, reference: PROSPECT_RESEARCH_METADATA.templateReference, digest: prospectResearchPromptDigest() },
+    ...M2_TELEGRAM_PROMPT_METADATA.map((metadata) => ({ key: `telegram:${metadata.operation}`, metadata, reference: metadata.templateReference, digest: metadata.digest })),
+  ]
 }
 
 async function ensurePrompt(

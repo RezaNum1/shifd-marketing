@@ -49,6 +49,7 @@ model Company {
   telegramUpdates          TelegramWebhookUpdate[]
   prospects                Prospect[]
   prospectImportBatches    ProspectImportBatch[]
+  prospectResearchRuns     ProspectResearchRun[]
 
   @@map("companies")
 }
@@ -81,6 +82,8 @@ model User {
   telegramThreads       TelegramIdeationThread[]
   telegramIdeaDrafts    TelegramIdeaDraft[]
   createdProspects      Prospect[]
+  createdResearchRuns   ProspectResearchRun[]
+  reviewedResearchClaims ProspectResearchClaim[] @relation("ResearchClaimReviewer")
   prospectImportBatches ProspectImportBatch[]
 
   @@index([companyId])
@@ -132,6 +135,7 @@ model Prospect {
   company           Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   creator           User                 @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   importBatch       ProspectImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+  researchRuns      ProspectResearchRun[]
 
   @@unique([companyId, id])
   @@index([companyId, archivedAt, updatedAt, id])
@@ -160,6 +164,81 @@ model ProspectImportBatch {
   @@index([companyId, expiresAt])
   @@index([createdBy, expiresAt])
   @@map("prospect_import_batches")
+}
+
+model ProspectResearchRun {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  companyId             String                  @map("company_id") @db.Uuid
+  prospectId            String                  @map("prospect_id") @db.Uuid
+  createdBy             String                  @map("created_by") @db.Uuid
+  aiRequestLogId        String                  @unique @map("ai_request_log_id") @db.Uuid
+  promptVersionId       String                  @map("prompt_version_id") @db.Uuid
+  status                String
+  identityStatus        String                  @map("identity_status")
+  identityExplanation   String                  @map("identity_explanation")
+  summary               String
+  limitations           String[]                @default([])
+  researchedAt          DateTime                @map("researched_at") @db.Timestamptz(3)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  prospect              Prospect                @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  creator               User                    @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  aiRequestLog          AiRequestLog            @relation(fields: [aiRequestLogId], references: [id], onDelete: Restrict)
+  promptVersion         PromptVersion           @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  sources               ProspectResearchSource[]
+  claims                ProspectResearchClaim[]
+
+  @@unique([companyId, id])
+  @@index([companyId, prospectId, createdAt(sort: Desc)])
+  @@index([companyId, status])
+  @@map("prospect_research_runs")
+}
+
+model ProspectResearchSource {
+  id            String                  @id @default(uuid()) @db.Uuid
+  runId         String                  @map("run_id") @db.Uuid
+  url           String
+  title         String
+  publisher     String?
+  domain        String
+  retrievedAt   DateTime                @map("retrieved_at") @db.Timestamptz(3)
+  sourceType    String                  @map("source_type")
+  availability  String                  @default("retrieved")
+  run           ProspectResearchRun     @relation(fields: [runId], references: [id], onDelete: Restrict)
+  claimLinks    ProspectResearchClaimSource[]
+
+  @@unique([runId, url])
+  @@index([runId])
+  @@map("prospect_research_sources")
+}
+
+model ProspectResearchClaim {
+  id          String                      @id @default(uuid()) @db.Uuid
+  runId       String                      @map("run_id") @db.Uuid
+  text        String
+  category    String
+  claimType   String                      @map("claim_type")
+  reviewStatus String                     @default("pending") @map("review_status")
+  reviewNote  String?                     @map("review_note")
+  reviewedAt  DateTime?                   @map("reviewed_at") @db.Timestamptz(3)
+  reviewedBy  String?                     @map("reviewed_by") @db.Uuid
+  createdAt   DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  run         ProspectResearchRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  reviewer    User?                       @relation("ResearchClaimReviewer", fields: [reviewedBy], references: [id], onDelete: Restrict)
+  sources     ProspectResearchClaimSource[]
+
+  @@index([runId, claimType, reviewStatus])
+  @@map("prospect_research_claims")
+}
+
+model ProspectResearchClaimSource {
+  claimId  String                 @map("claim_id") @db.Uuid
+  sourceId String                 @map("source_id") @db.Uuid
+  claim    ProspectResearchClaim  @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  source   ProspectResearchSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@id([claimId, sourceId])
+  @@map("prospect_research_claim_sources")
 }
 
 model BrandProfile {
@@ -779,6 +858,7 @@ model PromptVersion {
   createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   aiRequests          AiRequestLog[]
+  prospectResearchRuns ProspectResearchRun[]
 
   @@unique([module, version])
   @@index([module, status])
@@ -824,6 +904,7 @@ model AiRequestLog {
   creativeReferenceImages         CreativeReference[]       @relation("CreativeReferenceImage")
   topicDiscoveryRuns              TopicDiscoveryRun[]
   telegramMessages                TelegramIdeationMessage[]
+  prospectResearchRun             ProspectResearchRun?
 
   @@index([companyId, createdAt, id])
   @@index([contentId, createdAt])

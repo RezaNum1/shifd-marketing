@@ -55,6 +55,13 @@ export interface TopicDiscoveryProvider {
   isConfigured?(model?: string): boolean
 }
 
+export interface ProspectResearchProviderRequest extends TopicDiscoveryProviderRequest {}
+export interface ProspectResearchProviderResult extends TopicDiscoveryProviderResult {}
+export interface ProspectResearchProvider {
+  researchProspect(request: ProspectResearchProviderRequest): Promise<ProspectResearchProviderResult>
+  isConfigured?(model?: string): boolean
+}
+
 export interface AiImageProviderRequest {
   model: string
   prompt: string
