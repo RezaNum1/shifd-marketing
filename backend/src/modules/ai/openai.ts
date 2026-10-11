@@ -1,7 +1,7 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
-import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION } from './constants.js'
+import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION } from './constants.js'
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
@@ -167,6 +167,14 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
           }, required: ['text', 'category', 'claimType', 'sourceUrls'],
         } },
       }, required: ['summary', 'identityStatus', 'identityExplanation', 'limitations', 'claims'],
+    },
+  },
+  [PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION]: {
+    name: 'm2_prospect_email_draft_v1',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: { subject: { type: 'string' }, body: { type: 'string' } },
+      required: ['subject', 'body'],
     },
   },
   [M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION]: {

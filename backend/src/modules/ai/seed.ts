@@ -10,6 +10,7 @@ import {
 import { M2_DISCOVERY_PROMPT_METADATA, M2_DISCOVERY_PROMPT_REFERENCE, m2DiscoveryPromptDigest } from './discovery-prompt.js'
 import { M2_TELEGRAM_PROMPT_METADATA } from './telegram-ideation-prompt.js'
 import { PROSPECT_RESEARCH_METADATA, prospectResearchPromptDigest } from './prospect-research-prompt.js'
+import { PROSPECT_EMAIL_DRAFT_METADATA, prospectEmailDraftPromptDigest } from './prospect-email-draft-prompt.js'
 
 export async function seedM2Prompt(prisma: PrismaClient) {
   const registry = promptSeedRegistry()
@@ -23,6 +24,7 @@ export async function seedM2Prompt(prisma: PrismaClient) {
       m3Id: result('m3').id, m3Digest: result('m3').digest,
       m4Id: result('m4').id, m4Digest: result('m4').digest,
       prospectResearchId: result('prospectResearch').id, prospectResearchDigest: result('prospectResearch').digest,
+      prospectEmailDraftId: result('prospectEmailDraft').id, prospectEmailDraftDigest: result('prospectEmailDraft').digest,
       telegram: registry.filter((entry) => entry.key.startsWith('telegram:')).map((entry) => result(entry.key)),
     }
   })
@@ -35,6 +37,7 @@ export function promptSeedRegistry() {
     { key: 'm3', metadata: M3_PROMPT_METADATA, reference: M3_PROMPT_REFERENCE, digest: m3PromptDigest() },
     { key: 'm4', metadata: M4_PROMPT_METADATA, reference: M4_PROMPT_REFERENCE, digest: m4PromptDigest() },
     { key: 'prospectResearch', metadata: PROSPECT_RESEARCH_METADATA, reference: PROSPECT_RESEARCH_METADATA.templateReference, digest: prospectResearchPromptDigest() },
+    { key: 'prospectEmailDraft', metadata: PROSPECT_EMAIL_DRAFT_METADATA, reference: PROSPECT_EMAIL_DRAFT_METADATA.templateReference, digest: prospectEmailDraftPromptDigest() },
     ...M2_TELEGRAM_PROMPT_METADATA.map((metadata) => ({ key: `telegram:${metadata.operation}`, metadata, reference: metadata.templateReference, digest: metadata.digest })),
   ]
 }
