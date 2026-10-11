@@ -20,3 +20,17 @@ export interface ProspectResearchSource { id: string; title: string; publisher: 
 export interface ProspectResearchClaim { id: string; text: string; category: string; claimType: 'sourced_fact' | 'hypothesis'; reviewStatus: 'pending' | 'approved' | 'rejected'; reviewNote: string | null; reviewedAt: string | null; reviewedBy: string | null; sources: Pick<ProspectResearchSource, 'id' | 'title' | 'domain' | 'url'>[] }
 export interface ProspectResearchRun { id: string; prospectId: string; status: string; identityStatus: 'matched' | 'needs_confirmation'; identityExplanation: string; summary: string; limitations: string[]; researchedAt: string; createdAt: string; provider: string; model: string; usage: { inputTokens: string | null; outputTokens: string | null; estimatedCostUsd: string | null }; sources: ProspectResearchSource[]; claims: ProspectResearchClaim[] }
 export interface ProspectResearchHistoryItem { id: string; status: string; identityStatus: string; summary: string; researchedAt: string; createdAt: string }
+export interface ProspectOutreachFact { id: string; text: string; category: string; claimType: 'sourced_fact'; reviewStatus: 'approved'; reviewedAt: string | null; runId: string; researchedAt: string; sources: Pick<ProspectResearchSource, 'id' | 'title' | 'domain' | 'url'>[] }
+export interface ProspectEmailDraftListItem { id: string; subject: string; origin: 'manual' | 'ai'; status: 'draft'; language: string; createdAt: string; updatedAt: string }
+export interface ProspectEmailDraft {
+  id: string; prospectId: string; recipientName: string | null; recipientEmail: string | null; subject: string; body: string
+  language: 'English' | 'Indonesian'; tone: string; objective: string; offering: string; origin: 'manual' | 'ai'; status: 'draft' | 'archived'
+  createdBy: string; createdAt: string; updatedAt: string; version: number
+  generation: { id: string; provider: string; model: string; inputTokens: string | null; outputTokens: string | null; estimatedCostUsd: string | null } | null
+  researchClaims: ProspectOutreachFact[]
+}
+export interface ProspectEmailDraftInput {
+  subject: string; body: string; recipientName?: string | null; recipientEmail?: string | null
+  language?: 'English' | 'Indonesian'; tone?: string; objective?: string; offering?: string
+  origin?: 'manual' | 'ai'; generationId?: string | null; claimIds?: string[]
+}

@@ -2,7 +2,7 @@
 
 ## Scope
 
-This extension adds prospect organizations as supporting business data for Shifd Marketing's existing marketing execution application. Phase 01 implements prospect management and Excel prospect import. Phase 02 adds user-triggered source-backed company research and human claim review. Neither phase changes Shifd Labs Company Context or Product Context. Phase 02 does not add email generation, outbound activity tracking, industry content generation, prospect-linked calendar records, or dashboard analytics.
+This extension adds prospect organizations as supporting business data for Shifd Marketing's existing marketing execution application. Phase 01 implements prospect management and Excel prospect import. Phase 02 adds user-triggered source-backed company research and human claim review. Phase 03 adds manual and AI-assisted personalized email drafting. These phases do not change Shifd Labs Company Context or Product Context. Email drafting does not send email or record outbound activity.
 
 ## Phase 01 architecture (implemented)
 
@@ -64,7 +64,7 @@ Runs preserve prompt version, tenant, prospect, creator, identity match status/e
 
 Facts are retained only when at least one normalized HTTP(S) URL from the AI response exactly matches a URL returned in provider search evidence. Unsupported claims are discarded. Invalid, credential-bearing, localhost, private-network, and non-web URLs are rejected. The backend creates claim-source joins only from this validated mapping. This prevents fabricated URL references and unsupported claims from entering the fact list; it cannot independently certify that a linked page substantively proves the AI's wording, so human review remains necessary.
 
-Facts and hypotheses are separate claim types. Hypotheses have the prominent “Potential Opportunity — Not a Confirmed Company Problem” label and are never represented as company facts. Claim review stores approval/rejection, reviewer, timestamp, and note. Approval records that the user reviewed the claim; it does not prove objective truth. Rejected or pending facts are not approved outreach inputs. Phase 03 can use the research API contract to retrieve the prospect, approved sourced facts with evidence links and review metadata, and separately labeled hypotheses. No email generation is included here.
+Facts and hypotheses are separate claim types. Hypotheses have the prominent “Potential Opportunity — Not a Confirmed Company Problem” label and are never represented as company facts. Claim review stores approval/rejection, reviewer, timestamp, and note. Approval records that the user reviewed the claim; it does not prove objective truth. Rejected or pending facts are not approved outreach inputs. Phase 03 consumes approved sourced facts and evidence links explicitly; hypotheses are never included in the factual prompt context.
 
 ### Human workflow and APIs
 
@@ -89,6 +89,34 @@ Provider errors are converted to the existing API error envelope and persisted a
 - Research is a synchronous request and subject to the configured provider timeout. A process interruption can leave a pending run for operator recovery.
 - Research does not automatically feed any current generation prompt. Phase 03 must consume approved facts and their evidence explicitly.
 
+## Phase 03 architecture (implemented)
+
+Manual and AI-assisted drafts extend the existing authenticated Prospect Detail workflow. Draft records are stored in `prospect_email_drafts`, tenant-owned, associated with one prospect and the user who created them. The draft stores subject/body, recipient name/email snapshot, language, tone, objective, selected Shifd Labs offering, manual/AI origin, draft/archive status, timestamps and version. A prospect has one optional contact in the current data model, so recipient selection uses that saved prospect contact or no recipient; a separate multi-contact entity is not introduced.
+
+`prospect_email_draft_claims` links a saved AI draft to the selected research claims. Claim review metadata and source URLs remain in the research tables and are returned with the draft for traceability. An AI draft also references its successful `AiRequestLog`, which stores provider/model, versioned prompt ID, input hash/snapshot, token usage, estimated cost when a rate is configured, latency and request ID. The output is not persisted as a draft until the user selects Save. Draft creation and editing never modify Prospect fields. Drafts are archived rather than physically deleted.
+
+The versioned `m2.prospect_email_draft.v1` prompt uses the existing OpenAI provider and strict structured output. It receives the minimum prospect profile context, selected Shifd Labs offering, objective, tone, language, optional guidance, and only the user-selected facts that the server revalidates as approved `sourced_fact` claims with evidence from a matched research run for the same tenant and prospect. Identity-uncertain research and hypotheses are excluded. Source references accompany facts in the internal UI, not as inserted citation markers in the email. Without approved facts the system can draft a generic prospect-aware introduction using the saved profile; it must not invent company facts. Output is bounded to 1,800 tokens and parsed/length-checked before use. Generation is user-triggered and rate-limited. Provider calls and failures use the existing AI usage log and model-rate ledger.
+
+The additive migration creates draft and claim-reference tables, extends both prompt and AI request operation CHECK constraints with `prospect.outreach.email_draft`, and preserves the existing allowlists. Prompt seeding is idempotent and follows the immutable prompt-version convention.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/prospects/:id/outreach-facts` | List approved, sourced facts eligible for this prospect |
+| `GET /api/prospects/:id/outreach-drafts` | List up to 50 active drafts |
+| `POST /api/prospects/:id/outreach-drafts/generate` | Generate an editable AI result; does not save a draft |
+| `POST /api/prospects/:id/outreach-drafts` | Save a manual draft or a generated AI result |
+| `GET /api/prospects/:id/outreach-drafts/:draftId` | Read saved draft and evidence references |
+| `PUT /api/prospects/:id/outreach-drafts/:draftId` | Edit subject/body/recipient on an active draft |
+| `POST /api/prospects/:id/outreach-drafts/:draftId/archive` | Preserve and archive a draft |
+
+All endpoints require session authentication and company-scoped lookups. Mutations enforce allowed Origin and CSRF. Composite database keys bind drafts to the same tenant as their prospect and creator. AI saves must reference the authenticated user's successful generation log, its prospect, and exactly the claims selected for that generation. Claim IDs are revalidated as approved sourced facts with source relationships at generation and save time.
+
+The Prospect Detail Outreach section supports saved-draft selection, manual creation, AI generation, editing, saving, copy-subject/body/full-email actions, source review and archive. Copying is a manual handoff to an external email client. There is no SMTP/Gmail/Outlook integration, delivery tracking, sending, or outbound activity history. Those features belong to later phases.
+
+### Phase 03 test commands
+
+From `backend/`, run `npx vitest run tests/prospect-outreach.unit.test.ts tests/prospect-research.unit.test.ts tests/prompt-seed.unit.test.ts` for focused unit coverage. Run `npm run test:prospects` for the authenticated research/outreach API integration fixture; its database guard requires `TEST_DATABASE_URL` to be set and different from `DATABASE_URL`, and the configured target must be `shifd_marketing_test`. From `frontend/`, run `npx vitest run --config vitest.config.ts src/views/ProspectDetailView.spec.ts` and `npm run build`.
+
 ## Relationship to existing six modules
 
 Prospects are a supporting business-data capability. The existing six marketing modules and their Company/Product contexts, content and ideas, calendar, Telegram, AI, and performance flows remain separate and unchanged. This phase adds no prospect foreign keys to those existing records and does not feed prospect facts into prompts. Later phases can associate evidence and outbound artifacts without copying or changing current Company/Product context.
@@ -99,13 +127,13 @@ Prospects are a supporting business-data capability. The existing six marketing 
 | --- | --- | --- |
 | 01 | Prospect create/list/search/filter/detail/edit/archive and Excel preview/confirm import | Implemented in this change |
 | 02 | AI-assisted prospect research with source-backed evidence and explicit human review | Implemented in this change |
-| 03 | Personalized outbound email drafts linked to prospects and evidence | Future; not implemented |
+| 03 | Personalized outbound email drafts linked to prospects and evidence | Implemented |
 | 04 | Outbound communication activity history, replies, follow-ups and meetings | Future; not implemented |
 | 05 | Industry-based content generation and planning | Future; not implemented |
 | 06 | Optional prospect-linked campaign and content-calendar associations | Future; not implemented |
 | 07 | Separate inbound/outbound performance metrics and enhanced evaluation dashboard | Future; not implemented |
 
-The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 03 and later workflows are not present in the current UI or API.
+The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 04 and later workflows are not present in the current UI or API.
 
 ## Phase 01 limitations
 
@@ -123,6 +151,20 @@ The order and boundaries of future phases remain subject to evaluation and thesi
 Use `shifd_marketing_test` for automated database integration tests and synthetic workbook fixtures. Never seed or fabricate prospect rows in development, research, or production. During the four-week field evaluation, identify user-supplied/imported records through `source`, preserve creation/update timestamps and creator provenance, and document the participant's source spreadsheet and manual corrections in the research protocol rather than treating spreadsheet facts as verified evidence. Freeze a data dictionary and status definitions before collection; keep prospect status distinct from future outbound activity outcomes. Do not backdate records or alter existing research KPIs. Analyze counts and workflow observations at the approved company/participant scope, and avoid exposing contact details in reports. Record usability feedback and import error categories separately from downstream outcome measures. This phase alone cannot measure research accuracy, outbound effectiveness, or content impact.
 
 ## Validation evidence
+
+Phase 03 checks run in the Codex workspace:
+
+- Draft/parser and prompt registry focused unit tests: 9 passed.
+- Prospect Detail targeted component tests: 9 passed, including manual save without research context, AI generation/edit/save with source references, draft reopening, and clipboard actions.
+- Prisma schema validation and client generation passed.
+- Backend TypeScript build and frontend type-check/production build passed.
+- The guarded migration plus `npm run test:prospects` could not connect to PostgreSQL (`P1001`, `127.0.0.1:5432`) while targeting only `shifd_marketing_test`; the migration and API/database assertions remain unverified here.
+- For local DB verification from `backend/`, run the guarded migration below, followed by `npm run test:prospects`:
+
+```sh
+node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || new URL(url).pathname.slice(1) !== "shifd_marketing_test" || url === process.env.DATABASE_URL) throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);'
+npm run test:prospects
+```
 
 Phase 02 checks run in the Codex workspace:
 
