@@ -6,8 +6,8 @@ import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import { errorMessage } from '../api/client'
-import { archiveProspect, getProspect, updateProspect, startProspectResearch, listProspectResearch, getProspectResearch, reviewProspectResearchClaim, listProspectEmailDrafts, getProspectEmailDraft, createProspectEmailDraft, updateProspectEmailDraft, archiveProspectEmailDraft, getProspectOutreachFacts, generateProspectEmailDraft } from '../api/prospects'
-import type { Prospect, ProspectInput, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftListItem, ProspectOutreachFact } from '../types/prospect'
+import { archiveProspect, getProspect, updateProspect, startProspectResearch, listProspectResearch, getProspectResearch, reviewProspectResearchClaim, listProspectEmailDrafts, getProspectEmailDraft, createProspectEmailDraft, updateProspectEmailDraft, archiveProspectEmailDraft, getProspectOutreachFacts, generateProspectEmailDraft, listProspectOutboundActivities, getProspectOutboundSummary, createProspectOutboundActivity, updateProspectOutboundActivity, completeProspectOutboundActivity, cancelProspectOutboundActivity, archiveProspectOutboundActivity } from '../api/prospects'
+import type { Prospect, ProspectInput, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftListItem, ProspectOutreachFact, OutboundActivity, OutboundActivityType, OutboundProvenance, ResponseClassification, OutboundSummary } from '../types/prospect'
 
 const route = useRoute(); const router = useRouter()
 const prospect = ref<Prospect | null>(null)
@@ -20,6 +20,16 @@ const generation = ref({ objective: 'introduce_shifd_labs', offering: 'custom_we
 const recipientChoice = ref('saved')
 const recipientOptions = [{ value: 'saved', label: 'Use saved prospect contact' }, { value: 'none', label: 'No recipient contact' }]
 const generatedClaims = ref<ProspectOutreachFact[]>([])
+const activities = ref<OutboundActivity[]>([]); const activitySummary = ref<OutboundSummary | null>(null); const activityLoading = ref(false); const activitySaving = ref(false); const activityError = ref(''); const activityNotice = ref(''); const activityEditId = ref<string | null>(null)
+const localDateTime = () => { const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16) }
+const activityForm = ref({ activityType: 'email_sent' as OutboundActivityType, occurredAt: localDateTime(), dueAt: localDateTime(), status: 'completed' as 'scheduled' | 'completed', provenance: '' as '' | OutboundProvenance, contactChoice: 'none', emailDraftId: '', subject: '', description: '', responseClassification: '' as '' | ResponseClassification, notes: '' })
+const activityTypeOptions = [{ value: 'email_sent', label: 'Email sent' }, { value: 'follow_up', label: 'Follow-up planned' }, { value: 'reply_received', label: 'Reply received' }, { value: 'meeting', label: 'Meeting' }, { value: 'product_demonstration', label: 'Product demonstration' }, { value: 'other', label: 'Other interaction' }]
+const provenanceOptions = [{ value: 'historical', label: 'Historical activity' }, { value: 'artifact_assisted', label: 'Artifact-assisted' }, { value: 'non_artifact_assisted', label: 'Not artifact-assisted' }]
+const responseOptions = [{ value: '', label: 'Choose classification' }, { value: 'interested', label: 'Interested' }, { value: 'not_interested', label: 'Not interested' }, { value: 'requested_information', label: 'Requested more information' }, { value: 'follow_up_requested', label: 'Follow-up requested' }, { value: 'meeting_requested', label: 'Meeting requested' }, { value: 'other', label: 'Other' }]
+const contactActivityOptions = [{ value: 'none', label: 'No contact' }, { value: 'saved', label: 'Use prospect saved contact' }]
+const activityLabel = (type: OutboundActivityType) => activityTypeOptions.find((option) => option.value === type)?.label ?? type
+const activityDateInput = (value: string | null) => { if (!value) return ''; const date = new Date(value); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16) }
+const eventTimestamp = (value: string) => value ? new Date(value).toISOString() : undefined
 const activeDraftClaims = computed(() => draft.value?.researchClaims ?? generatedClaims.value)
 const objectiveOptions = [{ value: 'introduce_shifd_labs', label: 'Introduce Shifd Labs' }, { value: 'introduce_service', label: 'Introduce a service' }, { value: 'introduce_shifd_approval', label: 'Introduce Shifd Approval' }, { value: 'explore_partnership', label: 'Explore a technology partnership' }, { value: 'follow_up', label: 'Follow up on previous outreach' }]
 const offeringOptions = [{ value: 'custom_web_application', label: 'Custom web application development' }, { value: 'mobile_application', label: 'Mobile application development' }, { value: 'workflow_digitalization', label: 'Business workflow digitalization' }, { value: 'it_consultation', label: 'IT consultation' }, { value: 'shifd_approval', label: 'Shifd Approval' }]
@@ -28,7 +38,7 @@ const languageOptions = [{ value: 'English', label: 'English' }, { value: 'Indon
 const statuses = [{ value: 'lead', label: 'Lead' }, { value: 'qualified', label: 'Qualified' }, { value: 'customer', label: 'Customer' }, { value: 'disqualified', label: 'Disqualified' }]
 async function load() {
   loading.value = true; error.value = ''
-  try { const result = await getProspect(String(route.params.id)); prospect.value = result.data; const p = result.data; editForm.value = { name: p.name, industry: p.industry ?? '', website: p.website ?? '', address: p.address ?? '', employeeCount: p.employeeCount === null ? '' : String(p.employeeCount), employeeSize: p.employeeSize ?? '', contactName: p.contactName ?? '', contactEmail: p.contactEmail ?? '', contactPhone: p.contactPhone ?? '', notes: p.notes ?? '', status: p.status }; await Promise.all([loadResearch(), loadDrafts()]) }
+  try { const result = await getProspect(String(route.params.id)); prospect.value = result.data; const p = result.data; editForm.value = { name: p.name, industry: p.industry ?? '', website: p.website ?? '', address: p.address ?? '', employeeCount: p.employeeCount === null ? '' : String(p.employeeCount), employeeSize: p.employeeSize ?? '', contactName: p.contactName ?? '', contactEmail: p.contactEmail ?? '', contactPhone: p.contactPhone ?? '', notes: p.notes ?? '', status: p.status }; await Promise.all([loadResearch(), loadDrafts(), loadActivities()]) }
   catch (reason) { error.value = errorMessage(reason, 'Prospect could not be loaded.') }
   finally { loading.value = false }
 }
@@ -87,6 +97,54 @@ async function archiveDraft() {
 }
 async function copy(value: string, message: string) { try { await navigator.clipboard.writeText(value); draftNotice.value = message } catch { draftError.value = 'Clipboard access is unavailable in this browser.' } }
 function copyFullEmail() { const recipient = draft.value?.recipientEmail || prospect.value?.contactEmail; void copy([recipient ? `To: ${recipient}` : '', `Subject: ${draftSubject.value}`, '', draftBody.value].filter(Boolean).join('\n'), 'Full email copied.') }
+async function loadActivities() {
+  if (!prospect.value) return
+  activityLoading.value = true; activityError.value = ''
+  try { const [list, summary] = await Promise.all([listProspectOutboundActivities(prospect.value.id), getProspectOutboundSummary(prospect.value.id)]); activities.value = list.data; activitySummary.value = summary.data }
+  catch (reason) { activityError.value = errorMessage(reason, 'Outbound activities could not be loaded.') }
+  finally { activityLoading.value = false }
+}
+function resetActivityForm(type: OutboundActivityType = 'email_sent') {
+  activityEditId.value = null; activityForm.value = { activityType: type, occurredAt: localDateTime(), dueAt: localDateTime(), status: 'completed', provenance: '', contactChoice: 'none', emailDraftId: '', subject: '', description: '', responseClassification: '', notes: '' }; activityError.value = ''; activityNotice.value = ''
+}
+function recordDraftAsSent() {
+  if (!draft.value) return
+  resetActivityForm('email_sent'); activityForm.value.emailDraftId = draft.value.id; activityForm.value.subject = draft.value.subject
+  document.getElementById('outbound-activities')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+function editActivity(item: OutboundActivity) {
+  activityEditId.value = item.id; activityError.value = ''; activityNotice.value = ''
+  activityForm.value = { activityType: item.activityType, occurredAt: activityDateInput(item.occurredAt), dueAt: activityDateInput(item.dueAt), status: item.status === 'scheduled' ? 'scheduled' : 'completed', provenance: item.provenance, contactChoice: item.contactName || item.contactEmail ? 'saved' : 'none', emailDraftId: item.emailDraftId ?? '', subject: item.subject ?? '', description: item.description ?? '', responseClassification: item.responseClassification ?? '', notes: item.notes ?? '' }
+}
+async function saveActivity() {
+  if (!prospect.value) return
+  if (!activityForm.value.provenance) { activityError.value = 'Choose the activity provenance.'; return }
+  if (activityForm.value.activityType !== 'follow_up' && !activityForm.value.occurredAt) { activityError.value = 'Enter the actual event date.'; return }
+  if (activityForm.value.activityType === 'follow_up' && !activityForm.value.dueAt) { activityError.value = 'Enter the planned follow-up date.'; return }
+  const contact = activityForm.value.contactChoice === 'saved' ? { contactName: prospect.value.contactName, contactEmail: prospect.value.contactEmail } : { contactName: null, contactEmail: null }
+  const common = { ...contact, provenance: activityForm.value.provenance, notes: activityForm.value.notes || null }
+  activitySaving.value = true; activityError.value = ''; activityNotice.value = ''
+  try {
+    if (activityEditId.value) {
+      await updateProspectOutboundActivity(prospect.value.id, activityEditId.value, { ...common, ...(activityForm.value.activityType === 'follow_up' ? { dueAt: eventTimestamp(activityForm.value.dueAt) } : { occurredAt: eventTimestamp(activityForm.value.occurredAt) }), subject: activityForm.value.subject || null, description: activityForm.value.description || null, responseClassification: activityForm.value.responseClassification || null })
+    } else {
+      await createProspectOutboundActivity(prospect.value.id, { activityType: activityForm.value.activityType, ...common, ...(activityForm.value.activityType === 'follow_up' ? { dueAt: eventTimestamp(activityForm.value.dueAt) } : { occurredAt: eventTimestamp(activityForm.value.occurredAt) }), ...(activityForm.value.emailDraftId ? { emailDraftId: activityForm.value.emailDraftId } : {}), ...(activityForm.value.subject ? { subject: activityForm.value.subject } : {}), ...(activityForm.value.description ? { description: activityForm.value.description } : {}), ...(activityForm.value.responseClassification ? { responseClassification: activityForm.value.responseClassification } : {}), ...(['meeting', 'product_demonstration'].includes(activityForm.value.activityType) ? { status: activityForm.value.status } : {}) })
+    }
+    const savedNotice = activityEditId.value ? 'Activity updated.' : 'Activity recorded.'; resetActivityForm(); await loadActivities(); activityNotice.value = savedNotice
+  } catch (reason) { activityError.value = errorMessage(reason, 'Activity could not be saved.') }
+  finally { activitySaving.value = false }
+}
+async function changeActivity(item: OutboundActivity, action: 'complete' | 'cancel' | 'archive') {
+  if (!prospect.value) return
+  if (action === 'archive' && !confirm('Archive this activity from the timeline?')) return
+  activityError.value = ''; activityNotice.value = ''
+  try {
+    if (action === 'complete') await completeProspectOutboundActivity(prospect.value.id, item.id)
+    else if (action === 'cancel') await cancelProspectOutboundActivity(prospect.value.id, item.id)
+    else await archiveProspectOutboundActivity(prospect.value.id, item.id)
+    activityNotice.value = action === 'archive' ? 'Activity archived.' : action === 'complete' ? 'Follow-up completed.' : 'Activity cancelled.'; await loadActivities()
+  } catch (reason) { activityError.value = errorMessage(reason, 'Activity could not be updated.') }
+}
 async function loadResearch(runId?: string) {
   if (!prospect.value) return
   researchError.value = ''
@@ -186,13 +244,42 @@ onMounted(load)
                 <BaseTextarea v-model="draftBody" label="Email body" :rows="12" maxlength="20000" required />
                 <p v-if="activeDraftClaims.length" class="evidence-label">Approved research references used</p>
                 <ul v-if="activeDraftClaims.length" class="draft-evidence"><li v-for="claim in activeDraftClaims" :key="claim.id"><span>{{ claim.reviewStatus === 'approved' ? 'Approved sourced fact · human reviewed' : 'Research claim status changed · review before reuse' }}</span><p>{{ claim.text }}</p><a v-for="source in claim.sources" :key="source.id" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }} ({{ source.domain }})</a></li></ul>
-                <div class="editor-actions"><BaseButton @click="saveDraft" :loading="draftSaving">{{ draft ? 'Save changes' : 'Save draft' }}</BaseButton><BaseButton variant="secondary" @click="copy(draftSubject, 'Subject copied.')">Copy subject</BaseButton><BaseButton variant="secondary" @click="copy(draftBody, 'Body copied.')">Copy body</BaseButton><BaseButton variant="secondary" @click="copyFullEmail">Copy full email</BaseButton><BaseButton v-if="draft" variant="danger" @click="archiveDraft" :loading="draftSaving">Archive draft</BaseButton><BaseButton v-if="draft?.origin === 'ai'" variant="secondary" @click="regenerateSavedDraft">Regenerate as a new draft</BaseButton><BaseButton v-if="draftMode === 'ai' && generatedId" variant="secondary" @click="generatedId = null; generatedClaims = []; draftSubject = ''; draftBody = ''">Regenerate</BaseButton></div>
+                <div class="editor-actions"><BaseButton @click="saveDraft" :loading="draftSaving">{{ draft ? 'Save changes' : 'Save draft' }}</BaseButton><BaseButton variant="secondary" @click="copy(draftSubject, 'Subject copied.')">Copy subject</BaseButton><BaseButton variant="secondary" @click="copy(draftBody, 'Body copied.')">Copy body</BaseButton><BaseButton variant="secondary" @click="copyFullEmail">Copy full email</BaseButton><BaseButton v-if="draft && draft.status === 'draft'" variant="secondary" @click="recordDraftAsSent">Record as sent</BaseButton><BaseButton v-if="draft" variant="danger" @click="archiveDraft" :loading="draftSaving">Archive draft</BaseButton><BaseButton v-if="draft?.origin === 'ai'" variant="secondary" @click="regenerateSavedDraft">Regenerate as a new draft</BaseButton><BaseButton v-if="draftMode === 'ai' && generatedId" variant="secondary" @click="generatedId = null; generatedClaims = []; draftSubject = ''; draftBody = ''">Regenerate</BaseButton></div>
                 <p v-if="draft" class="draft-meta">{{ draft.origin === 'ai' ? 'AI-assisted draft' : 'Manual draft' }} · Saved {{ new Date(draft.updatedAt).toLocaleString() }} · Created by {{ draft.createdBy }}</p>
               </div>
             </template>
           </section>
         </div>
         <p class="draft-disclaimer">Drafting and copying do not record an email as sent. Sending remains a manual action outside Shifd Marketing.</p>
+      </section>
+      <section id="outbound-activities" class="outbound-activities" aria-labelledby="activities-heading">
+        <header class="outbound-header"><div><p class="eyebrow">Manual outreach record</p><h2 id="activities-heading">Outbound Activities</h2></div><BaseButton variant="secondary" @click="resetActivityForm()">Record activity</BaseButton></header>
+        <p class="draft-disclaimer">Only record events that actually happened. Activity records do not verify email delivery. A planned follow-up remains pending until completed.</p>
+        <p v-if="activityError" class="detail-error" role="alert">{{ activityError }}</p><p v-if="activityNotice" class="detail-notice" role="status">{{ activityNotice }}</p>
+        <div v-if="activitySummary" class="activity-summary" aria-label="Outreach summary">
+          <article><strong>{{ activitySummary.emailsSent }}</strong><span>Emails sent</span></article><article><strong>{{ activitySummary.followUpsCompleted }}</strong><span>Follow-ups completed</span></article><article><strong>{{ activitySummary.repliesReceived }}</strong><span>Replies</span></article><article><strong>{{ activitySummary.interestedResponses }}</strong><span>Interested</span></article><article><strong>{{ activitySummary.meetings }}</strong><span>Meetings</span></article><article><strong>{{ activitySummary.demonstrations }}</strong><span>Demonstrations</span></article><article><strong>{{ activitySummary.pendingFollowUps }}</strong><span>Pending follow-ups · {{ activitySummary.overdueFollowUps }} overdue</span></article><article><strong>{{ activitySummary.lastInteractionAt ? new Date(activitySummary.lastInteractionAt).toLocaleDateString() : '—' }}</strong><span>Last interaction</span></article>
+        </div>
+        <form class="activity-form" @submit.prevent="saveActivity">
+          <h3>{{ activityEditId ? 'Edit activity' : 'Record an activity' }}</h3>
+          <BaseSelect v-model="activityForm.activityType" label="Activity type" :options="activityTypeOptions" :disabled="Boolean(activityEditId)" />
+          <BaseInput v-if="activityForm.activityType === 'follow_up'" v-model="activityForm.dueAt" label="Planned follow-up date" type="datetime-local" required />
+          <BaseInput v-else v-model="activityForm.occurredAt" label="Actual event date" type="datetime-local" required />
+          <BaseSelect v-if="['meeting', 'product_demonstration'].includes(activityForm.activityType) && !activityEditId" v-model="activityForm.status" label="Meeting/demo status" :options="[{value:'scheduled',label:'Scheduled'},{value:'completed',label:'Completed'}]" />
+          <BaseSelect v-if="prospect.contactName || prospect.contactEmail" v-model="activityForm.contactChoice" label="Contact" :options="contactActivityOptions" />
+          <BaseSelect v-if="activityForm.activityType === 'email_sent' && !activityEditId" v-model="activityForm.emailDraftId" label="Linked saved draft (optional)" :options="[{value:'',label:'No linked draft'}, ...drafts.filter(item => item.status === 'draft').map(item => ({value:item.id,label:item.subject || '(No subject)'}))]" />
+          <BaseInput v-if="activityForm.activityType === 'email_sent'" v-model="activityForm.subject" label="Email subject" maxlength="500" required />
+          <BaseSelect v-if="activityForm.activityType === 'reply_received'" v-model="activityForm.responseClassification" label="Response classification" :options="responseOptions" />
+          <BaseInput v-if="activityForm.activityType === 'other'" v-model="activityForm.description" label="Interaction description" maxlength="1000" required />
+          <BaseSelect v-model="activityForm.provenance" label="Activity provenance" :options="[{value:'',label:'Choose provenance'}, ...provenanceOptions]" />
+          <BaseTextarea v-model="activityForm.notes" label="Notes" :rows="3" maxlength="5000" />
+          <div class="editor-actions"><BaseButton type="submit" :loading="activitySaving">{{ activityEditId ? 'Save activity changes' : activityForm.activityType === 'follow_up' ? 'Schedule follow-up' : 'Record activity' }}</BaseButton><BaseButton v-if="activityEditId" type="button" variant="secondary" @click="resetActivityForm()">Cancel edit</BaseButton></div>
+        </form>
+        <section class="activity-timeline" aria-label="Activity timeline"><h3>Activity timeline</h3><p v-if="activityLoading" class="detail-message" role="status">Loading outbound activities…</p><p v-else-if="!activities.length" class="detail-message">No outbound activities recorded for this prospect.</p><ol v-else><li v-for="item in activities" :key="item.id" :class="{'overdue-follow-up': item.activityType === 'follow_up' && item.status === 'pending' && item.dueAt && new Date(item.dueAt) < new Date()}">
+          <div class="timeline-title"><span class="activity-badge">{{ activityLabel(item.activityType) }}</span><strong>{{ item.activityType === 'follow_up' ? item.status : item.status === 'scheduled' ? 'scheduled' : item.activityType === 'meeting' || item.activityType === 'product_demonstration' ? item.status : item.responseClassification?.replaceAll('_', ' ') || '' }}</strong><time>{{ new Date(item.activityType === 'follow_up' && item.status === 'pending' ? item.dueAt! : item.occurredAt!).toLocaleString() }}</time></div>
+          <p v-if="item.subject"><strong>Subject:</strong> {{ item.subject }}</p><p v-if="item.description">{{ item.description }}</p><p v-if="item.contactName || item.contactEmail">Contact: {{ item.contactName || item.contactEmail }} <span v-if="item.contactName && item.contactEmail">({{ item.contactEmail }})</span></p>
+          <p v-if="item.emailDraft">Linked draft: {{ item.emailDraft.subject }} · {{ item.emailDraft.origin === 'ai' ? 'AI-assisted' : 'Manual' }}. This does not verify delivery.</p><p v-if="item.notes">{{ item.notes }}</p><p class="activity-meta">{{ item.provenance.replaceAll('_', ' ') }} · Recorded {{ new Date(item.createdAt).toLocaleString() }} by {{ item.creator.name }}</p><p v-if="item.activityType === 'follow_up' && item.status === 'pending' && item.dueAt && new Date(item.dueAt) < new Date()" class="overdue-label">Overdue follow-up</p>
+          <div class="editor-actions"><BaseButton variant="secondary" @click="editActivity(item)">Edit</BaseButton><BaseButton v-if="item.status === 'pending' || item.status === 'scheduled'" @click="changeActivity(item, 'complete')">Mark completed</BaseButton><BaseButton v-if="item.status === 'pending' || item.status === 'scheduled'" variant="secondary" @click="changeActivity(item, 'cancel')">Cancel</BaseButton><BaseButton variant="danger" @click="changeActivity(item, 'archive')">Archive</BaseButton></div>
+        </li></ol></section>
       </section>
     </template>
   </section>
@@ -202,4 +289,5 @@ onMounted(load)
 .prospect-detail{display:grid;gap:24px}.prospect-detail>a{color:#356653;text-decoration:none}.prospect-detail header{display:flex;justify-content:space-between;align-items:center;gap:20px}.prospect-detail h1{font-size:32px;margin:5px 0}.prospect-detail header p{color:#687581;margin:0}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em}.prospect-form{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:900px}.form-wide{grid-column:1/-1}.actions{display:flex;justify-content:flex-end}.detail-notice{color:#186149}.detail-error{color:#a13c36}.detail-message{padding:32px;color:#687581}@media(max-width:700px){.prospect-detail header{align-items:flex-start;flex-direction:column}.prospect-form{grid-template-columns:1fr}.form-wide{grid-column:auto}}
 .company-research{display:grid;gap:20px;border-top:1px solid #dce4df;padding-top:24px}.company-research h2{margin:4px 0;font-size:26px}.company-research h3{margin:0 0 12px}.research-header{display:flex;align-items:center;justify-content:space-between;gap:16px}.research-card,.claim-card{border:1px solid #dce4df;border-radius:12px;padding:18px;background:#fff}.claim-card{margin-top:12px}.claim-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#356653;font-weight:700}.identity-state,.review-note,.review-status,.source-list span{color:#687581;font-size:14px}.claim-evidence{display:flex;gap:8px;flex-wrap:wrap}.claim-evidence a,.source-list a{color:#28664f;overflow-wrap:anywhere}.unverified{color:#8b5b1b}.note-field{display:grid;gap:6px;margin-top:12px}.note-field textarea{width:100%;border:1px solid #cbd6cf;border-radius:8px;padding:9px;font:inherit}.review-actions{display:flex;gap:10px;margin-top:10px}.source-list,.history-list{display:grid;gap:12px;list-style:none;padding:0}.source-list li,.history-list li{display:grid;gap:5px;border-bottom:1px solid #e4e9e6;padding:10px 0}.history-list button{justify-self:start;background:none;border:0;padding:0;color:#28664f;text-decoration:underline;cursor:pointer}.history-list button[aria-current="true"]{font-weight:700}@media(max-width:700px){.research-header{align-items:flex-start;flex-direction:column}}
 .outreach{display:grid;gap:18px;border-top:1px solid #dce4df;padding-top:24px}.outreach h2{margin:4px 0;font-size:26px}.outreach h3{margin:0 0 12px}.outreach-header,.outreach-actions,.editor-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.draft-layout{display:grid;grid-template-columns:minmax(220px, .8fr) minmax(0, 1.7fr);gap:24px}.draft-list,.draft-editor{border:1px solid #dce4df;border-radius:12px;padding:18px;background:#fff}.draft-list ul,.draft-evidence{list-style:none;padding:0;display:grid;gap:10px}.draft-list li button{width:100%;display:grid;gap:5px;text-align:left;border:1px solid #e0e7e2;border-radius:8px;padding:12px;background:#fff;color:inherit;cursor:pointer}.draft-list li button span,.draft-meta,.draft-disclaimer,.recipient-line{color:#687581;font-size:13px}.generation-form,.email-fields{display:grid;gap:16px}.fact-picker{display:grid;gap:12px;border:1px solid #dce4df;border-radius:8px;padding:14px}.fact-picker label{display:flex;align-items:flex-start;gap:9px}.fact-picker label span{display:grid;gap:4px}.fact-picker a,.draft-evidence a{color:#28664f;overflow-wrap:anywhere;font-size:13px}.draft-evidence li{border-left:3px solid #7ea28d;padding:4px 10px}.draft-evidence p{margin:6px 0}.draft-evidence span,.evidence-label{font-size:13px;color:#356653;font-weight:700}.draft-disclaimer{margin:0}@media(max-width:760px){.draft-layout{grid-template-columns:1fr}.outreach-header{align-items:flex-start}}
+.outbound-activities{display:grid;gap:18px;border-top:1px solid #dce4df;padding-top:24px;scroll-margin-top:24px}.outbound-activities h2{margin:4px 0;font-size:26px}.outbound-activities h3{margin:0 0 12px}.outbound-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.activity-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.activity-summary article{display:grid;gap:5px;border:1px solid #dce4df;border-radius:10px;background:#fff;padding:14px}.activity-summary strong{font-size:22px;color:#244f3e}.activity-summary span,.activity-meta{font-size:12px;color:#687581}.activity-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;border:1px solid #dce4df;border-radius:12px;background:#fff;padding:18px}.activity-form h3,.activity-form .editor-actions{grid-column:1/-1}.activity-timeline ol{list-style:none;padding:0;margin:0;display:grid;gap:12px}.activity-timeline li{border:1px solid #dce4df;border-radius:10px;padding:16px;background:#fff}.timeline-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.timeline-title time{margin-left:auto;color:#687581;font-size:13px}.activity-badge{border-radius:999px;background:#e8f0eb;color:#285540;padding:4px 9px;font-size:12px;font-weight:700}.activity-meta{margin-top:12px}.overdue-follow-up{border-color:#c87a56!important}.overdue-label{font-weight:700;color:#a13c36}@media(max-width:700px){.activity-form{grid-template-columns:1fr}.activity-form h3,.activity-form .editor-actions{grid-column:auto}.timeline-title time{margin-left:0}}
 </style>

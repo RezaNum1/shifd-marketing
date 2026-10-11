@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ProspectDetailView from './ProspectDetailView.vue'
 
-const api = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn(), archive: vi.fn(), startResearch: vi.fn(), listResearch: vi.fn(), getResearch: vi.fn(), reviewClaim: vi.fn(), listDrafts: vi.fn(), getDraft: vi.fn(), createDraft: vi.fn(), updateDraft: vi.fn(), archiveDraft: vi.fn(), facts: vi.fn(), generateDraft: vi.fn() }))
+const api = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn(), archive: vi.fn(), startResearch: vi.fn(), listResearch: vi.fn(), getResearch: vi.fn(), reviewClaim: vi.fn(), listDrafts: vi.fn(), getDraft: vi.fn(), createDraft: vi.fn(), updateDraft: vi.fn(), archiveDraft: vi.fn(), facts: vi.fn(), generateDraft: vi.fn(), activities: vi.fn(), activitySummary: vi.fn(), createActivity: vi.fn(), updateActivity: vi.fn(), completeActivity: vi.fn(), cancelActivity: vi.fn(), archiveActivity: vi.fn() }))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
-vi.mock('../api/prospects', () => ({ getProspect: api.get, updateProspect: api.update, archiveProspect: api.archive, startProspectResearch: api.startResearch, listProspectResearch: api.listResearch, getProspectResearch: api.getResearch, reviewProspectResearchClaim: api.reviewClaim, listProspectEmailDrafts: api.listDrafts, getProspectEmailDraft: api.getDraft, createProspectEmailDraft: api.createDraft, updateProspectEmailDraft: api.updateDraft, archiveProspectEmailDraft: api.archiveDraft, getProspectOutreachFacts: api.facts, generateProspectEmailDraft: api.generateDraft }))
+vi.mock('../api/prospects', () => ({ getProspect: api.get, updateProspect: api.update, archiveProspect: api.archive, startProspectResearch: api.startResearch, listProspectResearch: api.listResearch, getProspectResearch: api.getResearch, reviewProspectResearchClaim: api.reviewClaim, listProspectEmailDrafts: api.listDrafts, getProspectEmailDraft: api.getDraft, createProspectEmailDraft: api.createDraft, updateProspectEmailDraft: api.updateDraft, archiveProspectEmailDraft: api.archiveDraft, getProspectOutreachFacts: api.facts, generateProspectEmailDraft: api.generateDraft, listProspectOutboundActivities: api.activities, getProspectOutboundSummary: api.activitySummary, createProspectOutboundActivity: api.createActivity, updateProspectOutboundActivity: api.updateActivity, completeProspectOutboundActivity: api.completeActivity, cancelProspectOutboundActivity: api.cancelActivity, archiveProspectOutboundActivity: api.archiveActivity }))
 vi.mock('vue-router', async (load) => ({ ...(await load<typeof import('vue-router')>()), useRouter: () => router, useRoute: () => ({ params: { id: 'prospect-1' } }) }))
 
 const BaseInput = { props: ['label', 'modelValue', 'type'], emits: ['update:modelValue'], template: '<label>{{label}}<input :aria-label="label" :type="type || \'text\'" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)"></label>' }
@@ -18,7 +18,7 @@ const eligibleFact = { id: 'fact-1', text: 'Synthetic company offers logistics s
 function mountDetail() { return mount(ProspectDetailView, { global: { stubs: { BaseInput, BaseSelect, BaseTextarea, BaseButton, RouterLink: true } } }) }
 
 describe('Prospect detail view', () => {
-  beforeEach(() => { api.get.mockResolvedValue({ data: { ...prospect } }); api.update.mockResolvedValue({ data: { ...prospect, name: 'Edited Name', version: 2 } }); api.archive.mockResolvedValue({ data: { ...prospect, archivedAt: '2026-01-02T00:00:00.000Z' } }); api.listResearch.mockResolvedValue({ data: [] }); api.getResearch.mockResolvedValue({ data: null }); api.startResearch.mockResolvedValue({ data: null }); api.reviewClaim.mockResolvedValue({ data: {} }); api.listDrafts.mockResolvedValue({ data: [] }); api.facts.mockResolvedValue({ data: [eligibleFact] }); api.createDraft.mockResolvedValue({ data: savedDraft }); api.updateDraft.mockResolvedValue({ data: { ...savedDraft, subject: 'Edited' } }); api.getDraft.mockResolvedValue({ data: savedDraft }); api.archiveDraft.mockResolvedValue({ data: { id: 'draft-1', status: 'archived' } }); api.generateDraft.mockResolvedValue({ data: { subject: 'AI introduction', body: 'Hello, synthetic prospect.', generationId: 'generation-1', claims: [eligibleFact], usage: { inputTokens: 10, outputTokens: 20 } } }); vi.stubGlobal('confirm', vi.fn(() => true)) })
+  beforeEach(() => { api.get.mockResolvedValue({ data: { ...prospect } }); api.update.mockResolvedValue({ data: { ...prospect, name: 'Edited Name', version: 2 } }); api.archive.mockResolvedValue({ data: { ...prospect, archivedAt: '2026-01-02T00:00:00.000Z' } }); api.listResearch.mockResolvedValue({ data: [] }); api.getResearch.mockResolvedValue({ data: null }); api.startResearch.mockResolvedValue({ data: null }); api.reviewClaim.mockResolvedValue({ data: {} }); api.listDrafts.mockResolvedValue({ data: [] }); api.facts.mockResolvedValue({ data: [eligibleFact] }); api.createDraft.mockResolvedValue({ data: savedDraft }); api.updateDraft.mockResolvedValue({ data: { ...savedDraft, subject: 'Edited' } }); api.getDraft.mockResolvedValue({ data: savedDraft }); api.archiveDraft.mockResolvedValue({ data: { id: 'draft-1', status: 'archived' } }); api.generateDraft.mockResolvedValue({ data: { subject: 'AI introduction', body: 'Hello, synthetic prospect.', generationId: 'generation-1', claims: [eligibleFact], usage: { inputTokens: 10, outputTokens: 20 } } }); api.activities.mockResolvedValue({ data: [] }); api.activitySummary.mockResolvedValue({ data: { emailsSent: 0, followUpsCompleted: 0, repliesReceived: 0, interestedResponses: 0, meetings: 0, demonstrations: 0, pendingFollowUps: 0, overdueFollowUps: 0, lastInteractionAt: null } }); api.createActivity.mockResolvedValue({ data: {} }); api.updateActivity.mockResolvedValue({ data: {} }); api.completeActivity.mockResolvedValue({ data: {} }); api.cancelActivity.mockResolvedValue({ data: {} }); api.archiveActivity.mockResolvedValue({ data: {} }); vi.stubGlobal('confirm', vi.fn(() => true)) })
   afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals() })
   it('loads, edits, and saves the prospect with its current version', async () => {
     const wrapper = mountDetail(); await flushPromises()
@@ -111,5 +111,37 @@ describe('Prospect detail view', () => {
     expect(writeText).toHaveBeenCalledWith('Introduction')
     await wrapper.findAll('button').find((button) => button.text() === 'Copy body')?.trigger('click'); await flushPromises()
     expect(writeText).toHaveBeenCalledWith('Hello, may we share more?')
+  })
+  it('records an actually sent email and links the saved draft only after explicit submission', async () => {
+    api.listDrafts.mockResolvedValue({ data: [{ id: 'draft-1', subject: 'Introduction', origin: 'manual', status: 'draft', language: 'English', createdAt: savedDraft.createdAt, updatedAt: savedDraft.updatedAt }] })
+    const wrapper = mountDetail(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('Introduction'))?.trigger('click'); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'Record as sent')?.trigger('click')
+    await wrapper.get('[aria-label="Actual event date"]').setValue('2025-04-02T12:30')
+    await wrapper.get('[aria-label="Activity provenance"]').setValue('historical')
+    await wrapper.find('.activity-form').trigger('submit'); await flushPromises()
+    expect(api.createActivity).toHaveBeenCalledWith('prospect-1', expect.objectContaining({ activityType: 'email_sent', emailDraftId: 'draft-1', subject: 'Introduction', provenance: 'historical', occurredAt: expect.any(String) }))
+  })
+  it('schedules a follow-up, shows persisted timeline and summary, and completes it', async () => {
+    const followUp = { id: 'activity-1', prospectId: 'prospect-1', activityType: 'follow_up', status: 'pending', occurredAt: null, dueAt: '2026-10-12T01:00:00.000Z', completedAt: null, contactName: null, contactEmail: null, emailDraftId: null, emailDraft: null, subject: null, description: null, responseClassification: null, provenance: 'non_artifact_assisted', notes: 'Check in', createdAt: '2026-10-11T01:00:00.000Z', updatedAt: '2026-10-11T01:00:00.000Z', archivedAt: null, creator: { name: 'Founder' } }
+    api.activities.mockResolvedValue({ data: [followUp] })
+    api.activitySummary.mockResolvedValue({ data: { emailsSent: 2, followUpsCompleted: 1, repliesReceived: 1, interestedResponses: 1, meetings: 0, demonstrations: 0, pendingFollowUps: 1, overdueFollowUps: 0, lastInteractionAt: '2026-10-10T01:00:00.000Z' } })
+    const wrapper = mountDetail(); await flushPromises()
+    expect(wrapper.text()).toContain('2')
+    expect(wrapper.text()).toContain('Check in')
+    await wrapper.findAll('button').find((button) => button.text() === 'Mark completed')?.trigger('click'); await flushPromises()
+    expect(api.completeActivity).toHaveBeenCalledWith('prospect-1', 'activity-1')
+    await wrapper.findAll('button').find((button) => button.text() === 'Record activity')?.trigger('click')
+    await wrapper.get('[aria-label="Activity type"]').setValue('follow_up')
+    await wrapper.get('[aria-label="Planned follow-up date"]').setValue('2026-10-20T10:00')
+    await wrapper.get('[aria-label="Activity provenance"]').setValue('non_artifact_assisted')
+    await wrapper.find('.activity-form').trigger('submit'); await flushPromises()
+    expect(api.createActivity).toHaveBeenCalledWith('prospect-1', expect.objectContaining({ activityType: 'follow_up', provenance: 'non_artifact_assisted', dueAt: expect.any(String) }))
+  })
+  it('shows an activity loading failure without hiding the prospect page', async () => {
+    api.activities.mockRejectedValueOnce(new Error('activity service unavailable'))
+    const wrapper = mountDetail(); await flushPromises()
+    expect(wrapper.get('#outbound-activities [role="alert"]').text()).toContain('Outbound activities could not be loaded.')
+    expect(wrapper.text()).toContain('Original Name')
   })
 })

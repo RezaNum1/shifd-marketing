@@ -51,6 +51,7 @@ model Company {
   prospectImportBatches    ProspectImportBatch[]
   prospectResearchRuns     ProspectResearchRun[]
   prospectEmailDrafts      ProspectEmailDraft[]
+  outboundActivities       OutboundActivity[]
 
   @@map("companies")
 }
@@ -87,6 +88,9 @@ model User {
   reviewedResearchClaims ProspectResearchClaim[] @relation("ResearchClaimReviewer")
   prospectImportBatches ProspectImportBatch[]
   createdProspectEmailDrafts ProspectEmailDraft[] @relation("ProspectEmailDraftCreator")
+  createdOutboundActivities OutboundActivity[]    @relation("OutboundActivityCreator")
+  updatedOutboundActivities OutboundActivity[]   @relation("OutboundActivityUpdater")
+  archivedOutboundActivities OutboundActivity[]   @relation("OutboundActivityArchiver")
 
   @@unique([companyId, id])
   @@index([companyId])
@@ -140,6 +144,7 @@ model Prospect {
   importBatch       ProspectImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
   researchRuns      ProspectResearchRun[]
   emailDrafts       ProspectEmailDraft[]
+  outboundActivities OutboundActivity[]
 
   @@unique([companyId, id])
   @@index([companyId, archivedAt, updatedAt, id])
@@ -271,6 +276,7 @@ model ProspectEmailDraft {
   creator            User                      @relation("ProspectEmailDraftCreator", fields: [companyId, createdBy], references: [companyId, id], onDelete: Restrict)
   aiRequestLog       AiRequestLog?             @relation(fields: [companyId, aiRequestLogId], references: [companyId, id], onDelete: Restrict)
   researchClaims     ProspectEmailDraftClaim[]
+  outboundActivities OutboundActivity[]
 
   @@unique([companyId, id])
   @@unique([companyId, aiRequestLogId])
@@ -287,6 +293,43 @@ model ProspectEmailDraftClaim {
   @@id([draftId, claimId])
   @@index([claimId])
   @@map("prospect_email_draft_claims")
+}
+
+model OutboundActivity {
+  id                  String             @id @default(uuid()) @db.Uuid
+  companyId           String             @map("company_id") @db.Uuid
+  prospectId          String             @map("prospect_id") @db.Uuid
+  emailDraftId        String?            @map("email_draft_id") @db.Uuid
+  activityType        String             @map("activity_type")
+  status              String             @default("recorded")
+  occurredAt          DateTime?          @map("occurred_at") @db.Timestamptz(3)
+  dueAt               DateTime?          @map("due_at") @db.Timestamptz(3)
+  completedAt         DateTime?          @map("completed_at") @db.Timestamptz(3)
+  contactName         String?            @map("contact_name")
+  contactEmail        String?            @map("contact_email")
+  subject             String?
+  description         String?
+  responseClassification String?         @map("response_classification")
+  provenance          String
+  notes               String?
+  createdBy           String             @map("created_by") @db.Uuid
+  updatedBy           String?            @map("updated_by") @db.Uuid
+  archivedBy          String?            @map("archived_by") @db.Uuid
+  archivedAt          DateTime?          @map("archived_at") @db.Timestamptz(3)
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  prospect            Prospect           @relation(fields: [companyId, prospectId], references: [companyId, id], onDelete: Restrict)
+  emailDraft          ProspectEmailDraft? @relation(fields: [companyId, emailDraftId], references: [companyId, id], onDelete: Restrict)
+  creator             User               @relation("OutboundActivityCreator", fields: [companyId, createdBy], references: [companyId, id], onDelete: Restrict)
+  updater             User?              @relation("OutboundActivityUpdater", fields: [companyId, updatedBy], references: [companyId, id], onDelete: Restrict)
+  archiver            User?              @relation("OutboundActivityArchiver", fields: [companyId, archivedBy], references: [companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, prospectId, occurredAt(sort: Desc), createdAt(sort: Desc)])
+  @@index([companyId, prospectId, status, dueAt])
+  @@index([companyId, emailDraftId])
+  @@map("outbound_activities")
 }
 
 model BrandProfile {

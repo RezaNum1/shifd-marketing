@@ -21,6 +21,7 @@ withDefaults(
       | 'password'
       | 'number'
       | 'date'
+      | 'datetime-local'
       | 'time'
   }>(),
   { size: 'default', type: 'text' },

@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { Prospect, ProspectInput, ProspectImportField, ProspectImportPreview, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftInput, ProspectEmailDraftListItem, ProspectOutreachFact } from '../types/prospect'
+import type { Prospect, ProspectInput, ProspectImportField, ProspectImportPreview, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftInput, ProspectEmailDraftListItem, ProspectOutreachFact, OutboundActivity, OutboundActivityInput, OutboundSummary } from '../types/prospect'
 
 export function listProspects(query: URLSearchParams) { return request<Prospect[]>('/prospects?' + query.toString()) }
 export function getProspect(id: string) { return request<Prospect>(`/prospects/${id}`) }
@@ -17,6 +17,14 @@ export function updateProspectEmailDraft(id: string, draftId: string, input: Pic
 export function archiveProspectEmailDraft(id: string, draftId: string) { return request<{ id: string; status: 'archived' }>(`/prospects/${id}/outreach-drafts/${draftId}/archive`, { method: 'POST', json: {} }) }
 export function getProspectOutreachFacts(id: string) { return request<ProspectOutreachFact[]>(`/prospects/${id}/outreach-facts`) }
 export function generateProspectEmailDraft(id: string, input: { objective: string; offering: string; tone: string; language: 'English' | 'Indonesian'; customInstructions?: string; claimIds: string[] }) { return request<{ subject: string; body: string; generationId: string; claims: ProspectOutreachFact[]; usage: { inputTokens: number | null; outputTokens: number | null } }>(`/prospects/${id}/outreach-drafts/generate`, { method: 'POST', json: input }) }
+export function listProspectOutboundActivities(id: string, page = 1, limit = 100) { return request<OutboundActivity[]>(`/prospects/${id}/outbound-activities?page=${page}&limit=${limit}`) }
+export function getProspectOutboundSummary(id: string) { return request<OutboundSummary>(`/prospects/${id}/outbound-activities/summary`) }
+export function createProspectOutboundActivity(id: string, input: OutboundActivityInput) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities`, { method: 'POST', json: input }) }
+export function getProspectOutboundActivity(id: string, activityId: string) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities/${activityId}`) }
+export function updateProspectOutboundActivity(id: string, activityId: string, input: Partial<OutboundActivityInput>) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities/${activityId}`, { method: 'PUT', json: input }) }
+export function completeProspectOutboundActivity(id: string, activityId: string, completedAt?: string) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities/${activityId}/complete`, { method: 'POST', json: completedAt ? { completedAt } : {} }) }
+export function cancelProspectOutboundActivity(id: string, activityId: string) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities/${activityId}/cancel`, { method: 'POST', json: {} }) }
+export function archiveProspectOutboundActivity(id: string, activityId: string) { return request<OutboundActivity>(`/prospects/${id}/outbound-activities/${activityId}/archive`, { method: 'POST', json: {} }) }
 export function previewProspectImport(file: File, mapping?: Partial<Record<ProspectImportField, number | ''>>) {
   const form = new FormData(); form.append('file', file)
   if (mapping) form.append('headerMap', JSON.stringify(mapping))

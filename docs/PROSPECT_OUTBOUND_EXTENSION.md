@@ -117,6 +117,33 @@ The Prospect Detail Outreach section supports saved-draft selection, manual crea
 
 From `backend/`, run `npx vitest run tests/prospect-outreach.unit.test.ts tests/prospect-research.unit.test.ts tests/prompt-seed.unit.test.ts` for focused unit coverage. Run `npm run test:prospects` for the authenticated research/outreach API integration fixture; its database guard requires `TEST_DATABASE_URL` to be set and different from `DATABASE_URL`, and the configured target must be `shifd_marketing_test`. From `frontend/`, run `npx vitest run --config vitest.config.ts src/views/ProspectDetailView.spec.ts` and `npm run build`.
 
+## Phase 04 architecture (implemented)
+
+`outbound_activities` is the single tenant-owned event and follow-up table. It stores the prospect, optional same-company email draft, activity type/status, event/due/completion timestamps, contact snapshot, subject/description, reply classification, notes, explicit provenance, creator/updater/archiver and archive timestamps. Composite foreign keys bind rows to the owning company, prospect, users and optional draft. Database CHECK constraints enforce allowed type/status/provenance/classification values and valid field combinations. Activities are archived rather than physically deleted.
+
+Activity types are `email_sent`, `follow_up`, `reply_received`, `meeting`, `product_demonstration`, and `other`. A planned follow-up starts pending with a due date and no occurred date. Completing it records the completion timestamp as its occurrence; cancelling it preserves the due date and does not count it as completed. Scheduled meetings and demonstrations can be completed or cancelled. Replies have a separate classification (`interested`, `not_interested`, `requested_information`, `follow_up_requested`, `meeting_requested`, or `other`) and do not change prospect lifecycle status.
+
+Provenance is explicitly selected as `historical`, `artifact_assisted`, or `non_artifact_assisted`; it is not inferred from the record-entry date or linked draft. `occurredAt` is distinct from `createdAt`, so historical events entered during the four-week field evaluation remain measurable by their actual event time. Evaluation boundaries are not hardcoded. The model supports later filtering by event date and provenance, but this phase adds no evaluation dashboard and keeps inbound inquiry metrics separate.
+
+Email drafts remain drafts until a user manually sends outside the application and explicitly records an `email_sent` activity. The activity can reference an active saved draft or be recorded without one. Recording does not verify delivery and never changes or archives the draft. The current prospect schema has one saved contact, so activities preserve that contact as a name/email snapshot; multi-contact management is not included.
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /api/prospects/:id/outbound-activities` | Record an event or schedule a follow-up |
+| `GET /api/prospects/:id/outbound-activities` | List chronological activities with bounded pagination |
+| `GET /api/prospects/:id/outbound-activities/:activityId` | Read an activity |
+| `PUT /api/prospects/:id/outbound-activities/:activityId` | Edit event details and notes |
+| `POST /api/prospects/:id/outbound-activities/:activityId/complete` | Complete a pending follow-up or scheduled meeting/demo |
+| `POST /api/prospects/:id/outbound-activities/:activityId/cancel` | Cancel a pending follow-up or scheduled meeting/demo |
+| `POST /api/prospects/:id/outbound-activities/:activityId/archive` | Archive an activity with actor/time metadata |
+| `GET /api/prospects/:id/outbound-activities/summary` | Calculate counts and last interaction from persisted, non-archived events |
+
+All endpoints require authentication; mutations also validate Origin and CSRF. Tenant, prospect, contact snapshot and linked draft checks are server-side. Timeline entries show event/due time separately from record time and show the recording user. Summary counts use persisted rows only.
+
+### Phase 04 testing
+
+From `backend/`, run `npx vitest run tests/prospect-activities.unit.test.ts tests/prospect-outreach.unit.test.ts tests/prospect-research.unit.test.ts` for focused unit checks. Run `npm run test:prospects` for the database-backed prospect, research, draft and outbound-activity API integration suite. From `frontend/`, run `npx vitest run --config vitest.config.ts src/views/ProspectDetailView.spec.ts`. Apply migrations and run integration tests only against `shifd_marketing_test`.
+
 ## Relationship to existing six modules
 
 Prospects are a supporting business-data capability. The existing six marketing modules and their Company/Product contexts, content and ideas, calendar, Telegram, AI, and performance flows remain separate and unchanged. This phase adds no prospect foreign keys to those existing records and does not feed prospect facts into prompts. Later phases can associate evidence and outbound artifacts without copying or changing current Company/Product context.
@@ -128,12 +155,12 @@ Prospects are a supporting business-data capability. The existing six marketing 
 | 01 | Prospect create/list/search/filter/detail/edit/archive and Excel preview/confirm import | Implemented in this change |
 | 02 | AI-assisted prospect research with source-backed evidence and explicit human review | Implemented in this change |
 | 03 | Personalized outbound email drafts linked to prospects and evidence | Implemented |
-| 04 | Outbound communication activity history, replies, follow-ups and meetings | Future; not implemented |
+| 04 | Outbound communication activity history, replies, follow-ups and meetings | Implemented |
 | 05 | Industry-based content generation and planning | Future; not implemented |
 | 06 | Optional prospect-linked campaign and content-calendar associations | Future; not implemented |
 | 07 | Separate inbound/outbound performance metrics and enhanced evaluation dashboard | Future; not implemented |
 
-The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 04 and later workflows are not present in the current UI or API.
+The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 05 and later workflows are not present in the current UI or API.
 
 ## Phase 01 limitations
 
@@ -164,6 +191,18 @@ Phase 03 checks run in the Codex workspace:
 ```sh
 node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || new URL(url).pathname.slice(1) !== "shifd_marketing_test" || url === process.env.DATABASE_URL) throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);'
 npm run test:prospects
+```
+
+Phase 04 focused checks in the Codex workspace:
+
+- Outbound activity, outreach draft and research unit tests: 12 passed.
+- Prospect Detail targeted tests: 12 passed, including recording a draft-linked sent email, follow-up scheduling/completion, timeline and persisted summary rendering, and activity loading errors.
+- Prisma schema validation/client generation, backend TypeScript build, frontend type-check/production build, and `git diff --check` passed.
+- The guarded Phase 04 migration attempt was blocked by PostgreSQL `P1001` at `127.0.0.1:5432` while the URL selected `shifd_marketing_test`. The database-backed activity/API assertions were not run and are not reported as passed.
+- After local PostgreSQL is available, from `backend/` apply the additive migration and run the targeted prospect/research/outreach/activity integration suite with:
+
+```sh
+node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || url === process.env.DATABASE_URL) throw new Error("Refusing migration: TEST_DATABASE_URL must be set and distinct from DATABASE_URL."); let parsed; try { parsed = new URL(url); } catch { throw new Error("Refusing migration: TEST_DATABASE_URL is invalid."); } if (parsed.pathname.replace(/^\//, "") !== "shifd_marketing_test") throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:prospects
 ```
 
 Phase 02 checks run in the Codex workspace:

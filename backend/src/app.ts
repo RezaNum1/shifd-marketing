@@ -31,6 +31,7 @@ import { telegramRoutes } from './modules/integrations/telegram/routes.js'
 import { prospectRoutes } from './modules/prospects/routes.js'
 import { prospectResearchRoutes } from './modules/prospects/research-routes.js'
 import { prospectOutreachRoutes } from './modules/prospects/outreach-routes.js'
+import { prospectActivityRoutes } from './modules/prospects/activity-routes.js'
 
 export interface BuildAppOptions {
   config: AppConfig
@@ -78,6 +79,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(topicDiscoveryRoutes, { config: options.config, provider: discoveryProvider, prefix: '/api' })
   await app.register(prospectResearchRoutes, { config: options.config, provider: prospectResearchProvider, prefix: '/api' })
   await app.register(prospectOutreachRoutes, { config: options.config, provider: aiProvider, prefix: '/api' })
+  await app.register(prospectActivityRoutes, { config: options.config, prefix: '/api' })
   await app.register(schedulingRoutes, { config: options.config, clock, prefix: '/api' })
   await app.register(performanceRoutes, { config: options.config, clock, instagramProvider, prefix: '/api' })
   await app.register(telegramRoutes, { config: options.config, aiProvider, prefix: '/api' })

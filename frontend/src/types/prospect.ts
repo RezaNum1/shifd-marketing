@@ -34,3 +34,22 @@ export interface ProspectEmailDraftInput {
   language?: 'English' | 'Indonesian'; tone?: string; objective?: string; offering?: string
   origin?: 'manual' | 'ai'; generationId?: string | null; claimIds?: string[]
 }
+export type OutboundActivityType = 'email_sent' | 'follow_up' | 'reply_received' | 'meeting' | 'product_demonstration' | 'other'
+export type OutboundProvenance = 'historical' | 'artifact_assisted' | 'non_artifact_assisted'
+export type ResponseClassification = 'interested' | 'not_interested' | 'requested_information' | 'follow_up_requested' | 'meeting_requested' | 'other'
+export interface OutboundActivity {
+  id: string; prospectId: string; activityType: OutboundActivityType; status: 'recorded' | 'pending' | 'scheduled' | 'completed' | 'cancelled'
+  occurredAt: string | null; dueAt: string | null; completedAt: string | null; contactName: string | null; contactEmail: string | null
+  emailDraftId: string | null; emailDraft: { id: string; subject: string; origin: 'manual' | 'ai'; status: 'draft' | 'archived' } | null
+  subject: string | null; description: string | null; responseClassification: ResponseClassification | null; provenance: OutboundProvenance
+  notes: string | null; createdAt: string; updatedAt: string; archivedAt: string | null; creator: { name: string }
+}
+export interface OutboundActivityInput {
+  activityType: OutboundActivityType; occurredAt?: string; dueAt?: string; status?: 'scheduled' | 'completed'; emailDraftId?: string | null
+  contactName?: string | null; contactEmail?: string | null; subject?: string | null; description?: string | null
+  responseClassification?: ResponseClassification | null; provenance: OutboundProvenance; notes?: string | null
+}
+export interface OutboundSummary {
+  emailsSent: number; followUpsCompleted: number; repliesReceived: number; interestedResponses: number; meetings: number
+  demonstrations: number; pendingFollowUps: number; overdueFollowUps: number; lastInteractionAt: string | null
+}
