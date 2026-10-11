@@ -2,7 +2,7 @@
 
 ## Scope
 
-This extension adds prospect organizations as supporting business data for Shifd Marketing's existing marketing execution application. Phase 01 implements prospect management and Excel prospect import only. It does not alter the existing Shifd Labs Company Context or Product Context and does not add AI research, email generation, outbound activity tracking, industry content generation, prospect-linked calendar records, or dashboard analytics.
+This extension adds prospect organizations as supporting business data for Shifd Marketing's existing marketing execution application. Phase 01 implements prospect management and Excel prospect import. Phase 02 adds user-triggered source-backed company research and human claim review. Neither phase changes Shifd Labs Company Context or Product Context. Phase 02 does not add email generation, outbound activity tracking, industry content generation, prospect-linked calendar records, or dashboard analytics.
 
 ## Phase 01 architecture (implemented)
 
@@ -47,6 +47,48 @@ Preview returns the source row number, mapped fields, row errors, and potential 
 
 Company name: `company`, `company name`, `organization`, `organisation`, `business name`, `prospect`, `name`, `nama perusahaan`, `nama usaha`. Indonesian aliases include `bidang usaha`/`sektor` (industry), `situs web` (website), `alamat` (address), `jumlah karyawan`/`jumlah pegawai` (employee count), `ukuran perusahaan` (size), `nama narahubung` (contact), `surel` (email), `nomor telepon` (phone), and `catatan`/`keterangan` (notes). English aliases include `sector`, `vertical`, `web site`, `url`, `headcount`, `staff size`, `PIC`, `person in charge`, `e mail`, `mobile`, and `remarks`. Explicit mapping takes precedence over auto-detection and cannot map one worksheet column to multiple fields.
 
+## Phase 02 architecture (implemented)
+
+Prospect research lives in the existing `modules/prospects` domain and extends the existing OpenAI provider's web-search path. It uses OpenAI Responses web search, with medium search scope, a bounded 4,096-token output maximum, the configured AI timeout, no retries, and `store: false`. Only explicit user requests start a run. The search receives prospect name, website, industry, and location/address. It does not receive contact details or prospect notes. External page content is treated as untrusted data by the versioned server prompt.
+
+Prompt reference `m2.prospect_research.v1` is registered through the existing immutable PromptVersion seed convention. Each run also creates an `AiRequestLog` entry with provider/model, input hash/snapshot, token usage, latency, provider request ID, and error status. Estimated cost uses the existing ledger field and remains null when no applicable rate is available; token usage remains visible in research detail and the existing AI usage ledger.
+
+### Evidence and claim model
+
+```text
+Company → Prospect → ProspectResearchRun → ProspectResearchSource
+                                      └── ProspectResearchClaim ↔ ClaimSource ↔ Source
+```
+
+Runs preserve prompt version, tenant, prospect, creator, identity match status/explanation, summary, limitations, and retrieval timestamp. Sources store only provider-returned URLs and metadata, publisher/domain, retrieval time, source type, and availability; publication dates and page bodies are not stored. A source is marked official only when its hostname matches the prospect's supplied website hostname or a subdomain. Other sources are external.
+
+Facts are retained only when at least one normalized HTTP(S) URL from the AI response exactly matches a URL returned in provider search evidence. Unsupported claims are discarded. Invalid, credential-bearing, localhost, private-network, and non-web URLs are rejected. The backend creates claim-source joins only from this validated mapping. This prevents fabricated URL references and unsupported claims from entering the fact list; it cannot independently certify that a linked page substantively proves the AI's wording, so human review remains necessary.
+
+Facts and hypotheses are separate claim types. Hypotheses have the prominent “Potential Opportunity — Not a Confirmed Company Problem” label and are never represented as company facts. Claim review stores approval/rejection, reviewer, timestamp, and note. Approval records that the user reviewed the claim; it does not prove objective truth. Rejected or pending facts are not approved outreach inputs. Phase 03 can use the research API contract to retrieve the prospect, approved sourced facts with evidence links and review metadata, and separately labeled hypotheses. No email generation is included here.
+
+### Human workflow and APIs
+
+Open a prospect and select **Research Company**. The application creates a new append-only run; prior runs and their review evidence remain available. Concurrent runs for a prospect are serialized with a row lock. Users can inspect identity uncertainty, summaries, claims, source links and retrieval dates; approve or reject claims with notes; and revisit prior runs. The feature does not edit manually entered prospect fields or send messages.
+
+All routes use session authentication, CSRF and allowed-origin checks for mutations, UUID validation, and authenticated-company scoping. Detail routes also verify that the requested run/claim belongs to the prospect in the URL.
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /api/prospects/:id/research` | Start explicit research; rejects a concurrent run |
+| `GET /api/prospects/:id/research-runs` | List up to 30 recent runs |
+| `GET /api/prospects/:id/research-runs/:runId` | Read a run, claims, validated evidence, and usage |
+| `PUT /api/prospects/:id/research-claims/:claimId/review` | Save approved/rejected review and optional note |
+
+Provider errors are converted to the existing API error envelope and persisted as failed run/usage records. There is no direct URL fetcher, so the application does not fetch arbitrary or internal URLs.
+
+### Limitations
+
+- Identity matching and source-to-claim relevance are AI-assisted and require user inspection; domain matching is a helpful signal, not legal entity resolution.
+- Search sources are provider evidence, not a guarantee that the page remains available or proves each claim. Retrieval timestamps are distinct from publication dates, which are intentionally not stored.
+- Cost estimation is unavailable when the configured model has no matching cost rate; token usage is still logged.
+- Research is a synchronous request and subject to the configured provider timeout. A process interruption can leave a pending run for operator recovery.
+- Research does not automatically feed any current generation prompt. Phase 03 must consume approved facts and their evidence explicitly.
+
 ## Relationship to existing six modules
 
 Prospects are a supporting business-data capability. The existing six marketing modules and their Company/Product contexts, content and ideas, calendar, Telegram, AI, and performance flows remain separate and unchanged. This phase adds no prospect foreign keys to those existing records and does not feed prospect facts into prompts. Later phases can associate evidence and outbound artifacts without copying or changing current Company/Product context.
@@ -56,14 +98,14 @@ Prospects are a supporting business-data capability. The existing six marketing 
 | Phase | Planned capability | Status |
 | --- | --- | --- |
 | 01 | Prospect create/list/search/filter/detail/edit/archive and Excel preview/confirm import | Implemented in this change |
-| 02 | AI-assisted prospect research with source-backed evidence and explicit human review | Future; not implemented |
+| 02 | AI-assisted prospect research with source-backed evidence and explicit human review | Implemented in this change |
 | 03 | Personalized outbound email drafts linked to prospects and evidence | Future; not implemented |
 | 04 | Outbound communication activity history, replies, follow-ups and meetings | Future; not implemented |
 | 05 | Industry-based content generation and planning | Future; not implemented |
 | 06 | Optional prospect-linked campaign and content-calendar associations | Future; not implemented |
 | 07 | Separate inbound/outbound performance metrics and enhanced evaluation dashboard | Future; not implemented |
 
-The order and boundaries of future phases remain subject to evaluation and thesis supervision. No Phase 02 or later workflow is present in the Phase 01 UI or API.
+The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 03 and later workflows are not present in the current UI or API.
 
 ## Phase 01 limitations
 
@@ -74,6 +116,7 @@ The order and boundaries of future phases remain subject to evaluation and thesi
 - The importer reads the first worksheet only and does not preserve workbook formatting or formulas.
 - There is no restore action in this phase, though archived records remain in storage and can be queried with `archived=true`.
 - No imported company facts are researched or verified by the application.
+- Phase 02 source and claim validation verifies exact provenance references and safe URL shape, but does not independently audit page content or resolve corporate identity.
 
 ## Four-week research-evaluation considerations
 
@@ -81,7 +124,19 @@ Use `shifd_marketing_test` for automated database integration tests and syntheti
 
 ## Validation evidence
 
-Validation evidence for this change:
+Phase 02 checks run in the Codex workspace:
+
+- Prospect research/parser and existing OpenAI, topic discovery, and Prospect focused tests: 54 passed.
+- Prospect detail view targeted tests: 5 passed.
+- Prisma schema validation, Prisma client generation, backend TypeScript build, and frontend production build passed.
+- Database migration and research/prospect API integration checks are blocked in the sandbox: `shifd_marketing_test` is configured, but PostgreSQL at `127.0.0.1:5432` returned Prisma `P1001`. No attempt was made against another database.
+- After local PostgreSQL is available, from `backend/` run this guarded migration plus integration command. It refuses to migrate unless the database path is exactly `shifd_marketing_test`:
+
+```sh
+node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || new URL(url).pathname.slice(1) !== "shifd_marketing_test") throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:prospects
+```
+
+Validation evidence for Phase 01 (historical):
 
 - Backend unit/regression suite: 79 passed in the final local agent run; database-only suites are skipped by this unit command.
 - Prospect integration (`npm run test:prospects`): passed on the user's local Mac with PostgreSQL available (user-confirmed); the Codex sandbox did not execute these database assertions.

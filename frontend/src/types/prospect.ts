@@ -16,3 +16,7 @@ export interface ProspectImportPreview {
   previewToken: string; expiresAt: string; headers: { column: number; label: string }[]; mapping: Partial<Record<ProspectImportField, number>>
   rows: ProspectImportRow[]; summary: { total: number; valid: number; invalid: number; duplicates: number; ambiguous: number }
 }
+export interface ProspectResearchSource { id: string; title: string; publisher: string | null; domain: string; url: string; retrievedAt: string; sourceType: 'official' | 'external'; availability: string }
+export interface ProspectResearchClaim { id: string; text: string; category: string; claimType: 'sourced_fact' | 'hypothesis'; reviewStatus: 'pending' | 'approved' | 'rejected'; reviewNote: string | null; reviewedAt: string | null; reviewedBy: string | null; sources: Pick<ProspectResearchSource, 'id' | 'title' | 'domain' | 'url'>[] }
+export interface ProspectResearchRun { id: string; prospectId: string; status: string; identityStatus: 'matched' | 'needs_confirmation'; identityExplanation: string; summary: string; limitations: string[]; researchedAt: string; createdAt: string; provider: string; model: string; usage: { inputTokens: string | null; outputTokens: string | null; estimatedCostUsd: string | null }; sources: ProspectResearchSource[]; claims: ProspectResearchClaim[] }
+export interface ProspectResearchHistoryItem { id: string; status: string; identityStatus: string; summary: string; researchedAt: string; createdAt: string }

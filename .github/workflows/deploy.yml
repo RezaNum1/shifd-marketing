@@ -93,6 +93,11 @@ jobs:
             npm run db:deploy
 
             echo ""
+            echo "=== Seeding AI prompts ==="
+            cd "$BACKEND_DIR"
+            npm run ai:seed
+
+            echo ""
             echo "=== Restarting backend ==="
 
             pm2 restart shifd-marketing-api --update-env
