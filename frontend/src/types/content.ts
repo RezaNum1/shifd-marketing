@@ -28,6 +28,12 @@ export interface ContentCalendarEntry {
   platform: ContentPlatform
   contextName: string
   pillar: string
+  targetIndustry: string | null
+  prospect: { id: string; name: string; industry: string | null } | null
+  planningNotes: string | null
+  plannedBy: { id: string; name: string }
+  scheduleCreatedAt: string
+  scheduleUpdatedAt: string
   scheduledDate: string
   scheduledTime: string
   scheduledAt: Date
@@ -61,6 +67,7 @@ export interface ContentPlatformSchedule {
 export interface ContentPublication {
   publishedAt: string
   postUrl?: string
+  notes?: string
   status: 'Published'
 }
 
@@ -73,12 +80,14 @@ export interface PublicationRecord {
   scheduledAt?: string
   publishedAt: string
   postUrl?: string
+  notes?: string
   markedBy: string
 }
 
 export interface PublicationInput {
   publishedAt: string
   postUrl?: string
+  notes?: string
 }
 
 export interface ContentRecordDetails {
@@ -124,6 +133,9 @@ export interface ContentLibraryRecord {
   ideaId?: string
   companyId: string
   productId?: string
+  targetIndustry?: string | null
+  targetProspectId?: string | null
+  planningNotes?: string | null
   id: string
   title: string
   topic: string

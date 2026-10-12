@@ -264,6 +264,9 @@ export interface BackendSchedule {
   cancelledAt: string | null
   cancellationReason: string | null
   status: 'scheduled' | 'ready_to_publish' | 'published' | 'cancelled'
+  createdBy: BackendUser
+  createdAt: string
+  updatedAt: string
   version: number
 }
 
@@ -276,6 +279,7 @@ export interface BackendPublication {
   scheduledAt: string
   publishedAt: string
   postUrl: string | null
+  notes: string | null
   markedBy: BackendUser
   recordedAt: string
   updatedAt: string
@@ -323,6 +327,9 @@ export interface BackendContent {
   id: string
   companyId: string
   sourceIdeaId: string | null
+  targetIndustry: string | null
+  targetProspectId: string | null
+  planningNotes: string | null
   title: string
   brief: BackendBrief
   master: BackendMaster | null
@@ -345,6 +352,9 @@ export interface BackendContent {
 
 export interface BackendContentSummary {
   id: string
+  targetIndustry: string | null
+  targetProspectId: string | null
+  planningNotes: string | null
   title: string
   brief: Pick<BackendBrief, 'topic' | 'pillarCode' | 'objective'>
   company: { id: string; name: string }
@@ -440,6 +450,12 @@ export interface BackendCalendarEntry {
   company: { id: string; name: string }
   product: { id: string; name: string } | null
   pillarCode: string
+  targetIndustry: string | null
+  prospect: { id: string; name: string; industry: string | null } | null
+  planningNotes: string | null
+  plannedBy: BackendUser
+  scheduleCreatedAt: string
+  scheduleUpdatedAt: string
   scheduledAt: string
   timezone: string
   status: 'scheduled' | 'ready_to_publish' | 'published'
@@ -450,7 +466,16 @@ export interface BackendCalendarReport {
   start: string
   end: string
   asOf: string
+  nextCursor: string | null
   entries: BackendCalendarEntry[]
+}
+
+export interface BackendScheduleDetail {
+  schedule: BackendSchedule
+  content: Pick<BackendContent, 'id' | 'title' | 'sourceIdeaId' | 'targetIndustry' | 'targetProspectId' | 'planningNotes' | 'brief' | 'createdAt'>
+  variant: { id: string; platform: BackendPlatform }
+  prospect: { id: string; name: string; industry: string | null } | null
+  publication: BackendPublication | null
 }
 
 export interface BackendWeeklyMetric {

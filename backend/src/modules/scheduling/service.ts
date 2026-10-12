@@ -21,9 +21,16 @@ export interface ScheduleInput {
   timezone: string
 }
 
+export interface PlanningTargetInput {
+  targetIndustry?: string | null
+  targetProspectId?: string | null
+  planningNotes?: string | null
+}
+
 export interface PublicationInput {
   publishedAt: Date
   postUrl: string | null
+  notes?: string | null
 }
 
 export interface CalendarQuery {
@@ -33,6 +40,11 @@ export interface CalendarQuery {
   status?: CalendarStatus
   productId?: string
   contextType?: 'company' | 'product'
+  targetIndustry?: string
+  prospectId?: string
+  targeting?: 'general' | 'targeted'
+  limit: number
+  cursor?: { scheduledAt: Date; id: string }
 }
 
 export type CalendarStatus = 'scheduled' | 'ready_to_publish' | 'published'
@@ -51,6 +63,7 @@ export async function createOrUpdateSchedules(
   contentId: string,
   expectedVersion: number,
   schedules: ScheduleInput[],
+  target: PlanningTargetInput,
   idempotencyKey: string,
   requestId: string,
   config: SchedulingConfig,
@@ -68,6 +81,7 @@ export async function createOrUpdateSchedules(
         scheduledAt: schedule.scheduledAt.toISOString(),
         timezone: schedule.timezone,
       })),
+      target,
     },
     execute: async (tx) => {
       await lockContent(tx, companyId, contentId, expectedVersion)
@@ -77,6 +91,7 @@ export async function createOrUpdateSchedules(
       const now = config.clock.now()
       assertNotArchived(content)
       validateScheduleInputs(schedules, now)
+      await applyPlanningTarget(tx, companyId, contentId, target)
       const approvalActionId = await currentApprovalId(tx, companyId, content, config)
       const prepared = schedules.map((input) => {
         const variant = content.variants.find((candidate) => candidate.platform === input.platform)
@@ -110,6 +125,9 @@ export async function createOrUpdateSchedules(
               platform: item.variant.platform,
               scheduledAt: item.input.scheduledAt.toISOString(),
               timezone: item.input.timezone,
+              targetIndustry: Object.hasOwn(target, 'targetIndustry') ? target.targetIndustry ?? null : content.targetIndustry,
+              targetProspectId: Object.hasOwn(target, 'targetProspectId') ? target.targetProspectId ?? null : content.targetProspectId,
+              planningNotes: Object.hasOwn(target, 'planningNotes') ? target.planningNotes ?? null : content.planningNotes,
             },
             requestId,
           })
@@ -134,6 +152,9 @@ export async function createOrUpdateSchedules(
               platform: item.variant.platform,
               scheduledAt: item.input.scheduledAt.toISOString(),
               timezone: item.input.timezone,
+              targetIndustry: Object.hasOwn(target, 'targetIndustry') ? target.targetIndustry ?? null : content.targetIndustry,
+              targetProspectId: Object.hasOwn(target, 'targetProspectId') ? target.targetProspectId ?? null : content.targetProspectId,
+              planningNotes: Object.hasOwn(target, 'planningNotes') ? target.planningNotes ?? null : content.planningNotes,
             },
             requestId,
           })
@@ -154,6 +175,7 @@ export async function reschedule(
   scheduleId: string,
   expectedVersion: number,
   input: Pick<ScheduleInput, 'scheduledAt' | 'timezone'>,
+  target: PlanningTargetInput,
   requestId: string,
   config: SchedulingConfig,
 ) {
@@ -166,6 +188,7 @@ export async function reschedule(
     const content = await getContentAggregate(tx, companyId, owner.contentId)
     const now = config.clock.now()
     assertNotArchived(content)
+    await applyPlanningTarget(tx, companyId, content.id, target)
     const variant = content.variants.find((candidate) => candidate.id === owner.variantId)
     const schedule = variant?.schedule
     if (!variant || !schedule || schedule.id !== scheduleId) throw notFound()
@@ -197,6 +220,9 @@ export async function reschedule(
         scheduledAt: input.scheduledAt.toISOString(),
         timezone: input.timezone,
         reactivated: schedule.cancelledAt !== null,
+        targetIndustry: Object.hasOwn(target, 'targetIndustry') ? target.targetIndustry ?? null : content.targetIndustry,
+        targetProspectId: Object.hasOwn(target, 'targetProspectId') ? target.targetProspectId ?? null : content.targetProspectId,
+        planningNotes: Object.hasOwn(target, 'planningNotes') ? target.planningNotes ?? null : content.planningNotes,
       },
       requestId,
     })
@@ -276,6 +302,7 @@ export async function publishSchedule(
       expectedVersion,
       publishedAt: input.publishedAt.toISOString(),
       postUrl: input.postUrl,
+      notes: input.notes ?? null,
     },
     execute: async (tx) => {
       await lockContent(tx, companyId, owner.contentId, expectedVersion)
@@ -294,7 +321,7 @@ export async function publishSchedule(
 
       if (existing) {
         await lockPublication(tx, existing.id)
-        if (existing.publishedAt.getTime() === input.publishedAt.getTime() && existing.postUrl === input.postUrl) {
+        if (existing.publishedAt.getTime() === input.publishedAt.getTime() && existing.postUrl === input.postUrl && existing.notes === (input.notes ?? null)) {
           const mapped = await readContentFromDb(tx, companyId, content.id, config, now)
           const publication = publicationFromContent(mapped, existing.id)
           return { resourceId: existing.id, status: 200, body: { data: { publication, content: mapped } }, etag: etag(mapped.version) }
@@ -304,6 +331,7 @@ export async function publishSchedule(
           data: {
             publishedAt: input.publishedAt,
             postUrl: input.postUrl,
+            notes: input.notes ?? null,
             updatedAt: now,
             version: { increment: 1 },
           },
@@ -337,6 +365,7 @@ export async function publishSchedule(
           scheduledAtSnapshot: schedule.scheduledAt,
           publishedAt: input.publishedAt,
           postUrl: input.postUrl,
+          notes: input.notes ?? null,
           markedBy: actorId,
           recordedAt: now,
         },
@@ -369,6 +398,10 @@ export async function readCalendar(prisma: PrismaClient, companyId: string, quer
     where: {
       cancelledAt: null,
       scheduledAt: { gte: query.start, lt: query.end },
+      ...(query.cursor ? { OR: [
+        { scheduledAt: { gt: query.cursor.scheduledAt } },
+        { scheduledAt: query.cursor.scheduledAt, id: { gt: query.cursor.id } },
+      ] } : {}),
       variant: {
         enabled: true,
         ...(query.platform ? { platform: query.platform } : {}),
@@ -377,10 +410,15 @@ export async function readCalendar(prisma: PrismaClient, companyId: string, quer
           archivedAt: null,
           ...(query.productId ? { productId: query.productId } : {}),
           ...(query.contextType ? { contextType: query.contextType } : {}),
+          ...(query.targetIndustry ? { targetIndustry: { contains: query.targetIndustry, mode: 'insensitive' } } : {}),
+          ...(query.prospectId ? { targetProspectId: query.prospectId } : {}),
+          ...(query.targeting === 'general' ? { targetIndustry: null, targetProspectId: null } : {}),
+          ...(query.targeting === 'targeted' ? { OR: [{ targetIndustry: { not: null } }, { targetProspectId: { not: null } }] } : {}),
         },
       },
     },
     include: {
+      creator: { select: { id: true, name: true } },
       variant: {
         include: {
           publication: true,
@@ -395,16 +433,14 @@ export async function readCalendar(prisma: PrismaClient, companyId: string, quer
       },
     },
     orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+    take: query.limit + 1,
   })
-  const entries = rows.map((row) => {
+  const pageRows = rows.slice(0, query.limit)
+  const entries = pageRows.map((row) => {
     const brief = row.variant.content.brief
     if (!brief) throw conflict('Content persistence is incomplete: the required Brief is missing.')
     const publication = row.variant.publication
-    const status: CalendarStatus = publication
-      ? 'published'
-      : row.scheduledAt <= asOf
-        ? 'ready_to_publish'
-        : 'scheduled'
+    const status = deriveCalendarStatus(row.scheduledAt, Boolean(publication), asOf)
     return {
       id: row.id,
       contentId: row.variant.content.id,
@@ -414,6 +450,12 @@ export async function readCalendar(prisma: PrismaClient, companyId: string, quer
       company: row.variant.content.company,
       product: row.variant.content.product,
       pillarCode: brief.pillarCode,
+      targetIndustry: row.variant.content.targetIndustry,
+      targetProspectId: row.variant.content.targetProspectId,
+      planningNotes: row.variant.content.planningNotes,
+      plannedBy: { id: row.creator.id, name: row.creator.name },
+      scheduleCreatedAt: row.createdAt.toISOString(),
+      scheduleUpdatedAt: row.updatedAt.toISOString(),
       scheduledAt: row.scheduledAt.toISOString(),
       timezone: row.timezone,
       status,
@@ -421,12 +463,82 @@ export async function readCalendar(prisma: PrismaClient, companyId: string, quer
     }
   }).filter((entry) => !query.status || entry.status === query.status)
 
+  const prospectIds = [...new Set(pageRows.map((row) => row.variant.content.targetProspectId).filter((id): id is string => Boolean(id)))]
+  const prospects = prospectIds.length ? await prisma.prospect.findMany({
+    where: { companyId, id: { in: prospectIds } },
+    select: { id: true, name: true, industry: true },
+  }) : []
+  const prospectMap = new Map(prospects.map((prospect) => [prospect.id, prospect]))
+  const mappedEntries = entries.map(({ targetProspectId, ...entry }) => ({
+    ...entry,
+    prospect: targetProspectId ? prospectMap.get(targetProspectId) ?? null : null,
+  }))
+
   return {
     start: query.start.toISOString(),
     end: query.end.toISOString(),
     asOf: asOf.toISOString(),
-    entries,
+    nextCursor: rows.length > query.limit && pageRows.length ? encodeCalendarCursor(pageRows[pageRows.length - 1]!) : null,
+    entries: mappedEntries,
   }
+}
+
+function encodeCalendarCursor(row: { id: string; scheduledAt: Date }) {
+  return Buffer.from(JSON.stringify({ id: row.id, scheduledAt: row.scheduledAt.toISOString() })).toString('base64url')
+}
+
+export async function readSchedule(prisma: PrismaClient, companyId: string, scheduleId: string, clock: Clock, config: ContentReadConfig) {
+  const owner = await findScheduleOwner(prisma, scheduleId)
+  if (!owner || owner.companyId !== companyId) throw notFound()
+  const asOf = clock.now()
+  const content = await readContentFromDb(prisma, companyId, owner.contentId, config, asOf)
+  const schedule = content.schedules.find((item) => item.id === scheduleId)
+  const variant = content.variants.find((item) => item.id === owner.variantId)
+  if (!schedule || !variant) throw notFound()
+  const prospect = content.targetProspectId ? await prisma.prospect.findFirst({
+    where: { id: content.targetProspectId, companyId },
+    select: { id: true, name: true, industry: true },
+  }) : null
+  return {
+    schedule,
+    content: {
+      id: content.id,
+      title: content.title,
+      sourceIdeaId: content.sourceIdeaId,
+      targetIndustry: content.targetIndustry,
+      targetProspectId: content.targetProspectId,
+      planningNotes: content.planningNotes,
+      brief: content.brief,
+      createdAt: content.createdAt,
+    },
+    variant: { id: variant.id, platform: variant.platform },
+    prospect,
+    publication: content.publications.find((item) => item.scheduleId === scheduleId) ?? null,
+  }
+}
+
+export function deriveCalendarStatus(scheduledAt: Date, isPublished: boolean, asOf: Date): CalendarStatus {
+  if (isPublished) return 'published'
+  return scheduledAt <= asOf ? 'ready_to_publish' : 'scheduled'
+}
+
+async function applyPlanningTarget(db: Db, companyId: string, contentId: string, target: PlanningTargetInput) {
+  const hasIndustry = Object.hasOwn(target, 'targetIndustry')
+  const hasProspect = Object.hasOwn(target, 'targetProspectId')
+  const hasNotes = Object.hasOwn(target, 'planningNotes')
+  if (!hasIndustry && !hasProspect && !hasNotes) return
+  if (hasProspect && target.targetProspectId) {
+    const prospect = await db.prospect.findFirst({ where: { id: target.targetProspectId, companyId }, select: { id: true } })
+    if (!prospect) throw notFound('Prospect not found.')
+  }
+  await db.content.update({
+    where: { id: contentId },
+    data: {
+      ...(hasIndustry ? { targetIndustry: target.targetIndustry?.trim() || null } : {}),
+      ...(hasProspect ? { targetProspectId: target.targetProspectId || null } : {}),
+      ...(hasNotes ? { planningNotes: target.planningNotes?.trim() || null } : {}),
+    },
+  })
 }
 
 async function currentApprovalId(db: Db, companyId: string, content: CompleteContentRow, config: ContentReadConfig) {
@@ -526,6 +638,7 @@ function validateScheduleInputs(inputs: ScheduleInput[], now: Date) {
 function validatePublicationInput(input: PublicationInput, now: Date) {
   if (!validDate(input.publishedAt) || input.publishedAt.getTime() > now.getTime()) throw validationError('Publication time cannot be in the future.', { publishedAt: 'Use a current or past RFC3339 timestamp.' })
   if (input.postUrl !== null) assertPostUrl(input.postUrl)
+  if (input.notes && input.notes.length > 2_000) throw validationError('Publication notes are too long.', { notes: 'Use at most 2000 characters.' })
 }
 
 export function assertTimezone(value: string) {

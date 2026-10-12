@@ -11,16 +11,19 @@ import {
   createOrUpdateSchedules,
   publishSchedule,
   readCalendar,
+  readSchedule,
   reschedule,
   type CalendarStatus,
+  type PlanningTargetInput,
   type ScheduleInput,
 } from './service.js'
 
 const scheduleKeys = ['platform', 'scheduledAt', 'timezone'] as const
-const scheduleBatchKeys = ['schedules'] as const
-const scheduleUpdateKeys = ['scheduledAt', 'timezone'] as const
-const publicationKeys = ['publishedAt', 'postUrl'] as const
-const calendarKeys = ['start', 'end', 'platform', 'status', 'productId', 'contextType'] as const
+const targetKeys = ['targetIndustry', 'targetProspectId', 'planningNotes'] as const
+const scheduleBatchKeys = ['schedules', ...targetKeys] as const
+const scheduleUpdateKeys = ['scheduledAt', 'timezone', ...targetKeys] as const
+const publicationKeys = ['publishedAt', 'postUrl', 'notes'] as const
+const calendarKeys = ['start', 'end', 'platform', 'status', 'productId', 'contextType', 'targetIndustry', 'prospectId', 'targeting', 'limit', 'cursor'] as const
 
 export async function schedulingRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock }) {
   app.post('/contents/:id/schedules', async (request, reply) => {
@@ -28,13 +31,15 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     const contentId = routeId(request)
+    const parsed = parseScheduleBatch(request.body)
     const result = await createOrUpdateSchedules(
       app.prisma,
       auth.user.companyId,
       auth.user.id,
       contentId,
       ifMatch(request),
-      parseScheduleBatch(request.body),
+      parsed.schedules,
+      parsed.target,
       idempotencyKey(request),
       request.id,
       { openaiModel: options.config.openaiModel, clock: options.clock },
@@ -47,18 +52,26 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
+    const parsed = parseScheduleUpdate(request.body)
     const result = await reschedule(
       app.prisma,
       auth.user.companyId,
       auth.user.id,
       scheduleId(request),
       ifMatch(request),
-      parseScheduleUpdate(request.body),
+      parsed.schedule,
+      parsed.target,
       request.id,
       { openaiModel: options.config.openaiModel, clock: options.clock },
     )
     reply.header('ETag', result.etag)
     return reply.send({ data: result.content })
+  })
+
+  app.get('/schedules/:id', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const detail = await readSchedule(app.prisma, auth.user.companyId, scheduleId(request), options.clock, { openaiModel: options.config.openaiModel })
+    return reply.send({ data: detail })
   })
 
   app.delete('/schedules/:id', async (request, reply) => {
@@ -105,13 +118,13 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
   })
 }
 
-function parseScheduleBatch(value: unknown): ScheduleInput[] {
+function parseScheduleBatch(value: unknown): { schedules: ScheduleInput[]; target: PlanningTargetInput } {
   const body = object(value, 'Schedule request')
   allowedKeys(body, scheduleBatchKeys, 'body')
   if (!Array.isArray(body.schedules) || body.schedules.length === 0) throw validationError('At least one schedule is required.', { schedules: 'Choose at least one platform.' })
   const schedules = body.schedules.map((value, index) => parseSchedule(value, `schedules[${index}]`))
   if (new Set(schedules.map((schedule) => schedule.platform)).size !== schedules.length) throw validationError('Platforms must be unique in a schedule request.', { schedules: 'Do not submit a platform more than once.' })
-  return schedules
+  return { schedules, target: parseTarget(body) }
 }
 
 function parseSchedule(value: unknown, path: string): ScheduleInput {
@@ -124,12 +137,24 @@ function parseSchedule(value: unknown, path: string): ScheduleInput {
   }
 }
 
-function parseScheduleUpdate(value: unknown): Pick<ScheduleInput, 'scheduledAt' | 'timezone'> {
+function parseScheduleUpdate(value: unknown): { schedule: Pick<ScheduleInput, 'scheduledAt' | 'timezone'>; target: PlanningTargetInput } {
   const body = object(value, 'Schedule update request')
   allowedKeys(body, scheduleUpdateKeys, 'body')
-  return {
+  return { schedule: {
     scheduledAt: parseTimestamp(body.scheduledAt, 'scheduledAt'),
     timezone: requiredText(body.timezone, 'timezone'),
+  }, target: parseTarget(body) }
+}
+
+function parseTarget(body: Record<string, unknown>): PlanningTargetInput {
+  const industry = 'targetIndustry' in body ? optionalText(body.targetIndustry, 'targetIndustry') : undefined
+  const planningNotes = 'planningNotes' in body ? optionalText(body.planningNotes, 'planningNotes') : undefined
+  if (industry && industry.length > 120) throw validationError('Target industry is too long.', { targetIndustry: 'Use at most 120 characters.' })
+  if (planningNotes && planningNotes.length > 2_000) throw validationError('Planning notes are too long.', { planningNotes: 'Use at most 2000 characters.' })
+  return {
+    ...('targetIndustry' in body ? { targetIndustry: industry ?? null } : {}),
+    ...('targetProspectId' in body ? { targetProspectId: body.targetProspectId === null || body.targetProspectId === '' ? null : calendarResourceId(body.targetProspectId as string, 'targetProspectId') } : {}),
+    ...('planningNotes' in body ? { planningNotes: planningNotes ?? null } : {}),
   }
 }
 
@@ -137,10 +162,13 @@ function parsePublication(value: unknown) {
   const body = object(value, 'Publication request')
   allowedKeys(body, publicationKeys, 'body')
   const postUrl = optionalText(body.postUrl, 'postUrl')
+  const notes = optionalText(body.notes, 'notes')
+  if (notes && notes.length > 2_000) throw validationError('Publication notes are too long.', { notes: 'Use at most 2000 characters.' })
   if (postUrl !== null) assertPostUrl(postUrl)
   return {
     publishedAt: parseTimestamp(body.publishedAt, 'publishedAt'),
     postUrl,
+    notes,
   }
 }
 
@@ -154,6 +182,10 @@ function parseCalendarQuery(request: FastifyRequest) {
   if (start >= end) throw validationError('Calendar start must be before end.', { start: 'Use a time before end.', end: 'Use a time after start.' })
   if (end.getTime() - start.getTime() > 93 * 24 * 60 * 60 * 1_000) throw validationError('The Calendar range is too large.', { end: 'Use a range of at most 93 days.' })
   const productId = query.productId === undefined || query.productId === '' ? undefined : calendarResourceId(query.productId)
+  const prospectId = query.prospectId === undefined || query.prospectId === '' ? undefined : calendarResourceId(query.prospectId, 'prospectId')
+  const limit = query.limit === undefined ? 200 : Number(query.limit)
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw validationError('The Calendar limit is invalid.', { limit: 'Choose a value from 1 to 500.' })
+  const cursor = query.cursor === undefined || query.cursor === '' ? undefined : parseCalendarCursor(query.cursor)
   return {
     start,
     end,
@@ -161,6 +193,21 @@ function parseCalendarQuery(request: FastifyRequest) {
     ...(query.status === undefined ? {} : { status: enumValue(query.status, ['scheduled', 'ready_to_publish', 'published'] as const, 'status') as CalendarStatus }),
     ...(productId === undefined ? {} : { productId }),
     ...(query.contextType === undefined ? {} : { contextType: enumValue(query.contextType, ['company', 'product'] as const, 'contextType') as 'company' | 'product' }),
+    ...(query.targetIndustry === undefined || query.targetIndustry === '' ? {} : { targetIndustry: requiredText(query.targetIndustry, 'targetIndustry') }),
+    ...(prospectId === undefined ? {} : { prospectId }),
+    ...(query.targeting === undefined || query.targeting === '' ? {} : { targeting: enumValue(query.targeting, ['general', 'targeted'] as const, 'targeting') as 'general' | 'targeted' }),
+    limit,
+    ...(cursor ? { cursor } : {}),
+  }
+}
+
+function parseCalendarCursor(value: string): { scheduledAt: Date; id: string } {
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('format')
+    const cursor = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>
+    return { scheduledAt: parseTimestamp(cursor.scheduledAt, 'cursor'), id: calendarResourceId(cursor.id as string, 'cursor') }
+  } catch {
+    throw validationError('The Calendar cursor is invalid.', { cursor: 'Use a cursor returned by the Calendar API.' })
   }
 }
 
@@ -189,8 +236,8 @@ function resourceId(value: unknown): string {
   return value
 }
 
-function calendarResourceId(value: string): string {
-  if (!uuid(value)) throw validationError('The Calendar query is invalid.', { productId: 'Use a UUID.' })
+function calendarResourceId(value: string, path = 'id'): string {
+  if (!uuid(value)) throw validationError('The Calendar query is invalid.', { [path]: 'Use a UUID.' })
   return value
 }
 

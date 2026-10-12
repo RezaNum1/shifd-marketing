@@ -104,7 +104,7 @@ export const useContentLibraryStore = defineStore('contentLibrary', () => {
     const variant = value?.variants.find((item) => item.platform === platform)
     const version = value ? etagFor(contentId) : undefined
     if (!value || !variant?.schedule || !version) return false
-    const input = { publishedAt: publication.publishedAt, postUrl: publication.postUrl?.trim() || null }
+    const input = { publishedAt: publication.publishedAt, postUrl: publication.postUrl?.trim() || null, notes: publication.notes?.trim() || null }
     const command = beginCommand(`schedule.publish:${contentId}:${platform}`, `${variant.schedule.id}|${JSON.stringify(input)}|${version}`)
     try {
       const result = await schedulingApi.publishSchedule(variant.schedule.id, input, version, command.key)
@@ -158,5 +158,5 @@ export const useContentLibraryStore = defineStore('contentLibrary', () => {
 })
 
 function publicationRecord(value: BackendContent['publications'][number]): PublicationRecord {
-  return { id: value.id, contentId: value.contentId, platformVariantId: value.variantId, platform: value.platform, scheduledAt: value.scheduledAt, publishedAt: value.publishedAt, postUrl: value.postUrl ?? undefined, markedBy: value.markedBy.name }
+  return { id: value.id, contentId: value.contentId, platformVariantId: value.variantId, platform: value.platform, scheduledAt: value.scheduledAt, publishedAt: value.publishedAt, postUrl: value.postUrl ?? undefined, notes: value.notes ?? undefined, markedBy: value.markedBy.name }
 }

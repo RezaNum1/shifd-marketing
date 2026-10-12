@@ -13,11 +13,13 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useContentLibraryStore } from '../stores/contentLibrary'
-import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import { useCalendarStore } from '../stores/calendar'
 import { useProductsStore } from '../stores/products'
 import { useCompanyContextStore } from '../stores/companyContext'
 import { useUiStore } from '../stores/ui'
+import * as prospectsApi from '../api/prospects'
+import * as schedulingApi from '../api/scheduling'
+import type { Prospect } from '../types/prospect'
 import type {
   ContentAssetRecord,
   ContentCalendarEntry,
@@ -31,7 +33,6 @@ type CalendarViewMode = 'month' | 'week'
 
 const router = useRouter()
 const library = useContentLibraryStore()
-const workflow = useContentWorkflowStore()
 const calendar = useCalendarStore()
 const ui = useUiStore()
 const products = useProductsStore()
@@ -42,6 +43,9 @@ const anchorDate = ref(startOfDay(new Date()))
 const platformFilter = ref('all')
 const statusFilter = ref('all')
 const contextFilter = ref('all')
+const targetIndustryFilter = ref('')
+const prospectFilter = ref('all')
+const targetingFilter = ref('all')
 const selectedEntryId = ref<string | null>(null)
 const copiedEntryId = ref<string | null>(null)
 const previewAsset = ref<ContentAssetRecord | null>(null)
@@ -51,7 +55,20 @@ const publicationEntryId = ref<string | null>(null)
 const publishedDate = ref(dateKey(new Date()))
 const publishedTime = ref(timeKey(new Date()))
 const postUrl = ref('')
+const publicationNotes = ref('')
 const publicationError = ref('')
+const planningModalOpen = ref(false)
+const planningSaving = ref(false)
+const planningError = ref('')
+const planningContentId = ref('')
+const planningPlatform = ref<ContentPlatform>('instagram')
+const planningDate = ref(dateKey(new Date(Date.now() + 86_400_000)))
+const planningTime = ref('09:00')
+const planningIndustry = ref('')
+const planningProspectId = ref('')
+const planningNotes = ref('')
+const editingEntryId = ref<string | null>(null)
+const prospects = ref<Prospect[]>([])
 
 const platformOptions: SelectOption[] = [
   { value: 'all', label: 'All Platforms' },
@@ -69,12 +86,35 @@ const contextOptions = computed<SelectOption[]>(() => [
   { value: companyContext.companyProfile.name, label: companyContext.companyProfile.name },
   ...products.products.map((product) => ({ value: product.name, label: product.name })),
 ])
+const prospectOptions = computed<SelectOption[]>(() => [
+  { value: 'all', label: 'All Prospects' },
+  { value: 'none', label: 'General / No Prospect' },
+  ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` })),
+])
+const planningProspectOptions = computed<SelectOption[]>(() => {
+  const options = prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))
+  const linked = calendar.entries.find((entry) => entry.prospect?.id === planningProspectId.value)?.prospect
+  if (linked && !options.some((option) => option.value === linked.id)) options.push({ value: linked.id, label: `${linked.name}${linked.industry ? ` · ${linked.industry}` : ''} (linked)` })
+  return [{ value: '', label: 'No prospect (optional)' }, ...options]
+})
+const industrySuggestions = computed(() => [...new Set([...prospects.value.map((prospect) => prospect.industry), ...library.records.map((record) => record.targetIndustry)].filter((value): value is string => Boolean(value?.trim())))].sort())
+const planContentOptions = computed<SelectOption[]>(() => library.records
+  .filter((record) => record.status === 'Approved' || record.status === 'Scheduled')
+  .map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
+const planningPlatformOptions = computed<SelectOption[]>(() => {
+  const record = library.records.find((item) => item.id === planningContentId.value)
+  const platforms = record?.platforms ?? ['instagram', 'linkedin']
+  return platforms.map((platform) => ({ value: platform, label: platformLabel(platform) }))
+})
 
 const entries = computed<ContentCalendarEntry[]>(() => calendar.entries)
 const filteredEntries = computed(() => entries.value.filter((entry) =>
   (platformFilter.value === 'all' || entry.platform === platformFilter.value) &&
   (statusFilter.value === 'all' || entry.status === statusFilter.value) &&
-  (contextFilter.value === 'all' || entry.contextName === contextFilter.value),
+  (contextFilter.value === 'all' || entry.contextName === contextFilter.value) &&
+  (!targetIndustryFilter.value.trim() || entry.targetIndustry?.toLowerCase().includes(targetIndustryFilter.value.trim().toLowerCase())) &&
+  (prospectFilter.value === 'all' || (prospectFilter.value === 'none' ? !entry.prospect : entry.prospect?.id === prospectFilter.value)) &&
+  (targetingFilter.value === 'all' || (targetingFilter.value === 'general' ? !entry.targetIndustry && !entry.prospect : Boolean(entry.targetIndustry || entry.prospect))),
 ))
 const monthDays = computed(() => {
   const first = new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth(), 1)
@@ -106,7 +146,7 @@ const upcomingEntries = computed(() => entries.value
   .filter((entry) => entry.status !== 'Published')
   .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
   .slice(0, 5))
-const filtersActive = computed(() => [platformFilter.value, statusFilter.value, contextFilter.value].some((value) => value !== 'all'))
+const filtersActive = computed(() => [platformFilter.value, statusFilter.value, contextFilter.value, prospectFilter.value, targetingFilter.value].some((value) => value !== 'all') || Boolean(targetIndustryFilter.value))
 
 function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate())
@@ -139,6 +179,10 @@ function formatShortDate(value: Date, includeYear = false) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(includeYear ? { year: 'numeric' as const } : {}) }).format(value)
 }
 
+function formatTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
 function entriesForDay(value: Date) {
   const key = dateKey(value)
   return filteredEntries.value.filter((entry) => entry.scheduledDate === key)
@@ -163,6 +207,89 @@ function clearFilters() {
   platformFilter.value = 'all'
   statusFilter.value = 'all'
   contextFilter.value = 'all'
+  targetIndustryFilter.value = ''
+  prospectFilter.value = 'all'
+  targetingFilter.value = 'all'
+}
+
+function localTimestamp(date: string, time: string) {
+  const dateValue = new Date(`${date}T${time}:00`)
+  return { scheduledAt: `${dateValue.getFullYear()}-${String(dateValue.getMonth() + 1).padStart(2, '0')}-${String(dateValue.getDate()).padStart(2, '0')}T${String(dateValue.getHours()).padStart(2, '0')}:${String(dateValue.getMinutes()).padStart(2, '0')}:00${offsetFor(dateValue)}`, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jakarta' }
+}
+
+function offsetFor(value: Date) {
+  const minutes = -value.getTimezoneOffset()
+  return `${minutes >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(minutes) / 60)).padStart(2, '0')}:${String(Math.abs(minutes) % 60).padStart(2, '0')}`
+}
+
+function openPlanning(entry?: ContentCalendarEntry) {
+  planningError.value = ''
+  editingEntryId.value = entry?.id ?? null
+  planningContentId.value = entry?.contentId ?? planContentOptions.value[0]?.value ?? ''
+  planningPlatform.value = entry?.platform ?? (library.records.find((record) => record.id === planningContentId.value)?.platforms[0] as ContentPlatform | undefined) ?? 'instagram'
+  planningDate.value = entry?.scheduledDate ?? dateKey(new Date(Date.now() + 86_400_000))
+  planningTime.value = entry?.scheduledTime ?? '09:00'
+  planningIndustry.value = entry?.targetIndustry ?? ''
+  planningProspectId.value = entry?.prospect?.id ?? ''
+  planningNotes.value = entry?.planningNotes ?? ''
+  planningModalOpen.value = true
+}
+
+watch(planningContentId, (contentId) => {
+  if (editingEntryId.value || !contentId) return
+  const selected = library.records.find((record) => record.id === contentId)
+  if (selected) {
+    if (!selected.platforms.includes(planningPlatform.value)) planningPlatform.value = selected.platforms[0] ?? 'instagram'
+    planningIndustry.value = selected.targetIndustry ?? ''
+    planningProspectId.value = selected.targetProspectId ?? ''
+    planningNotes.value = selected.planningNotes ?? ''
+  }
+})
+watch(planningProspectId, (prospectId) => {
+  if (!prospectId || editingEntryId.value) return
+  const selected = prospects.value.find((prospect) => prospect.id === prospectId)
+  if (selected?.industry) planningIndustry.value = selected.industry
+})
+
+async function savePlanning() {
+  if (!planningContentId.value || !planningDate.value || !planningTime.value) {
+    planningError.value = 'Choose approved content, platform, date, and time.'
+    return
+  }
+  planningSaving.value = true
+  planningError.value = ''
+  try {
+    const record = await library.getById(planningContentId.value)
+    const version = library.etagFor(planningContentId.value)
+    if (!record || !version) throw new Error('Unable to load the selected content version.')
+    const timing = localTimestamp(planningDate.value, planningTime.value)
+    const target = { targetIndustry: planningIndustry.value.trim() || null, targetProspectId: planningProspectId.value || null, planningNotes: planningNotes.value.trim() || null }
+    if (editingEntryId.value) {
+      const entry = entries.value.find((item) => item.id === editingEntryId.value)
+      if (!entry) throw new Error('The calendar item is no longer available.')
+      const result = await schedulingApi.updateSchedule(entry.id, { ...timing, ...target }, version)
+      library.replaceCanonical(result.data)
+    } else {
+      const result = await schedulingApi.createSchedules(planningContentId.value, [{ platform: planningPlatform.value, ...timing }], version, undefined, target)
+      library.replaceCanonical(result.data)
+    }
+    planningModalOpen.value = false
+    await loadCalendar()
+    ui.notify(editingEntryId.value ? 'Calendar item updated.' : 'Content planned.', 'success')
+  } catch (error) {
+    planningError.value = error instanceof Error ? error.message : 'Unable to save this calendar item.'
+  } finally { planningSaving.value = false }
+}
+
+async function cancelPlan(entry: ContentCalendarEntry) {
+  const version = library.etagFor(entry.contentId)
+  if (!version) return ui.notify('Reload the content record before cancelling this plan.', 'danger')
+  const updated = await schedulingApi.deleteSchedule(entry.id, version)
+  if (!updated.data) return ui.notify('Unable to cancel this plan.', 'danger')
+  library.replaceCanonical(updated.data)
+  selectedEntryId.value = null
+  await loadCalendar()
+  ui.notify('Planned publication cancelled.', 'success')
 }
 
 function platformLabel(platform: ContentPlatform) {
@@ -216,6 +343,7 @@ function openPublication(entry: ContentCalendarEntry) {
   publishedDate.value = dateKey(now)
   publishedTime.value = timeKey(now)
   postUrl.value = ''
+  publicationNotes.value = ''
   publicationError.value = ''
   publicationModalOpen.value = true
 }
@@ -227,7 +355,7 @@ async function confirmPublication() {
     publicationError.value = 'Published date and time are required.'
     return
   }
-  const publishedAt = `${publishedDate.value}T${publishedTime.value}:00+07:00`
+  const publishedAt = localTimestamp(publishedDate.value, publishedTime.value).scheduledAt
   if (Number.isNaN(new Date(publishedAt).getTime())) {
     publicationError.value = 'Enter a valid published date and time.'
     return
@@ -245,6 +373,7 @@ async function confirmPublication() {
   const updated = await library.markPublished(publicationEntry.value.contentId, publicationEntry.value.platform, {
     publishedAt,
     postUrl: normalizedPostUrl,
+    notes: publicationNotes.value.trim(),
   })
   if (!updated) {
     publicationError.value = 'This scheduled entry could not be updated.'
@@ -259,20 +388,23 @@ async function confirmPublication() {
 const rangeStart = computed(() => viewMode.value === 'month' ? new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth(), 1) : startOfWeek(anchorDate.value))
 const rangeEnd = computed(() => viewMode.value === 'month' ? new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth() + 1, 1) : addDays(rangeStart.value, 7))
 async function loadCalendar() {
-  await Promise.all([companyContext.load(), products.load()])
+  await Promise.all([companyContext.load(), products.load(), library.load(), prospects.value.length ? Promise.resolve() : prospectsApi.listProspects(new URLSearchParams({ limit: '100', archived: 'false' })).then((result) => { prospects.value = result.data }).catch(() => { prospects.value = [] })])
   await calendar.load(dateKey(rangeStart.value), dateKey(rangeEnd.value), {
     platform: platformFilter.value === 'all' ? undefined : platformFilter.value as ContentPlatform,
     status: statusFilter.value === 'all' ? undefined : statusFilter.value === 'Ready to Publish' ? 'ready_to_publish' : statusFilter.value.toLowerCase() as 'scheduled' | 'published',
+    targetIndustry: targetIndustryFilter.value.trim() || undefined,
+    prospectId: prospectFilter.value !== 'all' && prospectFilter.value !== 'none' ? prospectFilter.value : undefined,
+    targeting: targetingFilter.value === 'all' ? undefined : targetingFilter.value as 'general' | 'targeted',
   })
 }
-watch([viewMode, anchorDate, platformFilter, statusFilter], () => { void loadCalendar() })
+watch([viewMode, anchorDate, platformFilter, statusFilter, targetIndustryFilter, prospectFilter, targetingFilter], () => { void loadCalendar() })
 onMounted(() => { void loadCalendar() })
 </script>
 
 <template>
   <div class="page-stack calendar-page">
     <PageHeader title="Content Calendar" description="Plan and track approved content across Instagram and LinkedIn." :breadcrumbs="[{ label: 'Planning & Insights' }, { label: 'Content Calendar' }]">
-      <template #actions><BaseButton variant="secondary" @click="resetToday">Today</BaseButton><div class="calendar-period-actions"><BaseButton variant="ghost" aria-label="Previous period" @click="navigatePeriod(-1)"><AppIcon name="arrow-left" :size="16" /></BaseButton><BaseButton variant="ghost" aria-label="Next period" @click="navigatePeriod(1)"><AppIcon name="arrow-right" :size="16" /></BaseButton></div></template>
+      <template #actions><BaseButton @click="openPlanning()">Plan Content</BaseButton><BaseButton variant="secondary" @click="resetToday">Today</BaseButton><div class="calendar-period-actions"><BaseButton variant="ghost" aria-label="Previous period" @click="navigatePeriod(-1)"><AppIcon name="arrow-left" :size="16" /></BaseButton><BaseButton variant="ghost" aria-label="Next period" @click="navigatePeriod(1)"><AppIcon name="arrow-right" :size="16" /></BaseButton></div></template>
     </PageHeader>
     <InlineAlert v-if="calendar.loading" title="Loading calendar">Reading schedules from the backend…</InlineAlert>
     <InlineAlert v-else-if="calendar.error" title="Calendar unavailable" tone="danger">{{ calendar.error }}</InlineAlert>
@@ -286,11 +418,14 @@ onMounted(() => { void loadCalendar() })
         <BaseSelect v-model="platformFilter" label="Platform" :options="platformOptions" size="compact" />
         <BaseSelect v-model="statusFilter" label="Status" :options="statusOptions" size="compact" />
         <BaseSelect v-model="contextFilter" label="Product / Context" :options="contextOptions" size="compact" />
+        <BaseInput v-model="targetIndustryFilter" label="Industry" placeholder="Any industry" size="compact" />
+        <BaseSelect v-model="prospectFilter" label="Prospect" :options="prospectOptions" size="compact" />
+        <BaseSelect v-model="targetingFilter" label="Targeting" :options="[{ value: 'all', label: 'All Content' }, { value: 'general', label: 'General' }, { value: 'targeted', label: 'Industry / Prospect Targeted' }]" size="compact" />
         <BaseButton v-if="filtersActive" variant="ghost" size="compact" @click="clearFilters">Clear Filters</BaseButton>
       </div>
     </BaseCard>
 
-    <BaseCard v-if="calendar.loaded && !calendar.loading && !calendar.error && entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Approved content will appear here after a publication date and time are selected."><BaseButton @click="workflow.startNewWorkflow(); router.push('/content/create')">Create Content</BaseButton><BaseButton variant="secondary" @click="router.push('/content')">View Content Library</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-if="calendar.loaded && !calendar.loading && !calendar.error && entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Plan approved content for Instagram or LinkedIn. General, industry-targeted, and prospect-linked plans are supported."><BaseButton @click="openPlanning()">Plan Existing Content</BaseButton><BaseButton variant="secondary" @click="router.push('/content/ideas')">Continue an Idea</BaseButton></EmptyState></BaseCard>
 
     <div v-else-if="calendar.loaded && !calendar.loading && !calendar.error" class="calendar-layout">
       <main class="calendar-main">
@@ -302,7 +437,7 @@ onMounted(() => { void loadCalendar() })
             <div v-for="day in monthDays" :key="dateKey(day)" class="month-day" :class="{ 'is-outside': day.getMonth() !== anchorDate.getMonth(), 'is-today': isToday(day) }">
               <div class="month-day__header"><span>{{ day.getDate() }}</span><small v-if="isToday(day)">Today</small></div>
               <div class="month-day__entries">
-                <button v-for="entry in entriesForDay(day).slice(0, 3)" :key="entry.id" type="button" class="calendar-entry" :class="[`is-${entry.platform}`, `is-${entry.status.toLowerCase().replaceAll(' ', '-')}`]" @click="openEntry(entry)"><span class="calendar-entry__time">{{ entry.scheduledTime }}</span><span class="calendar-entry__platform">{{ platformLabel(entry.platform) }}</span><strong>{{ entry.title }}</strong></button>
+                <button v-for="entry in entriesForDay(day).slice(0, 3)" :key="entry.id" type="button" class="calendar-entry" :class="[`is-${entry.platform}`, `is-${entry.status.toLowerCase().replaceAll(' ', '-')}`]" @click="openEntry(entry)"><span class="calendar-entry__time">{{ entry.scheduledTime }}</span><span class="calendar-entry__platform">{{ platformLabel(entry.platform) }}</span><strong>{{ entry.title }}</strong><small v-if="entry.targetIndustry || entry.prospect">{{ entry.targetIndustry || entry.prospect?.industry }}{{ entry.prospect ? ` · ${entry.prospect.name}` : '' }}</small></button>
                 <button v-if="entriesForDay(day).length > 3" type="button" class="calendar-more" @click="openEntry(entriesForDay(day)[3])">+{{ entriesForDay(day).length - 3 }} more</button>
               </div>
             </div>
@@ -311,7 +446,7 @@ onMounted(() => { void loadCalendar() })
 
         <div v-else class="calendar-scroll" tabindex="0" role="region" aria-label="Weekly content calendar">
           <div class="week-calendar">
-            <section v-for="day in weekDays" :key="dateKey(day)" class="week-day" :class="{ 'is-today': isToday(day) }"><header><span>{{ new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(day) }}</span><strong>{{ formatShortDate(day) }}</strong></header><div class="week-day__entries"><button v-for="entry in entriesForDay(day)" :key="entry.id" type="button" class="week-entry" :class="`is-${entry.platform}`" @click="openEntry(entry)"><time>{{ entry.scheduledTime }}</time><span>{{ platformLabel(entry.platform) }}</span><strong>{{ entry.title }}</strong><StatusBadge :tone="calendarTone(entry.status)">{{ entry.status }}</StatusBadge></button><p v-if="entriesForDay(day).length === 0">No scheduled content</p></div></section>
+          <section v-for="day in weekDays" :key="dateKey(day)" class="week-day" :class="{ 'is-today': isToday(day) }"><header><span>{{ new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(day) }}</span><strong>{{ formatShortDate(day) }}</strong></header><div class="week-day__entries"><button v-for="entry in entriesForDay(day)" :key="entry.id" type="button" class="week-entry" :class="`is-${entry.platform}`" @click="openEntry(entry)"><time>{{ entry.scheduledTime }}</time><span>{{ platformLabel(entry.platform) }}</span><strong>{{ entry.title }}</strong><small v-if="entry.targetIndustry || entry.prospect">{{ entry.targetIndustry || entry.prospect?.industry }}{{ entry.prospect ? ` · ${entry.prospect.name}` : '' }}</small><StatusBadge :tone="calendarTone(entry.status)">{{ entry.status }}</StatusBadge></button><p v-if="entriesForDay(day).length === 0">No scheduled content</p></div></section>
           </div>
         </div>
       </main>
@@ -319,10 +454,10 @@ onMounted(() => { void loadCalendar() })
       <aside class="calendar-sidebar">
         <BaseCard v-if="selectedEntry && selectedRecord" :title="selectedEntry.title" description="Manual publication workspace">
           <template #actions><StatusBadge :tone="calendarTone(selectedEntry.status)" dot>{{ selectedEntry.status }}</StatusBadge></template>
-          <dl class="calendar-entry-details"><div><dt>Platform</dt><dd>{{ platformLabel(selectedEntry.platform) }}</dd></div><div><dt>Product / Context</dt><dd>{{ selectedEntry.contextName }}</dd></div><div><dt>Content Pillar</dt><dd>{{ selectedEntry.pillar }}</dd></div><div><dt>Scheduled</dt><dd>{{ formatShortDate(selectedEntry.scheduledAt, true) }} · {{ selectedEntry.scheduledTime }}</dd></div><div><dt>Lifecycle Status</dt><dd>{{ contentStatus(selectedRecord) }}</dd></div></dl>
+          <dl class="calendar-entry-details"><div><dt>Platform</dt><dd>{{ platformLabel(selectedEntry.platform) }}</dd></div><div><dt>Product / Context</dt><dd>{{ selectedEntry.contextName }}</dd></div><div><dt>Content Pillar</dt><dd>{{ selectedEntry.pillar }}</dd></div><div><dt>Targeting</dt><dd>{{ selectedEntry.targetIndustry ? `Industry · ${selectedEntry.targetIndustry}` : 'General' }}{{ selectedEntry.prospect ? ` · Prospect · ${selectedEntry.prospect.name}` : '' }}</dd></div><div v-if="selectedEntry.planningNotes"><dt>Planning Notes</dt><dd>{{ selectedEntry.planningNotes }}</dd></div><div><dt>Planned</dt><dd>{{ formatShortDate(selectedEntry.scheduledAt, true) }} · {{ selectedEntry.scheduledTime }}</dd></div><div><dt>Plan recorded</dt><dd>{{ selectedEntry.plannedBy.name }} · {{ formatTimestamp(selectedEntry.scheduleCreatedAt) }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]"><dt>Actual Publication</dt><dd>{{ formatTimestamp(selectedRecord.details.publications[selectedEntry.platform]?.publishedAt ?? '') }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.postUrl"><dt>Published Post</dt><dd><a :href="selectedRecord.details.publications[selectedEntry.platform]?.postUrl" target="_blank" rel="noopener noreferrer">Open post</a></dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.notes"><dt>Publication Notes</dt><dd>{{ selectedRecord.details.publications[selectedEntry.platform]?.notes }}</dd></div><div><dt>Lifecycle Status</dt><dd>{{ contentStatus(selectedRecord) }}</dd></div></dl>
           <div class="calendar-copy-preview"><span>{{ selectedEntry.platform === 'instagram' ? 'Caption preview' : 'Post preview' }}</span><p>{{ entryCopy(selectedEntry) }}</p></div>
           <div v-if="selectedAssets.length" class="calendar-asset-strip"><ContentAssetThumbnail v-for="asset in selectedAssets" :key="asset.id" :asset="asset" @preview="openCreative" /></div>
-          <div class="calendar-detail-actions"><BaseButton size="compact" @click="router.push(`/content/${selectedEntry.contentId}`)">View Content</BaseButton><BaseButton variant="secondary" size="compact" @click="copyEntry(selectedEntry)">{{ copiedEntryId === selectedEntry.id ? 'Copied' : selectedEntry.platform === 'instagram' ? 'Copy Caption' : 'Copy Post' }}</BaseButton><BaseButton variant="secondary" size="compact" :disabled="selectedAssets.length === 0" @click="openCreative()">View Creative</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPublication(selectedEntry)">Mark as Published</BaseButton></div>
+          <div class="calendar-detail-actions"><BaseButton size="compact" @click="router.push(`/content/${selectedEntry.contentId}`)">View Content</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPlanning(selectedEntry)">Edit / Reschedule</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="ghost" size="compact" @click="cancelPlan(selectedEntry)">Cancel Plan</BaseButton><BaseButton variant="secondary" size="compact" @click="copyEntry(selectedEntry)">{{ copiedEntryId === selectedEntry.id ? 'Copied' : selectedEntry.platform === 'instagram' ? 'Copy Caption' : 'Copy Post' }}</BaseButton><BaseButton variant="secondary" size="compact" :disabled="selectedAssets.length === 0" @click="openCreative()">View Creative</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPublication(selectedEntry)">Mark as Published</BaseButton></div>
         </BaseCard>
 
         <BaseCard title="Upcoming Content" description="Next scheduled manual publication tasks.">
@@ -332,8 +467,23 @@ onMounted(() => { void loadCalendar() })
     </div>
 
     <BaseModal v-model="publicationModalOpen" title="Mark Content as Published" description="Use this after publishing the content manually on the selected platform.">
-      <div v-if="publicationEntry" class="publication-form"><dl><div><dt>Platform</dt><dd>{{ platformLabel(publicationEntry.platform) }}</dd></div><div><dt>Scheduled Date / Time</dt><dd>{{ formatShortDate(publicationEntry.scheduledAt, true) }} · {{ publicationEntry.scheduledTime }}</dd></div></dl><BaseInput v-model="publishedDate" type="date" label="Published Date" required :error="publicationError && !publishedDate ? 'Published date is required.' : undefined" /><BaseInput v-model="publishedTime" type="time" label="Published Time" required :error="publicationError && !publishedTime ? 'Published time is required.' : undefined" /><BaseInput v-model="postUrl" type="url" label="Post URL (optional)" placeholder="https://" /><p v-if="publicationError" class="publication-error" role="alert">{{ publicationError }}</p></div>
+      <div v-if="publicationEntry" class="publication-form"><dl><div><dt>Platform</dt><dd>{{ platformLabel(publicationEntry.platform) }}</dd></div><div><dt>Scheduled Date / Time</dt><dd>{{ formatShortDate(publicationEntry.scheduledAt, true) }} · {{ publicationEntry.scheduledTime }}</dd></div></dl><BaseInput v-model="publishedDate" type="date" label="Published Date" required :error="publicationError && !publishedDate ? 'Published date is required.' : undefined" /><BaseInput v-model="publishedTime" type="time" label="Published Time" required :error="publicationError && !publishedTime ? 'Published time is required.' : undefined" /><BaseInput v-model="postUrl" type="url" label="Post URL (optional)" placeholder="https://" /><BaseInput v-model="publicationNotes" label="Publication notes (optional)" placeholder="Internal recording notes" /><p v-if="publicationError" class="publication-error" role="alert">{{ publicationError }}</p></div>
       <template #footer><div class="calendar-modal-actions"><BaseButton variant="ghost" @click="publicationModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmPublication">Confirm Publication</BaseButton></div></template>
+    </BaseModal>
+
+    <BaseModal v-model="planningModalOpen" :title="editingEntryId ? 'Edit Planned Content' : 'Plan Content'" description="Schedule approved content for manual publication. Prospect details remain internal planning context.">
+      <div class="publication-form">
+        <BaseSelect v-model="planningContentId" label="Approved content" :options="planContentOptions" placeholder="Choose approved content" :disabled="Boolean(editingEntryId)" />
+        <p v-if="planContentOptions.length === 0" class="calendar-helper">No approved content is available yet. Complete the existing content workflow and M4 review before planning a publication. <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; router.push('/content/ideas')">Continue an idea</button> · <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; router.push('/content')">Open Content Library</button></p>
+        <BaseSelect v-model="planningPlatform" label="Platform" :options="planningPlatformOptions" :disabled="Boolean(editingEntryId)" />
+        <div class="planning-datetime"><BaseInput v-model="planningDate" type="date" label="Planned date" required /><BaseInput v-model="planningTime" type="time" label="Planned time" required /></div>
+        <BaseInput v-model="planningIndustry" label="Target industry (optional)" list="calendar-industry-suggestions" placeholder="Choose a suggestion or enter an industry" /><datalist id="calendar-industry-suggestions"><option v-for="industry in industrySuggestions" :key="industry" :value="industry" /></datalist>
+        <BaseSelect v-model="planningProspectId" label="Linked prospect (optional)" :options="planningProspectOptions" />
+        <BaseInput v-model="planningNotes" label="Planning notes (optional)" placeholder="Internal notes for the team" />
+        <p v-if="planningProspectId" class="calendar-helper">Prospect association is internal metadata. The content will not name the company automatically.</p>
+        <p v-if="planningError" class="publication-error" role="alert">{{ planningError }}</p>
+      </div>
+      <template #footer><div class="calendar-modal-actions"><BaseButton variant="ghost" @click="planningModalOpen = false">Cancel</BaseButton><BaseButton :disabled="planningSaving" @click="savePlanning">{{ planningSaving ? 'Saving…' : editingEntryId ? 'Save Changes' : 'Plan Content' }}</BaseButton></div></template>
     </BaseModal>
 
     <BaseModal v-model="previewModalOpen" title="Creative Preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="calendar-large-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Creative placeholder</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>{{ previewAsset.type }} · {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
@@ -410,8 +560,10 @@ onMounted(() => { void loadCalendar() })
 .upcoming-list button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .calendar-filter-empty { border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
 .publication-form { display: grid; gap: 16px; }
+.planning-datetime { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .publication-form dl { padding: 12px; border-radius: 6px; background: var(--color-well); }
 .publication-error { color: #991b1b; font-size: 12px; }
+.calendar-inline-link { color: var(--color-primary); font-weight: 600; text-decoration: underline; }
 .calendar-modal-actions { justify-content: flex-end; }
 .calendar-large-preview { min-height: 440px; overflow: hidden; border-radius: var(--radius-card); background: #eff4ff; }
 .calendar-large-preview img { width: 100%; max-height: 70vh; object-fit: contain; }
@@ -420,5 +572,5 @@ onMounted(() => { void loadCalendar() })
 .calendar-large-preview strong { max-width: 12ch; font-size: clamp(28px, 5vw, 52px); line-height: 1.05; font-weight: 600; }
 .calendar-large-preview span { margin-top: 28px; color: #bae6fd; }
 @media (max-width: 1150px) { .calendar-layout { grid-template-columns: 1fr; } .calendar-sidebar { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .calendar-sidebar { grid-template-columns: 1fr; } .calendar-toolbar__row { align-items: flex-start; flex-direction: column; } .calendar-filter-row :deep(.ui-field) { min-width: 100%; } }
+@media (max-width: 720px) { .calendar-sidebar { grid-template-columns: 1fr; } .calendar-toolbar__row { align-items: flex-start; flex-direction: column; } .calendar-filter-row :deep(.ui-field) { min-width: 100%; } .planning-datetime { grid-template-columns: 1fr; } }
 </style>

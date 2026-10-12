@@ -134,11 +134,14 @@ export function contentSummary(value: BackendContentSummary): ContentLibraryReco
   const platforms = [...value.enabledPlatforms]
   const status = value.lifecycleStatus as ContentLifecycleStatus
   const schedules = Object.fromEntries(value.scheduleSummary.filter((schedule) => schedule.status !== 'cancelled').map((schedule) => [schedule.platform, scheduleToLegacy(schedule)])) as ContentRecordDetails['schedules']
-  const publications = Object.fromEntries(value.publications.map((publication) => [publication.platform, { publishedAt: publication.publishedAt, postUrl: publication.postUrl ?? undefined, status: 'Published' as const }])) as ContentRecordDetails['publications']
+  const publications = Object.fromEntries(value.publications.map((publication) => [publication.platform, { publishedAt: publication.publishedAt, postUrl: publication.postUrl ?? undefined, notes: publication.notes ?? undefined, status: 'Published' as const }])) as ContentRecordDetails['publications']
   return baseRecord({
     id: value.id,
     companyId: value.company.id,
     productId: value.product?.id,
+    targetIndustry: value.targetIndustry,
+    targetProspectId: value.targetProspectId,
+    planningNotes: value.planningNotes,
     title: value.title,
     topic: value.brief.topic,
     context: value.product ? 'product' : 'company',
@@ -157,7 +160,7 @@ export function content(value: BackendContent): ContentLibraryRecord {
   const platforms = value.variants.filter((variant) => variant.enabled).map((variant) => variant.platform)
   const status = value.lifecycleStatus as ContentLifecycleStatus
   const schedules = Object.fromEntries(value.schedules.filter((schedule) => schedule.status !== 'cancelled').map((schedule) => [schedule.platform, scheduleToLegacy(schedule)])) as ContentRecordDetails['schedules']
-  const publications = Object.fromEntries(value.publications.map((publication) => [publication.platform, { publishedAt: publication.publishedAt, postUrl: publication.postUrl ?? undefined, status: 'Published' as const }])) as ContentRecordDetails['publications']
+  const publications = Object.fromEntries(value.publications.map((publication) => [publication.platform, { publishedAt: publication.publishedAt, postUrl: publication.postUrl ?? undefined, notes: publication.notes ?? undefined, status: 'Published' as const }])) as ContentRecordDetails['publications']
   const creative = {
     instagram: assetsFor(value.variants.find((variant) => variant.platform === 'instagram')?.ownAssets.map((link) => link.asset) ?? []),
     linkedin: assetsFor(value.variants.find((variant) => variant.platform === 'linkedin')?.ownAssets.map((link) => link.asset) ?? []),
@@ -190,6 +193,9 @@ export function content(value: BackendContent): ContentLibraryRecord {
     ideaId: value.sourceIdeaId ?? undefined,
     companyId: value.companyId,
     productId: value.brief.productId ?? undefined,
+    targetIndustry: value.targetIndustry,
+    targetProspectId: value.targetProspectId,
+    planningNotes: value.planningNotes,
     title: value.title,
     topic: value.brief.topic,
     context: value.brief.contextType,
@@ -217,13 +223,16 @@ export function creativeAsset(value: BackendAsset): CreativeAsset {
   return { id: value.id, name: value.fileName, url: value.contentUrl }
 }
 
-function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; title: string; topic: string; context: 'company' | 'product'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
+function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
   const schedules = value.schedules ?? {}
   const publications = value.publications ?? {}
   return {
     ideaId: value.ideaId,
     companyId: value.companyId,
     productId: value.productId,
+    targetIndustry: value.targetIndustry ?? null,
+    targetProspectId: value.targetProspectId ?? null,
+    planningNotes: value.planningNotes ?? null,
     id: value.id,
     title: value.title,
     topic: value.topic,

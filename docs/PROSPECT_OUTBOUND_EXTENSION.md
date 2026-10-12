@@ -146,7 +146,7 @@ From `backend/`, run `npx vitest run tests/prospect-activities.unit.test.ts test
 
 ## Relationship to existing six modules
 
-Prospects are a supporting business-data capability. The existing six marketing modules and their Company/Product contexts, content and ideas, calendar, Telegram, AI, and performance flows remain separate and unchanged. This phase adds no prospect foreign keys to those existing records and does not feed prospect facts into prompts. Later phases can associate evidence and outbound artifacts without copying or changing current Company/Product context.
+Prospects are a supporting business-data capability. Phase 06 adds an optional internal prospect association to existing content and calendar plans. It does not copy prospect contact data into public content or change Company/Product context.
 
 ## Phased development plan
 
@@ -156,11 +156,11 @@ Prospects are a supporting business-data capability. The existing six marketing 
 | 02 | AI-assisted prospect research with source-backed evidence and explicit human review | Implemented in this change |
 | 03 | Personalized outbound email drafts linked to prospects and evidence | Implemented |
 | 04 | Outbound communication activity history, replies, follow-ups and meetings | Implemented |
-| 05 | Industry-based content generation and planning | Future; not implemented |
-| 06 | Optional prospect-linked campaign and content-calendar associations | Future; not implemented |
+| 05 | Industry-based content generation and planning | Implemented |
+| 06 | Optional prospect-linked content-calendar associations | Implemented |
 | 07 | Separate inbound/outbound performance metrics and enhanced evaluation dashboard | Future; not implemented |
 
-The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 05 and later workflows are not present in the current UI or API.
+The order and boundaries of future phases remain subject to evaluation and thesis supervision. Phase 07 remains future work.
 
 ## Phase 01 limitations
 
@@ -244,8 +244,48 @@ The additive forward-only migration is `20261012100000_phase_5_industry_ideation
 node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || url === process.env.DATABASE_URL) throw new Error("Refusing migration: TEST_DATABASE_URL must be configured and distinct from DATABASE_URL."); const parsed = new URL(url); if (parsed.pathname.replace(/^\//, "") !== "shifd_marketing_test") throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:content
 ```
 
-Limitations: this version returns generated ideas in the request response rather than persisting unselected AI drafts. Only a selected idea enters the canonical Ideas library. Evidence returned by evergreen generation is not a substitute for independently retrieved and reviewed external research. Ideas save objective/industry/prospect/evidence metadata on the source idea; Phase 06 calendar and campaign planning are not implemented.
+Limitations: this version returns generated ideas in the request response rather than persisting unselected AI drafts. Only a selected idea enters the canonical Ideas library. Evidence returned by evergreen generation is not a substitute for independently retrieved and reviewed external research.
 
-### Phase 06 handoff (future)
+## Phase 06 — Prospect-Linked Content Calendar (implemented)
 
-Phase 06 may read nullable industry, prospect, objective and evidence metadata from canonical ideas to plan industry campaigns, optional prospect-linked content, and general campaigns. It should preserve human selection and publication review. Phase 05 does not create calendar records or scheduled content.
+Phase 06 extends the existing M5 calendar and canonical `Content`, `PlatformVariant`, `ContentSchedule`, and `PublicationRecord` workflow. General content, industry-targeted content, and optional prospect-linked content all use the same calendar. A prospect may have no content or several associated items. Associations are internal planning context and do not give permission to name the organization publicly.
+
+### Planning and M2/M3/M4 integration
+
+Choose an already saved, M4-approved content record in the Calendar's Plan Content form, then select Instagram or LinkedIn and set its planned date/time. The same content can have platform-specific variants/schedules while retaining one master content record. Ideas continue through the existing M2 content-brief and M3 adaptation flow; scheduling still requires current human approval in M4. Source idea references and their objective, audience, evidence, and company/product context remain reachable through `sourceIdeaId`. No platform auto-posting is performed.
+
+Industry can be selected from browser suggestions based on current prospect/content values or entered as free text. Prospect association is optional; the selector shows company name and industry only. It can be changed or cleared when rescheduling. Planning notes remain internal. Calendar filters include industry, prospect, general content, platform, status and existing context filters. Cancel Plan uses the existing cancellation transition, retaining its history and allowing the schedule to be reactivated through the existing scheduling endpoint.
+
+### Workflow states and publication recording
+
+Calendar membership represents a planned publication. When a planned time passes, its read-time status becomes `ready_to_publish`; no `PublicationRecord` is created and the item is not counted as published. After a user manually publishes on Instagram or LinkedIn, they can explicitly record the actual date/time and optional post URL. The existing publication record stores the planned-time snapshot, actual publication time, recording user and record timestamps. Corrections use the existing manual publication correction behavior. Calendar cards and detail show target industry, the optional prospect, planned time, and actual publication metadata when available.
+
+### API and database changes
+
+- `POST /api/contents/:id/schedules` accepts optional `targetIndustry`, `targetProspectId`, and `planningNotes` alongside its existing platform schedules.
+- `PUT /api/schedules/:id` can reschedule and update or clear those optional targeting fields.
+- `GET /api/schedules/:id` returns one schedule with its content, variant, optional prospect name/industry, and explicit publication record.
+- `GET /api/calendar` accepts `targetIndustry`, `prospectId`, and `targeting=general|targeted` in addition to the existing bounded date, platform, status, product, and context filters. It uses bounded `limit` (1–500) and an opaque `nextCursor` for stable schedule-time pagination; the calendar store loads each page for its active view.
+- Calendar response prospect data contains only prospect ID, name, and industry; no contact, outreach, or research-private fields are returned.
+- Existing Content receives nullable `target_industry`, `target_prospect_id`, and `planning_notes` fields. Existing PublicationRecord receives optional internal notes. The `source_idea_id` continues to connect M2 metadata. No duplicate calendar model or required prospect relationship was introduced.
+- Migration `20261012110000_phase_6_prospect_linked_calendar` is additive and forward-only. API mutations verify content and prospect ownership under the authenticated tenant. Existing records with null targeting remain valid and queryable.
+
+Planned and actual timestamps remain UTC instants in PostgreSQL `timestamptz`; schedule display and input use the browser's timezone. Existing event history preserves schedule changes and actors. Original content creation time and M2 source reference remain available for later four-week evaluation without a hardcoded evaluation date or fabricated outcome metrics.
+
+### Phase 06 validation and limitations
+
+Focused backend coverage is in `backend/tests/scheduling.test.ts` (P601) for optional targeting, prospect privacy, filtering, cross-tenant rejection, unlinking and general content. Run it only against `shifd_marketing_test` with `npm run test:scheduling`. Calendar frontend validation is in `frontend/src/views/CalendarView.spec.ts` and `frontend/src/api/normalizers.spec.ts`. Schema/client validation, backend build, frontend tests/build, and `git diff --check` are also required.
+
+In this workspace, the scheduling status unit tests (2), calendar/normalizer frontend tests (5), Prisma validation, backend build, frontend build, and `git diff --check` passed. The guarded migration was attempted with `TEST_DATABASE_URL` resolving exactly to `shifd_marketing_test`, then PostgreSQL at `127.0.0.1:5432` returned `P1001`; migration and P601 API/database assertions are not verified here. Run `npx vitest run tests/scheduling.unit.test.ts` from `backend/` and `npx vitest run --config vitest.config.ts src/views/CalendarView.spec.ts src/api/normalizers.spec.ts` from `frontend/` for non-database checks.
+
+Limitations: calendar plans are created from saved M4-approved content; unsaved ideas must first continue through the existing content workflow. Industry remains free text rather than a canonical taxonomy. Publication confirmation is manual; no social publishing or platform metrics are generated. Source claims remain governed by the existing Phase 02 review workflow.
+
+If local PostgreSQL is unavailable in the Codex sandbox, from `backend/` apply the migration and run the scheduling integration suite using this guarded command. It refuses to migrate unless the configured test database is exactly `shifd_marketing_test` and distinct from `DATABASE_URL`:
+
+```sh
+node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || url === process.env.DATABASE_URL) throw new Error("Refusing migration outside isolated test database."); const parsed = new URL(url); if (parsed.pathname.replace(/^\//, "") !== "shifd_marketing_test") throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:scheduling
+```
+
+### Phase 07 handoff (future)
+
+Phase 07 may evaluate planned versus manually confirmed publications, content origin, industry, optional prospect association, platform and timestamps over the four-week field period. Platform-confirmed engagement metrics must remain separate from manual publication records. Phase 06 does not implement analytics dashboards or invent publication/performance outcomes.

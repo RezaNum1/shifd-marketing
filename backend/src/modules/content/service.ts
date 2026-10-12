@@ -113,7 +113,7 @@ const contentInclude = {
       assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } },
       reuseCreativeFromVariant: true,
       currentAssessment: true,
-      schedule: true,
+      schedule: { include: { creator: { select: { id: true, name: true } } } },
       publication: { include: { marker: { select: { id: true, name: true } } } },
     },
   },
@@ -284,14 +284,20 @@ export async function createContent(prisma: PrismaClient, companyId: string, act
     normalizedRequest: { actorId, content: input },
     execute: async (tx) => {
       await validateBriefReference(tx, companyId, input.brief)
+      let ideaTarget: { targetIndustry: string | null; targetProspectId: string | null } | null = null
       if (input.sourceIdeaId) {
         const idea = await lockIdea(tx, companyId, input.sourceIdeaId)
         if (idea.status !== 'ready') throw conflict('The source Idea is no longer Ready.')
+        const target = await tx.contentIdea.findFirst({ where: { id: input.sourceIdeaId, companyId }, select: { targetIndustry: true, targetProspectId: true } })
+        if (!target) throw notFound()
+        ideaTarget = target
       }
       const content = await tx.content.create({
         data: {
           companyId,
           sourceIdeaId: input.sourceIdeaId,
+          targetIndustry: ideaTarget?.targetIndustry ?? null,
+          targetProspectId: ideaTarget?.targetProspectId ?? null,
           contextType: input.brief.contextType,
           productId: input.brief.productId,
           editorialStage: 'draft',
@@ -874,6 +880,9 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
     id: content.id,
     companyId: content.companyId,
     sourceIdeaId: content.sourceIdeaId,
+    targetIndustry: content.targetIndustry,
+    targetProspectId: content.targetProspectId,
+    planningNotes: content.planningNotes,
     title: master?.title ?? content.brief.topic,
     brief: {
       contextType: content.contextType,
@@ -910,6 +919,9 @@ function mapContentSummary(content: CompleteContentRow, approvalValid = false, a
   return {
     id: content.id,
     title: master?.title ?? content.brief.topic,
+    targetIndustry: content.targetIndustry,
+    targetProspectId: content.targetProspectId,
+    planningNotes: content.planningNotes,
     brief: { topic: content.brief.topic, pillarCode: content.brief.pillarCode, objective: content.brief.objective },
     company: { id: content.company.id, name: content.company.name },
     product: content.product ? { id: content.product.id, name: content.product.name } : null,
@@ -980,6 +992,9 @@ function mapSchedule(
     cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
     cancellationReason: schedule.cancellationReason,
     status,
+    createdBy: { id: schedule.creator.id, name: schedule.creator.name },
+    createdAt: schedule.createdAt.toISOString(),
+    updatedAt: schedule.updatedAt.toISOString(),
     version: schedule.version,
   }
 }
@@ -998,6 +1013,7 @@ function mapPublication(
     scheduledAt: publication.scheduledAtSnapshot.toISOString(),
     publishedAt: publication.publishedAt.toISOString(),
     postUrl: publication.postUrl,
+    notes: publication.notes,
     markedBy: { id: publication.marker.id, name: publication.marker.name },
     recordedAt: publication.recordedAt.toISOString(),
     updatedAt: publication.updatedAt.toISOString(),

@@ -618,6 +618,9 @@ model Content {
   id                       String                   @id @default(uuid()) @db.Uuid
   companyId                String                   @map("company_id") @db.Uuid
   sourceIdeaId             String?                  @map("source_idea_id") @db.Uuid
+  targetIndustry           String?                  @map("target_industry")
+  targetProspectId          String?                  @map("target_prospect_id") @db.Uuid
+  planningNotes            String?                  @map("planning_notes")
   contextType              String                   @map("context_type")
   productId                String?                  @map("product_id") @db.Uuid
   editorialStage           String                   @default("draft") @map("editorial_stage")
@@ -781,6 +784,7 @@ model PublicationRecord {
   scheduledAtSnapshot DateTime            @map("scheduled_at_snapshot") @db.Timestamptz(3)
   publishedAt         DateTime            @map("published_at") @db.Timestamptz(3)
   postUrl             String?             @map("post_url")
+  notes               String?
   markedBy            String              @map("marked_by") @db.Uuid
   recordedAt          DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(3)
   updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
