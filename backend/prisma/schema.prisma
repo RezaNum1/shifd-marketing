@@ -443,6 +443,10 @@ model ContentIdea {
   objective       String
   targetAudience  String?             @map("target_audience")
   notes           String?
+  targetIndustry  String?             @map("target_industry")
+  targetProspectId String?            @map("target_prospect_id") @db.Uuid
+  contentObjective String?            @map("content_objective")
+  evidenceReferences Json?            @map("evidence_references")
   sourceType      String?             @map("source_type")
   sourceReference String?             @map("source_reference")
   sourceSummary   String?             @map("source_summary")

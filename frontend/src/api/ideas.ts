@@ -9,6 +9,10 @@ export interface IdeaInput {
   objective: string
   targetAudience?: string | null
   notes?: string | null
+  targetIndustry?: string | null
+  targetProspectId?: string | null
+  contentObjective?: string | null
+  evidenceReferences?: Array<{ claim: string; sources: Array<{ title: string; url: string }> }> | null
 }
 
 export function listIdeas() { return request<BackendIdea[]>('/content-ideas?limit=100') }

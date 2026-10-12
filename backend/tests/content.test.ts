@@ -21,6 +21,8 @@ let companyId = ''
 let otherCompanyId = ''
 let activeProductId = ''
 let inactiveProductId = ''
+let targetProspectId = ''
+let foreignProspectId = ''
 
 function cookieFrom(response: { headers: { 'set-cookie'?: unknown } }) {
   const value = response.headers['set-cookie']
@@ -125,6 +127,7 @@ async function removeCompany(company: string) {
   await prisma.contentBrief.deleteMany({ where: { content: { companyId: company } } })
   await prisma.content.deleteMany({ where: { companyId: company } })
   await prisma.contentIdea.deleteMany({ where: { companyId: company } })
+  await prisma.prospect.deleteMany({ where: { companyId: company } })
   await prisma.requestIdempotency.deleteMany({ where: { companyId: company } })
   await prisma.aiRequestLog.deleteMany({ where: { companyId: company } })
   await prisma.productProfile.deleteMany({ where: { product: { companyId: company } } })
@@ -151,6 +154,12 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
     ])
     activeProductId = active.id
     inactiveProductId = inactive.id
+    const [target, foreign] = await Promise.all([
+      prisma.prospect.create({ data: { companyId, createdBy: primary.user.id, name: 'Target Logistics', normalizedName: `target logistics ${suffix}`, industry: 'Logistics' } }),
+      prisma.prospect.create({ data: { companyId: otherCompanyId, createdBy: other.user.id, name: 'Foreign Prospect', normalizedName: `foreign prospect ${suffix}`, industry: 'Retail' } }),
+    ])
+    targetProspectId = target.id
+    foreignProspectId = foreign.id
   })
 
   afterAll(async () => {
@@ -175,6 +184,11 @@ runIntegration('Phase 4 Ideas and Content persistence', () => {
     expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_CONFLICT' } })
     const product = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-product' }, payload: productIdea() })
     expect(product.statusCode).toBe(201)
+    const targeted = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-industry-targeted' }, payload: { ...companyIdea('Logistics workflow education'), targetIndustry: 'Logistics', targetProspectId, contentObjective: 'industry_education', evidenceReferences: [{ claim: 'The company operates in logistics.', sources: [{ title: 'Approved profile', url: 'https://example.test/about' }] }] } })
+    expect(targeted.statusCode).toBe(201)
+    expect(targeted.json().data).toMatchObject({ targetIndustry: 'Logistics', targetProspectId, contentObjective: 'industry_education', evidenceReferences: [{ claim: 'The company operates in logistics.' }] })
+    const rejectsForeignProspect = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-foreign-prospect' }, payload: { ...companyIdea('Cross-tenant reject'), targetProspectId: foreignProspectId } })
+    expect(rejectsForeignProspect.statusCode).toBe(404)
     const rejectsCompanyProduct = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-company-reject' }, payload: { ...companyIdea('Bad company context'), productId: activeProductId } })
     expect(rejectsCompanyProduct.statusCode).toBe(422)
     const rejectsInactive = await app.inject({ method: 'POST', url: '/api/content-ideas', headers: { ...mutationHeaders(auth), 'idempotency-key': 'idea-inactive-reject' }, payload: { ...productIdea('Bad inactive context'), productId: inactiveProductId } })

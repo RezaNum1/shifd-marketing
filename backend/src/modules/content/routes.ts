@@ -19,7 +19,7 @@ import { brandCheckContent } from '../ai/brand.js'
 import { approveContent, listReviewActions, recordOverride, requestRevision, type ReviewChecklist } from '../review/service.js'
 import type { Clock } from '../../shared/time/clock.js'
 
-const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes'] as const
+const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes', 'targetIndustry', 'targetProspectId', 'contentObjective', 'evidenceReferences'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
 const masterKeys = ['title', 'coreMessage', 'hook', 'body', 'cta'] as const
 const visualDirectionKeys = ['format', 'concept', 'structure', 'notes'] as const
@@ -339,7 +339,25 @@ function parseIdeaInput(value: unknown): IdeaInput {
     objective: parseObjective(input.objective, 'objective'),
     targetAudience: optionalText(input.targetAudience, 'targetAudience'),
     notes: optionalText(input.notes, 'notes'),
+    targetIndustry: optionalText(input.targetIndustry, 'targetIndustry'),
+    targetProspectId: input.targetProspectId === undefined || input.targetProspectId === null || input.targetProspectId === '' ? null : parseResourceId(input.targetProspectId),
+    contentObjective: optionalText(input.contentObjective, 'contentObjective'),
+    evidenceReferences: parseEvidenceReferences(input.evidenceReferences),
   }
+}
+
+function parseEvidenceReferences(value: unknown): import('@prisma/client').Prisma.InputJsonValue | null {
+  if (value === undefined || value === null) return null
+  if (!Array.isArray(value) || value.length > 10) throw validationError('Evidence references are invalid.')
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw validationError('Evidence references are invalid.')
+    const record = entry as Record<string, unknown>
+    if (typeof record.claim !== 'string' || record.claim.length > 500 || !Array.isArray(record.sources) || record.sources.length > 5) throw validationError('Evidence references are invalid.')
+    for (const source of record.sources) {
+      if (!source || typeof source !== 'object' || typeof (source as Record<string, unknown>).title !== 'string' || typeof (source as Record<string, unknown>).url !== 'string' || !/^https?:\/\//i.test((source as Record<string, unknown>).url as string)) throw validationError('Evidence references are invalid.')
+    }
+  }
+  return value as import('@prisma/client').Prisma.InputJsonValue
 }
 
 function parseBrief(value: unknown): BriefInput {

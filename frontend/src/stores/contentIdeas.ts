@@ -30,6 +30,10 @@ function cleanInput(input: ContentIdeaInput): ideasApi.IdeaInput {
     objective: input.objective,
     targetAudience: input.targetAudience?.trim() || null,
     notes: input.notes?.trim() || null,
+    targetIndustry: input.targetIndustry?.trim() || null,
+    targetProspectId: input.targetProspectId || null,
+    contentObjective: input.contentObjective || null,
+    evidenceReferences: input.evidenceReferences ?? null,
   }
 }
 

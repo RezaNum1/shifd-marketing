@@ -144,6 +144,10 @@ export interface BackendIdea {
   sourceType?: string | null
   sourceReference?: string | null
   sourceSummary?: string | null
+  targetIndustry?: string | null
+  targetProspectId?: string | null
+  contentObjective?: string | null
+  evidenceReferences?: Array<{ claim: string; sources: Array<{ title: string; url: string }> }> | null
   status: BackendIdeaStatus
   relatedContentIds: string[]
   version: number

@@ -76,7 +76,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const clock = options.clock ?? systemClock
   const instagramProvider = options.instagramProvider ?? new MetaInstagramInsightsProvider(options.config)
   await app.register(contentRoutes, { config: options.config, aiProvider, clock, prefix: '/api' })
-  await app.register(topicDiscoveryRoutes, { config: options.config, provider: discoveryProvider, prefix: '/api' })
+  await app.register(topicDiscoveryRoutes, { config: options.config, provider: discoveryProvider, aiProvider, prefix: '/api' })
   await app.register(prospectResearchRoutes, { config: options.config, provider: prospectResearchProvider, prefix: '/api' })
   await app.register(prospectOutreachRoutes, { config: options.config, provider: aiProvider, prefix: '/api' })
   await app.register(prospectActivityRoutes, { config: options.config, prefix: '/api' })

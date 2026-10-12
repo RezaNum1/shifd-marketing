@@ -18,7 +18,7 @@ const products = useProductsStore()
 const productOptions = computed(() => products.productOptions.map((option) => ({ ...option, label: option.label })))
 const formElement = ref<HTMLFormElement>()
 const attempted = ref(false)
-const form = reactive<ContentIdeaInput>({ title: '', contextType: 'product', productId: '', pillar: '', objective: '', targetAudience: '', notes: '' })
+const form = reactive<ContentIdeaInput>({ title: '', contextType: 'product', productId: '', pillar: '', objective: '', targetAudience: '', notes: '', targetIndustry: '', targetProspectId: '', contentObjective: '', evidenceReferences: [] })
 const errors = computed(() => attempted.value ? validateIdea(form) : {})
 
 watch(open, (value) => {
@@ -28,6 +28,7 @@ watch(open, (value) => {
     title: props.idea?.title ?? '', contextType: props.idea?.contextType ?? 'product',
     productId: props.idea?.productId ?? '', pillar: props.idea?.pillar ?? '',
     objective: props.idea?.objective ?? '', targetAudience: props.idea?.targetAudience ?? '', notes: props.idea?.notes ?? '',
+    targetIndustry: props.idea?.targetIndustry ?? '', targetProspectId: props.idea?.targetProspectId ?? '', contentObjective: props.idea?.contentObjective ?? '', evidenceReferences: props.idea?.evidenceReferences ?? [],
   })
 })
 

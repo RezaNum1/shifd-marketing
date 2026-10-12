@@ -1,7 +1,7 @@
 import { APIConnectionError, APIConnectionTimeoutError, APIError } from 'openai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AppConfig } from '../src/config/env.js'
-import { M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
+import { M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION } from '../src/modules/ai/constants.js'
 import { OpenAiAiProvider } from '../src/modules/ai/openai.js'
 import { M4_CHECK_LABELS } from '../src/modules/ai/output.js'
 import { AiProviderFailure, type AiImageProviderRequest, type AiProviderRequest } from '../src/modules/ai/provider.js'
@@ -82,6 +82,14 @@ function withRejectedResponse(error: unknown) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('OpenAI Responses API adapter', () => {
+  it('uses a structured output contract for industry ideation without web search', async () => {
+    const output = { ideas: [{ title: 'A', angle: 'A', hook: 'A', targetAudience: 'A', talkingPoints: ['A', 'B'], industryRelevance: 'A', capability: 'A', format: 'Carousel', platform: 'LinkedIn', softCta: 'A', evidence: [] }, { title: 'B', angle: 'B', hook: 'B', targetAudience: 'B', talkingPoints: ['A', 'B'], industryRelevance: 'B', capability: 'B', format: 'Post', platform: null, softCta: 'B', evidence: [] }, { title: 'C', angle: 'C', hook: 'C', targetAudience: 'C', talkingPoints: ['A', 'B'], industryRelevance: 'C', capability: 'C', format: 'Post', platform: 'Both', softCta: 'C', evidence: [] }] }
+    const { provider, create } = withResponse(completedResponse(JSON.stringify(output)))
+    await provider.generate({ ...request, outputSchemaVersion: M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION })
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ store: false, text: { format: { type: 'json_schema', name: 'm2_industry_ideation_v1', strict: true, schema: { properties: { ideas: { minItems: 3, maxItems: 5 } } } } } })
+    expect(JSON.stringify(create.mock.calls[0]?.[0])).not.toContain('web_search')
+  })
+
   it('uses the existing web-search provider for bounded source-backed prospect research', async () => {
     const output = { summary: 'A source-backed company overview.', identityStatus: 'matched', identityExplanation: 'The official site and location match.', limitations: [], claims: [] }
     const response = { ...completedResponse(JSON.stringify(output)), output: [{ type: 'web_search_call', action: { type: 'search', sources: [{ type: 'url', url: 'https://company.example/about' }] } }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }] }

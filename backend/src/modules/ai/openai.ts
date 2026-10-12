@@ -1,12 +1,29 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
-import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION } from './constants.js'
+import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION } from './constants.js'
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
 
 const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
+  [M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION]: {
+    name: 'm2_industry_ideation_v1',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: { ideas: { type: 'array', minItems: 3, maxItems: 5, items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          title: { type: 'string' }, angle: { type: 'string' }, hook: { type: 'string' }, targetAudience: { type: 'string' },
+          talkingPoints: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string' } }, industryRelevance: { type: 'string' }, capability: { type: 'string' },
+          format: { type: 'string' }, platform: { type: ['string', 'null'], enum: ['Instagram', 'LinkedIn', 'Both', null] }, softCta: { type: 'string' },
+          evidence: { type: 'array', maxItems: 3, items: { type: 'object', additionalProperties: false, properties: {
+            claim: { type: 'string' }, sources: { type: 'array', maxItems: 3, items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] } },
+          }, required: ['claim', 'sources'] } },
+        }, required: ['title', 'angle', 'hook', 'targetAudience', 'talkingPoints', 'industryRelevance', 'capability', 'format', 'platform', 'softCta', 'evidence'],
+      } } }, required: ['ideas'],
+    },
+  },
   [OUTPUT_SCHEMA_VERSION]: {
     name: 'm2_generate_v1',
     schema: {

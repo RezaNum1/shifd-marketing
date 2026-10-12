@@ -10,6 +10,10 @@ export interface ContentIdeaInput {
   objective: ContentBrief['objective']
   targetAudience?: string
   notes?: string
+  targetIndustry?: string
+  targetProspectId?: string
+  contentObjective?: string
+  evidenceReferences?: Array<{ claim: string; sources: Array<{ title: string; url: string }> }>
 }
 
 export interface ContentIdea extends ContentIdeaInput {

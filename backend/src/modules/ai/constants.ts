@@ -33,6 +33,7 @@ export const CREATIVE_REFERENCE_PROMPT_VERSION = 'creative-reference-v1'
 export const CREATIVE_REFERENCE_PROMPT_REFERENCE = 'm2.creative_reference_concepts.v1'
 export const M2_DISCOVERY_OPERATION = 'idea.discovery.web_search' as const
 export const M2_DISCOVERY_OUTPUT_SCHEMA_VERSION = 'm2.idea_discovery_web_search.v1' as const
+export const M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION = 'm2.industry_ideation.v1' as const
 export const M2_DISCOVERY_PROMPT_VERSION = 'idea-discovery-web-search-v1' as const
 export const M2_DISCOVERY_PROMPT_REFERENCE = 'm2.idea_discovery_web_search.v1' as const
 export const PROSPECT_RESEARCH_OPERATION = 'prospect.company.research' as const

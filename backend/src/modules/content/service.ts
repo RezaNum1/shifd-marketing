@@ -21,6 +21,10 @@ export interface IdeaInput {
   sourceType?: string | null
   sourceReference?: string | null
   sourceSummary?: string | null
+  targetIndustry?: string | null
+  targetProspectId?: string | null
+  contentObjective?: string | null
+  evidenceReferences?: Prisma.InputJsonValue | null
 }
 
 export interface BriefInput {
@@ -140,7 +144,8 @@ export async function createIdea(prisma: PrismaClient, companyId: string, actorI
  */
 export async function createIdeaInTransaction(db: Db, companyId: string, actorId: string, input: IdeaInput) {
   await validateNewContextReference(db, companyId, input.contextType, input.productId, input.pillarCode, input.objective)
-  const idea = await db.contentIdea.create({ data: { companyId, ...input, createdBy: actorId } })
+  await validateIdeaTarget(db, companyId, input.targetIndustry, input.targetProspectId, input.contentObjective)
+  const idea = await db.contentIdea.create({ data: { companyId, ...input, evidenceReferences: input.evidenceReferences ?? Prisma.DbNull, createdBy: actorId } })
   return readIdea(db, companyId, idea.id)
 }
 
@@ -197,7 +202,8 @@ export async function updateIdea(prisma: PrismaClient, companyId: string, ideaId
     const locked = await lockIdea(tx, companyId, ideaId, expectedVersion)
     if (locked.status !== 'ready') throw conflict('Only Ready Ideas can be edited.')
     await validateNewContextReference(tx, companyId, input.contextType, input.productId, input.pillarCode, input.objective)
-    await tx.contentIdea.update({ where: { id: ideaId }, data: { ...input, version: { increment: 1 } } })
+    await validateIdeaTarget(tx, companyId, input.targetIndustry, input.targetProspectId, input.contentObjective)
+    await tx.contentIdea.update({ where: { id: ideaId }, data: { ...input, evidenceReferences: input.evidenceReferences ?? Prisma.DbNull, version: { increment: 1 } } })
     return readIdea(tx, companyId, ideaId)
   })
 }
@@ -226,6 +232,10 @@ export async function duplicateIdea(prisma: PrismaClient, companyId: string, act
           sourceType: null,
           sourceReference: null,
           sourceSummary: null,
+          targetIndustry: source.targetIndustry,
+          targetProspectId: source.targetProspectId,
+          contentObjective: source.contentObjective,
+          evidenceReferences: source.evidenceReferences ?? Prisma.DbNull,
           status: 'ready',
           createdBy: actorId,
         },
@@ -584,6 +594,12 @@ async function validateNewContextReference(db: Db, companyId: string, contextTyp
   await validatePillarAndObjective(db, pillarCode, objective)
 }
 
+async function validateIdeaTarget(db: Db, companyId: string, industry?: string | null, prospectId?: string | null, objective?: string | null) {
+  if (industry && industry.length > 120) throw validationError('Target industry is too long.')
+  if (objective && objective.length > 40) throw validationError('Content objective is too long.')
+  if (prospectId && !await db.prospect.findFirst({ where: { id: prospectId, companyId }, select: { id: true } })) throw notFound('Prospect not found.')
+}
+
 async function validateBriefReference(db: Db, companyId: string, brief: BriefInput) {
   await validateContextProduct(db, companyId, brief.contextType, brief.productId, true)
   await validatePillarAndObjective(db, brief.pillarCode, brief.objective)
@@ -838,6 +854,10 @@ function mapIdea(idea: Prisma.ContentIdeaGetPayload<{ include: { sourceContents:
     sourceType: idea.sourceType,
     sourceReference: idea.sourceReference,
     sourceSummary: idea.sourceSummary,
+    targetIndustry: idea.targetIndustry,
+    targetProspectId: idea.targetProspectId,
+    contentObjective: idea.contentObjective,
+    evidenceReferences: idea.evidenceReferences,
     status: idea.status,
     relatedContentIds: idea.sourceContents.map((content) => content.id),
     version: idea.version,

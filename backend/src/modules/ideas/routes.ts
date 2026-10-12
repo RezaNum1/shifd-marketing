@@ -5,8 +5,17 @@ import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import { allowedKeys, enumValue, object, optionalText } from '../context/normalize.js'
 import { discoverTopics, readDiscoveryRun, readLatestDiscoveryRun, useDiscoveryCandidate, type DiscoveryMarket, type DiscoveryTimeframe, type TopicDiscoveryInput, type TopicDiscoveryValidationDiagnostics } from './discovery.js'
 import type { TopicDiscoveryProvider } from '../ai/provider.js'
+import type { AiProvider } from '../ai/provider.js'
+import { generateIndustryIdeas, parseIndustryIdeationInput } from './industry-ideation.js'
 
-export async function topicDiscoveryRoutes(app: FastifyInstance, options: { config: AppConfig; provider: TopicDiscoveryProvider }) {
+export async function topicDiscoveryRoutes(app: FastifyInstance, options: { config: AppConfig; provider: TopicDiscoveryProvider; aiProvider: AiProvider }) {
+  app.post('/ideas/industry-ideation', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const input = parseIndustryIdeationInput(request.body)
+    return reply.send({ data: await generateIndustryIdeas(app.prisma, options.config, options.aiProvider, auth.user.companyId, input) })
+  })
   app.post('/ideas/discover', async (request, reply) => {
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)

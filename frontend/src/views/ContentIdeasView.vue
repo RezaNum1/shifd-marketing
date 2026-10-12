@@ -16,6 +16,8 @@ import BaseDrawer from '../components/ui/BaseDrawer.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import * as topicDiscoveryApi from '../api/topicDiscovery'
+import * as industryIdeationApi from '../api/industryIdeation'
+import * as prospectsApi from '../api/prospects'
 import { errorMessage } from '../api/client'
 import { ideaContextOptions, ideaObjectiveOptions, pillarOptions } from '../constants/contentOptions'
 import { useContentIdeasStore } from '../stores/contentIdeas'
@@ -26,6 +28,8 @@ import { useCompanyContextStore } from '../stores/companyContext'
 import type { ContentIdea, ContentIdeaStatus } from '../types/contentIdea'
 import type { TableColumn } from '../types/ui'
 import type { TopicDiscoveryRun } from '../types/topicDiscovery'
+import type { Prospect } from '../types/prospect'
+import type { IndustryIdea } from '../api/industryIdeation'
 
 const store = useContentIdeasStore()
 const workflow = useContentWorkflowStore()
@@ -52,6 +56,29 @@ const discoveryTimeframe = ref<'last_7_days' | 'last_30_days'>('last_7_days')
 const discoveryFocus = ref('')
 const discoveryRun = ref<TopicDiscoveryRun | null>(null)
 const usingCandidateId = ref<string | null>(null)
+const ideationOpen = ref(false)
+const ideationLoading = ref(false)
+const ideationError = ref('')
+const ideationIndustry = ref('')
+const customIndustry = ref('')
+const ideationProspectId = ref('')
+const ideationProductId = ref('')
+const ideationAudience = ref('')
+const ideationObjective = ref('industry_education')
+const ideationGuidance = ref('')
+const prospects = ref<Prospect[]>([])
+const generatedIdeas = ref<IndustryIdea[]>([])
+const savingIdeaIndex = ref<number | null>(null)
+const ideationObjectiveOptions = [
+  { value: 'brand_awareness', label: 'Brand awareness' }, { value: 'industry_education', label: 'Industry education' },
+  { value: 'problem_awareness', label: 'Problem awareness' }, { value: 'product_introduction', label: 'Product/service introduction' },
+  { value: 'thought_leadership', label: 'Thought leadership' }, { value: 'engagement', label: 'Engagement' },
+]
+const targetIndustries = computed(() => [...new Set(prospects.value.map((prospect) => prospect.industry?.trim()).filter((industry): industry is string => Boolean(industry)))].sort())
+const industryOptions = computed(() => [{ value: '', label: 'General content (no industry)' }, ...targetIndustries.value.map((industry) => ({ value: industry, label: industry })), { value: '__custom__', label: 'Enter another industry…' }])
+const targetProspectOptions = computed(() => [{ value: '', label: 'No prospect (optional)' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
+const ideationProductOptions = computed(() => [{ value: '', label: 'Company / services' }, ...products.productOptions])
+const selectedIndustry = computed(() => ideationIndustry.value === '__custom__' ? customIndustry.value.trim() || null : ideationIndustry.value || null)
 const tabs = ['All', 'Ready', 'Used', 'Archived'] as const
 const columns: TableColumn[] = [
   { key: 'idea', label: 'Idea' }, { key: 'context', label: 'Context' },
@@ -82,6 +109,17 @@ function count(tab: typeof tabs[number]) { return tab === 'All' ? store.ideas.le
 function label(options: { value: string; label: string }[], value: string) { return options.find((option) => option.value === value)?.label ?? value }
 function date(value: string) { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value)) }
 function sourceDomain(value: string) { try { return new URL(value).hostname } catch { return value } }
+function ideaTargetingLabel(idea: ContentIdea) {
+  if (!idea.targetIndustry && !idea.targetProspectId) return 'General content'
+  const prospect = prospects.value.find((item) => item.id === idea.targetProspectId)
+  if (!idea.targetIndustry) return prospect ? `Prospect context: ${prospect.name} · No industry target` : 'General content'
+  return [idea.targetIndustry, prospect?.name].filter(Boolean).join(' · ')
+}
+function generatedTargetingLabel() {
+  const prospect = prospects.value.find((item) => item.id === ideationProspectId.value)
+  if (!selectedIndustry.value) return prospect ? `Prospect context: ${prospect.name} · No industry target` : 'General content'
+  return [selectedIndustry.value, prospect?.name].filter(Boolean).join(' · ')
+}
 function clearFilters() { search.value = ''; status.value = 'All'; context.value = product.value = pillar.value = objective.value = 'all' }
 function edit(idea?: ContentIdea) { editingIdea.value = idea; editorOpen.value = true }
 function createContent(idea: ContentIdea) {
@@ -107,6 +145,38 @@ async function deleteIdea() {
   deleteLoading.value = false
 }
 function openDiscovery() { discoveryError.value = ''; discoveryOpen.value = true }
+function openIdeation() { ideationError.value = ''; ideationOpen.value = true }
+function discoverForIdeation() {
+  discoveryProduct.value = ideationProductId.value
+  discoveryFocus.value = selectedIndustry.value ? `Industry: ${selectedIndustry.value}` : ''
+  ideationOpen.value = false
+  openDiscovery()
+}
+function chooseProspect() {
+  const prospect = prospects.value.find((item) => item.id === ideationProspectId.value)
+  if (prospect?.industry && !ideationIndustry.value) ideationIndustry.value = targetIndustries.value.includes(prospect.industry) ? prospect.industry : '__custom__'
+  if (prospect?.industry && ideationIndustry.value === '__custom__' && !customIndustry.value) customIndustry.value = prospect.industry
+}
+async function generateIndustryIdeas() {
+  if (ideationLoading.value) return
+  ideationLoading.value = true; ideationError.value = ''; generatedIdeas.value = []
+  try {
+    const result = await industryIdeationApi.generateIndustryIdeas({ industry: selectedIndustry.value, prospectId: ideationProspectId.value || null, productId: ideationProductId.value || null, audience: ideationAudience.value.trim() || null, objective: ideationObjective.value, guidance: ideationGuidance.value.trim() || null })
+    generatedIdeas.value = result.data.ideas
+  } catch (reason: unknown) { ideationError.value = errorMessage(reason, 'Content ideation could not be completed.') }
+  finally { ideationLoading.value = false }
+}
+async function useGeneratedIdea(item: IndustryIdea, index: number, continueToContent: boolean) {
+  if (savingIdeaIndex.value !== null) return
+  savingIdeaIndex.value = index
+  const objectiveMap: Record<string, string> = { brand_awareness: 'awareness', industry_education: 'education', problem_awareness: 'discovery', product_introduction: 'consideration', thought_leadership: 'credibility', engagement: 'engagement' }
+  const idea = await store.save({ title: item.title, contextType: ideationProductId.value ? 'product' : 'company', productId: ideationProductId.value || undefined, pillar: ideationObjective.value === 'thought_leadership' ? 'thought-leadership' : ideationObjective.value === 'product_introduction' ? 'product' : 'industry', objective: objectiveMap[ideationObjective.value], targetAudience: item.targetAudience, notes: [`Angle: ${item.angle}`, `Hook: ${item.hook}`, `Talking points: ${item.talkingPoints.join('; ')}`, `Industry relevance: ${item.industryRelevance}`, `Shifd capability: ${item.capability}`, `Suggested format: ${item.format}${item.platform ? ` (${item.platform})` : ''}`, `Soft CTA: ${item.softCta}`].join('\n'), targetIndustry: selectedIndustry.value ?? undefined, targetProspectId: ideationProspectId.value || undefined, contentObjective: ideationObjective.value, evidenceReferences: item.evidence }, undefined)
+  savingIdeaIndex.value = null
+  if (!idea) { ideationError.value = store.error || 'The idea could not be saved.'; return }
+  ui.notify('Idea saved to the M2 Ideas library.', 'success')
+  if (continueToContent) createContent(idea)
+  else await store.load(true)
+}
 async function discover() {
   if (discoveryLoading.value) return
   discoveryLoading.value = true
@@ -133,13 +203,13 @@ async function useCandidate(candidateId: string) {
   } finally { usingCandidateId.value = null }
 }
 
-onMounted(() => { void Promise.all([store.load(), products.load(), companyContext.loadTaxonomy(), companyContext.load(), topicDiscoveryApi.latestDiscovery().then((result) => { discoveryRun.value = result.data }).catch(() => undefined)]) })
+onMounted(() => { void Promise.all([store.load(), products.load(), companyContext.loadTaxonomy(), companyContext.load(), prospectsApi.listProspects(new URLSearchParams({ limit: '100', archived: 'false' })).then((result) => { prospects.value = result.data }).catch(() => undefined), topicDiscoveryApi.latestDiscovery().then((result) => { discoveryRun.value = result.data }).catch(() => undefined)]) })
 </script>
 
 <template>
   <div class="page-stack ideas-page">
     <PageHeader title="Content Ideas" description="Capture and organize ideas before turning them into marketing content." :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Ideas' }]">
-      <template #actions><BaseButton variant="secondary" @click="startNewContent">Create Content</BaseButton><BaseButton variant="secondary" @click="openDiscovery"><AppIcon name="search" :size="16" />Discover Current Topics</BaseButton><BaseButton @click="edit()"><AppIcon name="plus" :size="16" />Add Idea</BaseButton></template>
+      <template #actions><BaseButton variant="secondary" @click="startNewContent">Create Content</BaseButton><BaseButton variant="secondary" @click="openDiscovery"><AppIcon name="search" :size="16" />Discover Current Topics</BaseButton><BaseButton variant="secondary" @click="openIdeation"><AppIcon name="idea" :size="16" />Generate Ideas</BaseButton><BaseButton @click="edit()"><AppIcon name="plus" :size="16" />Add Idea</BaseButton></template>
     </PageHeader>
 
     <div class="idea-tabs" role="group" aria-label="Idea status">
@@ -161,7 +231,7 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
     <InlineAlert v-if="store.error" title="Ideas unavailable" tone="danger">{{ store.error }}</InlineAlert>
 
     <BaseTable v-if="store.loaded && filteredIdeas.length" :columns="columns" :rows="filteredIdeas" caption="Content ideas">
-      <template #cell-idea="{ row }"><div class="idea-title"><strong>{{ row.title }}</strong><p v-if="row.notes">{{ row.notes }}</p></div></template>
+      <template #cell-idea="{ row }"><div class="idea-title"><strong>{{ row.title }}</strong><p class="idea-targeting">{{ ideaTargetingLabel(row) }}</p><p v-if="row.notes">{{ row.notes }}</p></div></template>
       <template #cell-context="{ row }"><div class="idea-cell"><strong>{{ row.contextType === 'product' ? products.nameFor(row.productId) : companyContext.companyProfile.name }}</strong><span>{{ row.contextType === 'product' ? 'Product' : 'Company' }}</span></div></template>
       <template #cell-pillar="{ row }"><div class="idea-cell"><strong>{{ label(pillarOptions, row.pillar) }}</strong><span>{{ label(ideaObjectiveOptions, row.objective) }}</span></div></template>
       <template #cell-audience="{ row }"><span class="idea-audience">{{ row.targetAudience || '—' }}</span></template>
@@ -181,6 +251,31 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
     <BaseCard v-else-if="store.loaded"><EmptyState icon="search" title="No ideas match these filters." description="Try another search or clear your filters."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
 
     <ContentIdeaEditor v-model="editorOpen" :idea="editingIdea" @saved="clearFilters(); ui.notify('Idea saved.', 'success')" />
+
+    <BaseDrawer v-model="ideationOpen" title="Generate Content Ideas" description="Create practical M2 ideas with optional industry and prospect targeting." size="default">
+      <form class="discovery-form" @submit.prevent="generateIndustryIdeas">
+        <BaseSelect v-model="ideationIndustry" label="Target industry" :options="industryOptions" hint="Choose an industry from prospects, enter one, or keep general content." />
+        <BaseInput v-if="ideationIndustry === '__custom__'" v-model="customIndustry" label="Custom industry" maxlength="120" placeholder="For example, healthcare distribution" />
+        <BaseSelect v-model="ideationProspectId" label="Target prospect (optional)" :options="targetProspectOptions" hint="The prospect is only used as optional context; choosing one does not assert a problem." @update:model-value="chooseProspect" />
+        <BaseSelect v-model="ideationProductId" label="Shifd Labs context" :options="ideationProductOptions" />
+        <BaseSelect v-model="ideationObjective" label="Content objective" :options="ideationObjectiveOptions" required />
+        <BaseInput v-model="ideationAudience" label="Target audience / decision-maker (optional)" placeholder="For example, operations leaders" />
+        <BaseTextarea v-model="ideationGuidance" label="Custom guidance (optional)" :rows="2" maxlength="600" placeholder="Themes, voice, or constraints" />
+        <p v-if="ideationError" class="discovery-error" role="alert">{{ ideationError }}</p>
+        <div class="discovery-actions"><BaseButton variant="secondary" type="button" @click="discoverForIdeation">Find current industry topics</BaseButton><BaseButton type="submit" :loading="ideationLoading" :disabled="ideationLoading">Generate 3–5 Ideas</BaseButton></div>
+      </form>
+      <InlineAlert v-if="ideationLoading" title="Generating ideas">Using the selected Shifd Labs context and approved prospect research, when available…</InlineAlert>
+      <EmptyState v-else-if="!generatedIdeas.length" icon="idea" title="Ready to ideate" description="Choose an optional target, then generate ideas for human review." />
+      <div v-else class="discovery-results">
+        <article v-for="(item, index) in generatedIdeas" :key="`${index}-${item.title}`" class="topic-card">
+          <div class="topic-card__top"><span class="topic-card__position">{{ String(index + 1).padStart(2, '0') }}</span><div><h4>{{ item.title }}</h4><p>{{ item.angle }}</p><small class="idea-targeting">{{ generatedTargetingLabel() }}</small></div></div>
+          <dl class="topic-card__details"><div><dt>Opening hook</dt><dd>{{ item.hook }}</dd></div><div><dt>Target audience</dt><dd>{{ item.targetAudience }}</dd></div><div><dt>Industry relevance</dt><dd>{{ item.industryRelevance }}</dd></div><div><dt>Shifd Labs capability</dt><dd>{{ item.capability }}</dd></div><div><dt>Talking points</dt><dd>{{ item.talkingPoints.join(' · ') }}</dd></div><div><dt>Suggested format</dt><dd>{{ item.format }}<template v-if="item.platform"> · {{ item.platform }}</template></dd></div><div><dt>Soft CTA</dt><dd>{{ item.softCta }}</dd></div></dl>
+          <div v-if="item.evidence.some((entry) => entry.sources.length)" class="topic-card__sources"><strong>Evidence references</strong><template v-for="entry in item.evidence" :key="entry.claim"><p>{{ entry.claim }}</p><a v-for="source in entry.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}</a></template></div>
+          <div class="idea-actions"><BaseButton variant="secondary" size="compact" :loading="savingIdeaIndex === index" :disabled="savingIdeaIndex !== null" @click="useGeneratedIdea(item, index, false)">Save Idea</BaseButton><BaseButton size="compact" :loading="savingIdeaIndex === index" :disabled="savingIdeaIndex !== null" @click="useGeneratedIdea(item, index, true)">Continue to Content</BaseButton></div>
+        </article>
+      </div>
+      <template #footer><BaseButton variant="ghost" @click="ideationOpen = false">Close</BaseButton></template>
+    </BaseDrawer>
 
     <BaseModal
       v-model="deleteModalOpen"
@@ -233,6 +328,7 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 .idea-title { min-width: 240px; max-width: 340px; }
 .idea-title strong { font-size: 14px; line-height: 1.5; }
 .idea-title p { color: var(--color-muted); font-size: 12px; line-height: 1.6; margin-top: 6px; white-space: pre-line; overflow-wrap: anywhere; }
+.idea-title .idea-targeting, .idea-targeting { color: var(--color-accent); font-size: 11px; font-weight: 600; margin-top: 4px; }
 .idea-cell { display: grid; gap: 4px; min-width: 125px; }
 .idea-cell strong { font-weight: 500; }
 .idea-cell span, .idea-audience, time { color: var(--color-muted); font-size: 12px; }
