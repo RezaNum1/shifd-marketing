@@ -19,6 +19,7 @@ type MetricRow = {
   comments: bigint | null
   saves: bigint | null
   reportedPublishedPosts: number
+  nativeEngagementRate: number | null
   source: string
   evidenceAssetId: string | null
   notes: string | null
@@ -225,10 +226,11 @@ export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWee
     return { platform: item, published: counts, targetPerWeek: 2, weeks: requestedWeeks, expected, percent, visualPercent: Math.min(100, Math.max(0, percent)) }
   })
   const summary = {
-    latestWeeklyReach: weekly.at(-1)?.reach ?? null,
-    impressions: sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions))),
-    engagements: sumNullable(relevantMetrics.map(engagements)),
-    engagementRate: percentage(sumNullable(relevantMetrics.map(engagements)), sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions)))),
+    latestWeeklyReach: platform === 'combined' ? null : weekly.at(-1)?.reach ?? null,
+    impressions: platform === 'combined' ? null : sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions))),
+    engagements: platform === 'combined' ? null : sumNullable(relevantMetrics.map(engagements)),
+    // LinkedIn's native rate is preserved as entered; other rates are not reconstructed.
+    engagementRate: platform === 'linkedin' ? relevantMetrics.at(-1)?.nativeEngagementRate ?? null : null,
     published,
   }
   const periodStart = bounds ? bounds.start : null
@@ -359,7 +361,7 @@ function weeklyRow(metrics: MetricRow[], weekStart: string, platform: ReportPlat
   const impressions = candidates.length ? sumNullable(candidates.map((metric) => metric.impressions === null ? null : Number(metric.impressions))) : null
   const engagement = candidates.length ? sumNullable(candidates.map(engagements)) : null
   const reachValues = candidates.map((metric) => metric.reach).filter((value): value is bigint => value !== null)
-  const reach = candidates.length && reachValues.length ? sum(reachValues.map(Number)) : null
+  const reach = platform !== 'combined' && candidates.length && reachValues.length ? sum(reachValues.map(Number)) : null
   const sources = [...new Set(candidates.map((metric) => metric.source))]
   return {
     weekStart,
@@ -369,7 +371,7 @@ function weeklyRow(metrics: MetricRow[], weekStart: string, platform: ReportPlat
     reach,
     impressions,
     engagements: engagement,
-    engagementRate: engagement === null || impressions === null ? null : percentage(engagement, impressions),
+    engagementRate: platform === 'linkedin' && candidates.length === 1 ? candidates[0]?.nativeEngagementRate ?? null : null,
     source: sources.length === 0 ? null : sources.length === 1 ? sources[0] : 'mixed',
     coverage: candidates.length ? 'recorded' as const : 'missing' as const,
   }
@@ -397,18 +399,11 @@ function publicationCounts(publications: PublicationRow[], selectedMetrics: Metr
   const metrics = allMetrics.filter((metric) => selectedMetrics.some((selected) => selected.id === metric.id) && (platform === 'combined' ? isPerformancePlatform(metric.socialAccount.platform) : metric.socialAccount.platform === platform))
   const platformPublications = publications.filter((publication) => platform === 'combined' ? isPerformancePlatform(publication.variant.platform) : publication.variant.platform === platform)
   const scoped = bounds ? platformPublications.filter((publication) => localDateInRange(publicationDate(publication, timezone), bounds.localStart, bounds.localEnd)) : platformPublications
-  const matched = new Set<string>()
   let reportedPosts = 0
-  let effectivePosts = 0
   for (const metric of metrics) {
-    const metricPublications = scoped.filter((publication) => publication.variant.platform === metric.socialAccount.platform && localDateInRange(publicationDate(publication, metric.socialAccount.reportingTimezone), dateOnly(metric.weekStart), dateOnly(addDays(metric.weekEnd, 1))))
-    metricPublications.forEach((publication) => matched.add(publication.id))
-    const reported = metric.reportedPublishedPosts
-    reportedPosts += reported
-    effectivePosts += Math.max(metricPublications.length, reported)
+    reportedPosts += metric.reportedPublishedPosts
   }
-  const unmatched = scoped.filter((publication) => !matched.has(publication.id)).length
-  return { explicitPosts: scoped.length, reportedPosts, effectivePosts: effectivePosts + unmatched, basis: 'max_per_account_interval' as const }
+  return { explicitPosts: scoped.length, reportedPosts, effectivePosts: scoped.length, discrepancy: reportedPosts - scoped.length, basis: 'publication_records' as const }
 }
 
 function executionSummary(schedules: ScheduleRow[], platform: ReportPlatform, bounds: { start: Date; end: Date; localStart: string; localEnd: string } | null) {
@@ -553,10 +548,6 @@ function engagements(metric: Pick<MetricRow, 'likes' | 'comments' | 'saves'>) {
 
 function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0)
-}
-
-function percentage(numerator: number | null, denominator: number | null) {
-  return numerator === null || denominator === null || denominator === 0 ? null : (numerator / denominator) * 100
 }
 
 function sumNullable(values: Array<number | null>) {

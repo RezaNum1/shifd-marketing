@@ -12,6 +12,9 @@ import BaseSelect from '../components/ui/BaseSelect.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import { usePerformanceStore } from '../stores/performance'
+import { useContentLibraryStore } from '../stores/contentLibrary'
+import { listProspects } from '../api/prospects'
+import type { Prospect } from '../types/prospect'
 import { useUiStore } from '../stores/ui'
 import InlineAlert from '../components/ui/InlineAlert.vue'
 import type { PerformancePlatform } from '../types/performance'
@@ -22,12 +25,29 @@ type PeriodWeeks = 4 | 8 | 12
 
 const router = useRouter()
 const performance = usePerformanceStore()
+const contentLibrary = useContentLibraryStore()
 const ui = useUiStore()
 const period = ref('8')
 const platform = ref<PlatformFilter>('combined')
 const logModalOpen = ref(false)
 const logError = ref('')
 const logForm = reactive({ platform: 'linkedin' as PerformancePlatform, weekStart: '2026-09-07', followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' })
+const prospects = ref<Prospect[]>([])
+const platformRows = ['instagram', 'linkedin'] as const
+const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
+const evaluationSaving = ref(false)
+const measurementDefinitionNotes = ref('')
+const snapshotForm = reactive({ stage: 'week0' as 'week0' | 'week4', instagramFollowers: '', linkedinFollowers: '', source: 'Native platform account observation', notes: '' })
+const inquiryForm = reactive({ receivedAt: localDateTimeInput(), channel: 'whatsapp', companyName: '', prospectId: '', summary: '', relevance: 'unreviewed', source: 'Founder-recorded message', sourceReference: '', followUpNotes: '' })
+const productionForm = reactive({ contentId: '', minutes: '', occurredAt: localDateTimeInput(), notes: '' })
+const evaluation = computed(() => performance.evaluation)
+const contentOptions = computed(() => contentLibrary.records.map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
+const prospectOptions = computed(() => [{ value: '', label: 'No linked prospect' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
+const evaluationPeriodsLabel = computed(() => {
+  const periods = evaluation.value?.periods
+  return periods ? `${formatDate(periods.baseline.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} baseline · ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.endExclusive, { dateStyle: 'medium' })} intervention` : 'Set a start date to configure the 28-day baseline and intervention.'
+})
+watch(() => evaluation.value?.evaluation, (config) => { if (config) { evaluationStart.value = config.startDate; measurementDefinitionNotes.value = typeof config.definitions.customNotes === 'string' ? config.definitions.customNotes : '' } })
 
 const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }]
 const platformOptions: SelectOption[] = [{ value: 'combined', label: 'Combined' }, { value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
@@ -120,6 +140,37 @@ function formatNumber(value: number) { return value.toLocaleString() }
 function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) { return new Intl.DateTimeFormat(undefined, options).format(new Date(`${value}T00:00:00`)) }
 function formatPercent(value: number) { return `${value.toFixed(1)}%` }
 function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
+function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
+function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
+function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
+function comparisonChange(value: number | null) { return value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toLocaleString()}` }
+function cadenceText(periodData: NonNullable<typeof evaluation.value>['baseline']) { return periodData ? `IG ${periodData.cadence.instagram.weeklyCounts.join(' / ')} · LI ${periodData.cadence.linkedin.weeklyCounts.join(' / ')}` : 'No evaluation data' }
+async function saveEvaluation() {
+  evaluationSaving.value = true
+  const result = await performance.configureEvaluation({ startDate: evaluationStart.value, definitions: { customNotes: measurementDefinitionNotes.value } })
+  evaluationSaving.value = false
+  if (result) ui.notify('Evaluation configuration saved as a new revision.', 'success')
+}
+async function saveSnapshot() {
+  const config = evaluation.value?.evaluation
+  if (!config) return
+  if (!snapshotForm.instagramFollowers && !snapshotForm.linkedinFollowers) { performance.evaluationError = 'Enter at least one verified follower measurement.'; return }
+  const measurements = { instagramFollowers: snapshotForm.instagramFollowers === '' ? null : Number(snapshotForm.instagramFollowers), linkedinFollowers: snapshotForm.linkedinFollowers === '' ? null : Number(snapshotForm.linkedinFollowers) }
+  const capturedAt = new Date().toISOString()
+  const saved = await performance.recordSnapshot(config.id, { stage: snapshotForm.stage, capturedAt, measurements, source: snapshotForm.source, notes: snapshotForm.notes || null })
+  if (saved) ui.notify(`${snapshotForm.stage === 'week0' ? 'Week 0' : 'Week 4'} snapshot recorded.`, 'success')
+}
+async function saveBusinessInquiry() {
+  const result = await performance.addBusinessInquiry({ ...inquiryForm, receivedAt: new Date(inquiryForm.receivedAt).toISOString(), companyName: inquiryForm.companyName || null, prospectId: inquiryForm.prospectId || null, sourceReference: inquiryForm.sourceReference || null, followUpNotes: inquiryForm.followUpNotes || null })
+  if (!result) return
+  inquiryForm.summary = ''; inquiryForm.companyName = ''; inquiryForm.prospectId = ''; inquiryForm.sourceReference = ''; inquiryForm.followUpNotes = ''
+  ui.notify('Inbound inquiry recorded separately from outbound replies.', 'success')
+}
+async function saveProductionTime() {
+  if (!productionForm.contentId || !productionForm.minutes) return
+  const saved = await performance.addProductionTime({ contentId: productionForm.contentId, minutes: Number(productionForm.minutes), occurredAt: new Date(productionForm.occurredAt).toISOString(), notes: productionForm.notes || undefined })
+  if (saved) { productionForm.minutes = ''; productionForm.notes = ''; ui.notify('Active production time recorded.', 'success') }
+}
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
 function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
 function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: selectedMetrics.value.weeks.at(-1) ?? '2026-09-07', followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
@@ -164,7 +215,7 @@ const latestWeekLabel = computed(() => {
 })
 const latestReachDetail = computed(() => latestReach.value === null ? 'No compatible weekly account observation' : `${latestWeekLabel.value} · latest reported week`)
 const impressionsDetail = computed(() => impressionsTotal.value === null ? 'No impressions returned by current sources' : `Total for ${period.value} weeks`)
-const engagementDetail = computed(() => engagementRate.value === null ? 'Unavailable: impressions are required' : 'Engagements ÷ impressions')
+const engagementDetail = computed(() => engagementRate.value === null ? 'Native platform rate is unavailable; no dashboard formula is substituted' : 'Native LinkedIn Analytics value as recorded')
 const publishedCount = computed(() => report.value?.summary.published.effectivePosts ?? 0)
 const consistency = computed(() => report.value?.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
 const consistencyLabel = computed(() => consistency.value.length ? consistency.value.map((item) => `${platformLabel(item.platform)} ${formatPercent(item.percent)}`).join(' · ') : 'No observations')
@@ -223,7 +274,41 @@ async function saveMetric() {
   ui.notify('Weekly LinkedIn metrics saved.', 'success')
 }
 function exportReport() { ui.notify('Report export is not part of the backend contract.', 'info') }
-onMounted(() => { void performance.load(periodWeeks.value, platform.value) })
+function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
+function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
+function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
+function comparisonChange(value: number | null) { return value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toLocaleString()}` }
+async function saveEvaluation() {
+  evaluationSaving.value = true
+  const result = await performance.configureEvaluation({ startDate: evaluationStart.value, definitions: { customNotes: measurementDefinitionNotes.value } })
+  evaluationSaving.value = false
+  if (result) ui.notify('Evaluation configuration saved as a new revision.', 'success')
+}
+async function saveSnapshot() {
+  const config = evaluation.value?.evaluation
+  if (!config) return
+  if (!snapshotForm.instagramFollowers && !snapshotForm.linkedinFollowers) { performance.evaluationError = 'Enter at least one verified follower measurement.'; return }
+  const measurements = { instagramFollowers: snapshotForm.instagramFollowers === '' ? null : Number(snapshotForm.instagramFollowers), linkedinFollowers: snapshotForm.linkedinFollowers === '' ? null : Number(snapshotForm.linkedinFollowers) }
+  const saved = await performance.recordSnapshot(config.id, { stage: snapshotForm.stage, capturedAt: new Date().toISOString(), measurements, source: snapshotForm.source, notes: snapshotForm.notes || null })
+  if (saved) ui.notify(`${snapshotForm.stage === 'week0' ? 'Week 0' : 'Week 4'} snapshot recorded.`, 'success')
+}
+async function saveBusinessInquiry() {
+  const result = await performance.addBusinessInquiry({ ...inquiryForm, receivedAt: new Date(inquiryForm.receivedAt).toISOString(), companyName: inquiryForm.companyName || null, prospectId: inquiryForm.prospectId || null, sourceReference: inquiryForm.sourceReference || null, followUpNotes: inquiryForm.followUpNotes || null })
+  if (!result) return
+  inquiryForm.summary = ''; inquiryForm.companyName = ''; inquiryForm.prospectId = ''; inquiryForm.sourceReference = ''; inquiryForm.followUpNotes = ''
+  ui.notify('Inbound inquiry recorded separately from outbound replies.', 'success')
+}
+async function saveProductionTime() {
+  if (!productionForm.contentId || !productionForm.minutes) return
+  const saved = await performance.addProductionTime({ contentId: productionForm.contentId, minutes: Number(productionForm.minutes), notes: productionForm.notes || undefined })
+  if (saved) { productionForm.minutes = ''; productionForm.notes = ''; ui.notify('Active production time recorded.', 'success') }
+}
+onMounted(async () => {
+  void performance.load(periodWeeks.value, platform.value)
+  await Promise.all([performance.loadEvaluation(), contentLibrary.load()])
+  try { prospects.value = (await listProspects(new URLSearchParams({ page: '1', limit: '100' }))).data }
+  catch { prospects.value = [] }
+})
 watch([period, platform], () => { void performance.load(periodWeeks.value, platform.value) })
 </script>
 
@@ -235,8 +320,70 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
     <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
     <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
 
-    <template v-if="performance.loaded">
+    <template v-if="performance.loaded || evaluation">
     <section class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Observed platform-account metrics from the backend report. Reach, followers, impressions, and engagement are reported separately.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report <em>API source when configured</em></span><span>LinkedIn · Manual Entry <em>Weekly account metrics</em></span><span>WhatsApp · Manual Entry <em>Supplementary inquiry volume</em></span></div></section>
+
+    <section class="evaluation-section" aria-label="Four-week research evaluation">
+      <BaseCard title="Four-Week Research Evaluation" description="Configure a local-date baseline and intervention. Configuration changes create a new revision and preserve earlier snapshots.">
+        <div class="evaluation-controls"><BaseInput v-model="evaluationStart" label="Evaluation start date" type="date" /><BaseInput v-model="measurementDefinitionNotes" label="Measurement definition notes (optional)" /><BaseButton :disabled="evaluationSaving || !evaluationStart" @click="saveEvaluation">{{ evaluationSaving ? 'Saving…' : evaluation?.evaluation ? 'Save New Revision' : 'Configure Evaluation' }}</BaseButton></div>
+        <p class="helper-text">{{ evaluationPeriodsLabel }} · Timezone: {{ evaluation?.evaluation?.timezone ?? 'Asia/Jakarta' }}</p>
+        <div v-if="performance.evaluationLoading" class="evaluation-note" role="status">Loading evaluation data…</div>
+        <InlineAlert v-else-if="performance.evaluationError" title="Evaluation data unavailable" tone="danger">{{ performance.evaluationError }}</InlineAlert>
+        <template v-if="evaluation?.evaluation">
+          <div class="evaluation-progress"><div><strong>{{ evaluation.progress.elapsedDays }} / 28 intervention days</strong><span>{{ evaluation.progress.complete ? 'Four-week intervention complete' : 'Partial intervention; changes remain unavailable until all 28 days elapse.' }}</span></div><div class="progress-track"><span :style="{ width: `${evaluation.progress.elapsedPercent}%` }" /></div></div>
+          <div class="source-status-list"><div v-for="source in evaluation.completeness.sources" :key="source.source"><span>{{ source.source }}</span><strong>{{ source.status.replace('_', ' ') }} · {{ source.records }} records</strong></div></div>
+          <div class="evaluation-snapshot">
+            <strong>Week 0 / Week 4 verified snapshot</strong>
+            <div class="evaluation-controls"><BaseSelect v-model="snapshotForm.stage" label="Snapshot" :options="[{ value: 'week0', label: 'Week 0' }, { value: 'week4', label: 'Week 4' }]" size="compact" /><BaseInput v-model="snapshotForm.instagramFollowers" label="Instagram followers" type="number" min="0" /><BaseInput v-model="snapshotForm.linkedinFollowers" label="LinkedIn followers" type="number" min="0" /><BaseInput v-model="snapshotForm.source" label="Measurement source" /><BaseInput v-model="snapshotForm.notes" label="Notes" /><BaseButton @click="saveSnapshot">Record Snapshot</BaseButton></div>
+            <p v-if="evaluation.evaluation.snapshots.length" class="helper-text">Recorded snapshots: {{ evaluation.evaluation.snapshots.map(item => `${item.stage} · ${formatDate(item.capturedAt)}`).join(' | ') }}</p>
+            <p v-else class="helper-text">No snapshots are recorded yet. Enter verified native account counts at each measurement boundary.</p>
+          </div>
+          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table"><caption>Baseline and intervention KPI comparison</caption><thead><tr><th>KPI</th><th>Baseline</th><th>Intervention</th><th>Absolute change</th><th>Change %</th><th>Source / status</th></tr></thead><tbody><tr v-for="item in evaluation.comparison" :key="item.kpi"><th scope="row">{{ item.kpi }}</th><td>{{ formatMaybeNumber(item.baseline) }}</td><td>{{ formatMaybeNumber(item.intervention) }}</td><td>{{ comparisonChange(item.absoluteChange) }}</td><td>{{ formatPercent(item.percentageChange) }}</td><td>{{ item.source }} · {{ item.status }}<small v-if="item.sourceRecordIds?.length">{{ item.sourceRecordIds.join(', ') }}</small></td></tr></tbody></table></div>
+        </template>
+      </BaseCard>
+    </section>
+
+    <section v-if="evaluation?.evaluation && evaluation.baseline && evaluation.intervention" class="evaluation-section">
+      <div class="evaluation-two-column">
+        <BaseCard title="Marketing Execution" description="Posting consistency is based on actual publication records. Variability uses population standard deviation ÷ mean across four weeks.">
+          <div class="platform-execution-grid"><div v-for="name in platformRows" :key="name" class="platform-execution"><strong>{{ platformLabel(name) }} · target 2/week</strong><p>Baseline weekly posts: {{ evaluation.baseline.cadence[name].weeklyCounts.join(' · ') }} <span>({{ evaluation.baseline.cadence[name].weeksMeetingTarget }}/4 weeks at target)</span></p><p>Intervention weekly posts: {{ evaluation.intervention.cadence[name].weeklyCounts.join(' · ') }} <span>({{ evaluation.intervention.cadence[name].weeksMeetingTarget }}/4 weeks at target)</span></p><p>CV: {{ formatMaybeNumber(evaluation.baseline.cadence[name].coefficientOfVariation, '×') }} baseline · {{ formatMaybeNumber(evaluation.intervention.cadence[name].coefficientOfVariation, '×') }} intervention</p></div></div>
+          <dl class="summary-list"><div><dt>Campaigns with publication · baseline / intervention</dt><dd>{{ evaluation.baseline.publications.campaigns }} / {{ evaluation.intervention.publications.campaigns }}</dd></div><div><dt>Planned · baseline / intervention</dt><dd>{{ evaluation.baseline.schedules.planned }} / {{ evaluation.intervention.schedules.planned }}</dd></div><div><dt>Published posts · baseline / intervention</dt><dd>{{ evaluation.baseline.publications.total }} / {{ evaluation.intervention.publications.total }}</dd></div></dl>
+          <p class="helper-text">Intervention targeting — industry: {{ evaluation.intervention.publications.targeting.industryTargeted }} ({{ evaluation.intervention.publications.targeting.industryOnly }} without a prospect) · prospect-linked: {{ evaluation.intervention.publications.targeting.prospectLinked }} · general: {{ evaluation.intervention.publications.targeting.general }}. Industries: {{ Object.entries(evaluation.intervention.publications.targeting.byIndustry).map(([industry, count]) => `${industry} (${count})`).join(', ') || 'none recorded' }}.</p>
+          <ul class="inquiry-record-list"><li v-for="record in evaluation.intervention.publications.records.slice(0, 8)" :key="String(record.id)">{{ record.platform }} · {{ record.contentId }} · {{ record.targetIndustry || 'general' }} · prospect {{ record.targetProspectId || 'none' }} · published {{ record.publishedAt }} · marker {{ record.markedBy }} · record {{ record.id }}</li><li v-if="!evaluation.intervention.publications.records.length">No intervention publication records.</li></ul>
+        </BaseCard>
+        <BaseCard title="Content Production Time" description="Active founder minutes recorded per content campaign. Idle and waiting time are excluded; intervention values are descriptive.">
+          <div class="output-grid"><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.median, ' min') }}</strong><span>Intervention median</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.minimum, ' min') }}</strong><span>Minimum</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.maximum, ' min') }}</strong><span>Maximum</span></div><div><strong>{{ evaluation.intervention.productionTime.count }}</strong><span>Recorded campaigns</span></div></div>
+          <p class="helper-text">No comparable pre-deployment efficiency claim is made. Session records:</p><ul class="inquiry-record-list"><li v-for="observation in evaluation.intervention.productionTime.sourceObservations" :key="observation.id">{{ observation.contentId }} · {{ observation.minutes }} active minutes · completed {{ observation.occurredAt }} · recorded {{ observation.recordedAt }} · user {{ observation.recordedBy }} · {{ observation.id }}</li><li v-if="!evaluation.intervention.productionTime.sourceObservations.length">No session records.</li></ul>
+          <form class="evaluation-form" @submit.prevent="saveProductionTime"><BaseSelect v-model="productionForm.contentId" label="Content campaign" :options="[{ value: '', label: 'Choose saved content' }, ...contentOptions]" required /><BaseInput v-model="productionForm.minutes" label="Active minutes" type="number" min="1" max="1440" required /><BaseInput v-model="productionForm.occurredAt" label="Work completed at" type="datetime-local" required /><BaseInput v-model="productionForm.notes" label="Included active work (optional)" /><BaseButton type="submit" :disabled="!productionForm.contentId || !productionForm.minutes">Record Active Time</BaseButton></form>
+        </BaseCard>
+      </div>
+      <div class="evaluation-two-column">
+        <BaseCard title="Instagram Performance*" description="Account-level observations and post-level media observations remain separate. Post reach is not unique account reach; missing API fields display as N/A.">
+          <div class="platform-observation"><strong>Account level</strong><p v-for="observation in evaluation.intervention.social.instagram.weeklyAccountObservations" :key="String(observation.id)">{{ observation.weekStart }} · followers {{ observation.followers }} · account reach {{ observation.accountReach ?? 'N/A' }} · source {{ observation.source }} · record {{ observation.id }}</p><p v-if="!evaluation.intervention.social.instagram.weeklyAccountObservations.length">No account-level Instagram observations.</p></div>
+          <div class="platform-observation"><strong>Post level</strong><p v-for="observation in evaluation.intervention.social.instagram.postObservations" :key="String(observation.publicationId)">{{ observation.publishedAt }} · views {{ observation.views ?? 'N/A' }} · reach {{ observation.reach ?? 'N/A' }} · likes {{ observation.likes ?? 'N/A' }} · comments {{ observation.comments ?? 'N/A' }} · saves {{ observation.saves ?? 'N/A' }} · shares {{ observation.shares ?? 'N/A' }} · source {{ observation.source }} · {{ observation.id }}</p><p v-if="!evaluation.intervention.social.instagram.postObservations.length">No post-level Instagram API observations.</p></div>
+        </BaseCard>
+        <BaseCard title="LinkedIn Performance*" description="Manual native LinkedIn Analytics observations. Engagement rate is shown as recorded; it is not reconstructed from interactions.">
+          <div class="platform-observation"><p v-for="observation in evaluation.intervention.social.linkedin.weeklyAccountObservations" :key="String(observation.id)">{{ observation.weekStart }} · followers {{ observation.followers }} · impressions {{ observation.impressions ?? 'N/A' }} · native engagement rate {{ formatMaybeNumber(typeof observation.nativeEngagementRate === 'number' ? observation.nativeEngagementRate : null, '%') }} · account-reported posts {{ observation.reportedPublishedPosts }} (publication ledger remains authoritative) · {{ observation.source }} · recorded {{ observation.recordedAt }} · {{ observation.id }}</p><p v-if="!evaluation.intervention.social.linkedin.weeklyAccountObservations.length">No LinkedIn Analytics observations. Unavailable values are N/A, not zero.</p></div>
+        </BaseCard>
+      </div>
+      <div class="evaluation-two-column">
+        <BaseCard title="Inbound Business Inquiries" description="Founder-recorded incoming messages, kept separate from replies to outbound outreach.">
+          <p><strong>{{ evaluation.intervention.inquiries.relevant }}</strong> relevant · {{ evaluation.intervention.inquiries.unreviewed }} unreviewed during intervention; baseline {{ evaluation.baseline.inquiries.relevant }} relevant.</p>
+          <div class="inquiry-weekly-trend"><span v-for="week in evaluation.intervention.inquiries.weekly" :key="week.weekStart">{{ week.weekStart }} · {{ week.relevant }} relevant / {{ week.recorded }} recorded</span></div>
+          <form class="evaluation-form" @submit.prevent="saveBusinessInquiry"><BaseInput v-model="inquiryForm.receivedAt" label="Received at" type="datetime-local" required /><BaseSelect v-model="inquiryForm.channel" label="Channel" :options="[{ value: 'whatsapp', label: 'WhatsApp Business' }, { value: 'instagram', label: 'Instagram message' }, { value: 'linkedin', label: 'LinkedIn message' }, { value: 'website', label: 'Website' }, { value: 'other', label: 'Other' }]" /><BaseInput v-model="inquiryForm.companyName" label="Company / sender name (optional)" /><BaseSelect v-model="inquiryForm.prospectId" label="Existing prospect (optional)" :options="prospectOptions" /><BaseInput v-model="inquiryForm.summary" label="Inquiry summary" required /><BaseSelect v-model="inquiryForm.relevance" label="Qualification" :options="[{ value: 'unreviewed', label: 'Needs review' }, { value: 'relevant', label: 'Relevant business inquiry' }, { value: 'unrelated', label: 'Unrelated' }]" /><BaseInput v-model="inquiryForm.source" label="Evidence / provenance" required /><BaseInput v-model="inquiryForm.sourceReference" label="Source reference (optional)" /><BaseButton type="submit" :disabled="!inquiryForm.summary.trim()">Record Inquiry</BaseButton></form>
+          <ul class="inquiry-record-list"><li v-for="inquiry in evaluation.inquiries.slice(0, 5)" :key="inquiry.id">{{ formatDate(inquiry.receivedAt) }} · {{ inquiry.channel }} · {{ inquiry.relevance }} · {{ inquiry.companyName || inquiry.prospect?.name || 'Name unknown' }} · {{ inquiry.summary }} · {{ inquiry.source }} · recorded by {{ inquiry.recordedBy }} · {{ inquiry.id }}</li><li v-if="!evaluation.inquiries.length">No inquiry events recorded.</li></ul>
+        </BaseCard>
+        <BaseCard title="Outbound Activities" description="Aggregated from actual Phase 04 events. Drafts, copies, scheduled follow-ups, and inbound inquiries are excluded.">
+          <div class="outbound-period"><strong>Baseline</strong><span>Emails {{ evaluation.baseline.outbound.emailsSent }} · follow-ups {{ evaluation.baseline.outbound.followUpsCompleted }} · replies {{ evaluation.baseline.outbound.repliesReceived }} · interested {{ evaluation.baseline.outbound.interestedResponses }} · meetings {{ evaluation.baseline.outbound.meetings }} · demos {{ evaluation.baseline.outbound.demonstrations }} · companies {{ evaluation.baseline.outbound.approachedCompanies }}</span></div>
+          <div class="outbound-period"><strong>Intervention</strong><span>Emails {{ evaluation.intervention.outbound.emailsSent }} · follow-ups {{ evaluation.intervention.outbound.followUpsCompleted }} · replies {{ evaluation.intervention.outbound.repliesReceived }} · interested {{ evaluation.intervention.outbound.interestedResponses }} · meetings {{ evaluation.intervention.outbound.meetings }} · demos {{ evaluation.intervention.outbound.demonstrations }} · companies {{ evaluation.intervention.outbound.approachedCompanies }}</span></div>
+          <p class="helper-text">Intervention provenance — historical {{ evaluation.intervention.outbound.provenance.historical }}, artifact-assisted {{ evaluation.intervention.outbound.provenance.artifactAssisted }}, non-artifact-assisted {{ evaluation.intervention.outbound.provenance.nonArtifactAssisted }}. Source record IDs: {{ evaluation.intervention.outbound.sourceRecordIds.join(', ') || 'none' }}</p>
+          <p class="helper-text">All-history totals: {{ evaluation.historicalOutbound.emailsSent }} sent emails · {{ evaluation.historicalOutbound.followUpsCompleted }} completed follow-ups · {{ evaluation.historicalOutbound.repliesReceived }} replies · {{ evaluation.historicalOutbound.meetings }} meetings · {{ evaluation.historicalOutbound.demonstrations }} demos.</p>
+          <p class="helper-text">All-history provenance — historical {{ evaluation.historicalOutbound.provenance.historical }}, artifact-assisted {{ evaluation.historicalOutbound.provenance.artifactAssisted }}, non-artifact-assisted {{ evaluation.historicalOutbound.provenance.nonArtifactAssisted }}.</p>
+          <p class="helper-text">Intervention source records: {{ evaluation.intervention.outbound.sourceObservations.slice(0, 8).map(item => `${String(item.activityType)} · ${String(item.provenance)} · ${String(item.id)}`).join(' | ') || 'none' }}</p>
+        </BaseCard>
+      </div>
+      <BaseCard title="KPI Definitions and Caveats" description="The asterisks identify platform-specific measures; wording is maintained here without attributing unverified footnote text to the advisor."><p>* Instagram uses available Graph API observations. Account reach remains account scoped; post reach/views/interactions remain post scoped. LinkedIn values come from native Analytics entry, and native engagement rate is not recalculated. Missing values are unavailable, not zero.</p><p>Baseline and intervention comparisons use 28 local calendar days. Percentage change is N/A when baseline is zero; incomplete intervention comparisons remain N/A until all four weeks elapse. Observed changes do not establish causation, recall, or acquisition attribution.</p><p>Posting target: two actual publication records weekly per platform. CV uses population standard deviation divided by mean; CV is N/A when mean weekly count is zero. Planned and cancelled calendar records do not count as published.</p></BaseCard>
+    </section>
 
     <section class="kpi-grid" aria-label="Primary metrics">
       <BaseCard v-for="card in [
@@ -275,6 +422,25 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 
 <style scoped>
 .performance-page { max-width: 1280px; }
+.evaluation-section { display: grid; gap: 18px; }
+.evaluation-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.evaluation-controls, .evaluation-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.evaluation-controls > *, .evaluation-form > * { flex: 1 1 170px; }
+.evaluation-progress { display: grid; gap: 10px; margin: 16px 0; }
+.evaluation-progress > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 12px; }
+.source-status-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.source-status-list div, .platform-execution, .platform-observation, .outbound-period, .evaluation-snapshot { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+.source-status-list div { grid-template-columns: 1fr auto; align-items: center; font-size: 11px; }
+.source-status-list strong { color: var(--color-muted); text-transform: capitalize; }
+.evaluation-snapshot { margin-top: 14px; }
+.evaluation-table-wrap { overflow-x: auto; margin-top: 16px; }
+.evaluation-table { min-width: 820px; }
+.platform-execution-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.platform-execution p, .platform-observation p, .evaluation-snapshot p, .outbound-period span { margin: 0; color: var(--color-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.platform-observation { margin: 10px 0; max-height: 260px; overflow: auto; }
+.outbound-period { margin: 10px 0; }
+.inquiry-record-list { display: grid; gap: 8px; padding-left: 18px; color: var(--color-muted); font-size: 11px; overflow-wrap: anywhere; }
+.inquiry-weekly-trend { display: grid; gap: 6px; margin: 12px 0; color: var(--color-muted); font-size: 11px; }
 .performance-header-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
 .performance-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-well); color: var(--color-muted); font-size: 12px; }
 .performance-toolbar__note, .performance-toolbar__source { display: flex; align-items: center; gap: 8px; }
@@ -334,5 +500,6 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
-@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list { grid-template-columns: 1fr; } }
 </style>

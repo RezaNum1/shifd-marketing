@@ -52,6 +52,9 @@ model Company {
   prospectResearchRuns     ProspectResearchRun[]
   prospectEmailDrafts      ProspectEmailDraft[]
   outboundActivities       OutboundActivity[]
+  marketingEvaluations    MarketingEvaluation[]
+  businessInquiries       BusinessInquiry[]
+  productionTimeLogs      ProductionTimeLog[]
 
   @@map("companies")
 }
@@ -91,6 +94,10 @@ model User {
   createdOutboundActivities OutboundActivity[]    @relation("OutboundActivityCreator")
   updatedOutboundActivities OutboundActivity[]   @relation("OutboundActivityUpdater")
   archivedOutboundActivities OutboundActivity[]   @relation("OutboundActivityArchiver")
+  createdMarketingEvaluations MarketingEvaluation[] @relation("EvaluationCreator")
+  recordedEvaluationSnapshots EvaluationSnapshot[] @relation("EvaluationSnapshotRecorder")
+  recordedBusinessInquiries BusinessInquiry[] @relation("InquiryRecorder")
+  recordedProductionTimeLogs ProductionTimeLog[] @relation("ProductionTimeRecorder")
 
   @@unique([companyId, id])
   @@index([companyId])
@@ -145,6 +152,7 @@ model Prospect {
   researchRuns      ProspectResearchRun[]
   emailDrafts       ProspectEmailDraft[]
   outboundActivities OutboundActivity[]
+  businessInquiries BusinessInquiry[]
 
   @@unique([companyId, id])
   @@index([companyId, archivedAt, updatedAt, id])
@@ -330,6 +338,87 @@ model OutboundActivity {
   @@index([companyId, prospectId, status, dueAt])
   @@index([companyId, emailDraftId])
   @@map("outbound_activities")
+}
+
+model MarketingEvaluation {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  revision    Int
+  startDate   DateTime @map("start_date") @db.Date
+  timezone    String
+  definitions Json
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  creator     User     @relation("EvaluationCreator", fields: [companyId, createdBy], references: [companyId, id], onDelete: Restrict)
+  snapshots   EvaluationSnapshot[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, revision])
+  @@index([companyId, createdAt(sort: Desc)])
+  @@map("marketing_evaluations")
+}
+
+model EvaluationSnapshot {
+  id           String              @id @default(uuid()) @db.Uuid
+  evaluationId String              @map("evaluation_id") @db.Uuid
+  stage        String
+  capturedAt   DateTime            @map("captured_at") @db.Timestamptz(3)
+  measurements Json
+  source       String
+  notes        String?
+  recordedBy   String              @map("recorded_by") @db.Uuid
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  evaluation   MarketingEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
+  recorder     User                @relation("EvaluationSnapshotRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  @@unique([evaluationId, stage])
+  @@index([evaluationId, capturedAt])
+  @@map("evaluation_snapshots")
+}
+
+model BusinessInquiry {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  prospectId      String?   @map("prospect_id") @db.Uuid
+  receivedAt      DateTime  @map("received_at") @db.Timestamptz(3)
+  channel         String
+  companyName     String?   @map("company_name")
+  summary         String
+  relevance       String
+  source          String
+  sourceReference String?   @map("source_reference")
+  followUpNotes   String?   @map("follow_up_notes")
+  recordedBy      String    @map("recorded_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  prospect        Prospect? @relation(fields: [companyId, prospectId], references: [companyId, id], onDelete: Restrict)
+  recorder        User      @relation("InquiryRecorder", fields: [companyId, recordedBy], references: [companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, receivedAt])
+  @@index([companyId, relevance, receivedAt])
+  @@map("business_inquiries")
+}
+
+model ProductionTimeLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  contentId  String   @map("content_id") @db.Uuid
+  minutes    Int
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  notes      String?
+  recordedBy String   @map("recorded_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  content    Content  @relation(fields: [companyId, contentId], references: [companyId, id], onDelete: Restrict)
+  recorder   User     @relation("ProductionTimeRecorder", fields: [companyId, recordedBy], references: [companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, occurredAt])
+  @@index([companyId, contentId])
+  @@map("production_time_logs")
 }
 
 model BrandProfile {
@@ -641,6 +730,7 @@ model Content {
   brief                    ContentBrief?
   variants                 PlatformVariant[]
   events                   ContentEvent[]
+  productionTimeLogs       ProductionTimeLog[]
   aiRequests               AiRequestLog[]
   creativeReferenceBatches CreativeReferenceBatch[]
   approvalActions          ApprovalAction[]         @relation("ContentApprovalActions")
@@ -1116,6 +1206,7 @@ model WeeklyMetric {
   comments               BigInt?
   saves                  BigInt?
   reportedPublishedPosts Int            @map("reported_published_posts")
+  nativeEngagementRate   Float?          @map("native_engagement_rate")
   source                 String
   evidenceAssetId        String?        @map("evidence_asset_id") @db.Uuid
   notes                  String?

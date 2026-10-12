@@ -106,16 +106,11 @@ reads use one injected `asOf`, are company-scoped, and are side-effect free.
 
 ### Publication reconciliation
 
-PublicationRecord is explicit managed-publication evidence. For each selected
-platform/account metric interval:
-
-`effective = max(explicit publications in that interval, reported_published_posts)`
-
-The two sources are never added. Explicit publications not contained by any
-selected metric interval are added once as unmatched explicit evidence. Reports
-return `explicitPosts`, `reportedPosts`, `effectivePosts`, and
-`basis=max_per_account_interval`, preserving a visible explicit count even when
-a larger reported aggregate keeps the effective count unchanged.
+Posting consistency and actual published-content totals use explicit
+PublicationRecord evidence only: `effectivePosts = explicitPosts`. Manual
+`reported_published_posts` remains a separate account-week observation in
+`reportedPosts` so the user can compare it with the publication ledger; it does
+not inflate actual post totals or cadence.
 
 ### Engagement and reach
 

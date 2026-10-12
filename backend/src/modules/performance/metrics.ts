@@ -22,6 +22,7 @@ export interface WeeklyMetricInput {
   comments: number
   saves: number
   publishedPosts: number
+  nativeEngagementRate?: number | null
   evidenceAssetId: string | null
   notes: string | null
 }
@@ -99,6 +100,7 @@ function metricData(input: WeeklyMetricInput, actorId: string, now: Date) {
     comments: BigInt(input.comments),
     saves: BigInt(input.saves),
     reportedPublishedPosts: input.publishedPosts,
+    nativeEngagementRate: input.nativeEngagementRate ?? null,
     source: LINKEDIN_SOURCE,
     evidenceAssetId: input.evidenceAssetId,
     notes: input.notes,
@@ -182,6 +184,7 @@ export async function updateLinkedInMetric(prisma: PrismaClient, companyId: stri
           comments: BigInt(input.comments),
           saves: BigInt(input.saves),
           reportedPublishedPosts: input.publishedPosts,
+          nativeEngagementRate: input.nativeEngagementRate ?? null,
           source: LINKEDIN_SOURCE,
           evidenceAssetId: input.evidenceAssetId,
           notes: input.notes,
@@ -278,6 +281,7 @@ export function validateWeeklyMetricInput(input: WeeklyMetricInput) {
   assertSafeCount(input.comments, 'comments')
   assertSafeCount(input.saves, 'saves')
   assertIntCount(input.publishedPosts, 'publishedPosts')
+  if (input.nativeEngagementRate != null && (!Number.isFinite(input.nativeEngagementRate) || input.nativeEngagementRate < 0)) throw validationError('The native LinkedIn engagement rate is invalid.')
   if (input.notes !== null && input.notes.length > 4_000) throw validationError('The metric note is too long.', { notes: 'Use at most 4000 characters.' })
 }
 
@@ -298,6 +302,7 @@ export function mapWeeklyMetric(row: {
   comments: bigint | null
   saves: bigint | null
   reportedPublishedPosts: number
+  nativeEngagementRate: number | null
   source: string
   evidenceAssetId: string | null
   notes: string | null
@@ -324,7 +329,8 @@ export function mapWeeklyMetric(row: {
     comments: Number(row.comments),
     saves: Number(row.saves),
     engagements,
-    engagementRate: impressions !== null && impressions > 0 && engagements !== null ? (engagements / impressions) * 100 : null,
+    engagementRate: row.socialAccount.platform === 'linkedin' ? row.nativeEngagementRate : null,
+    nativeEngagementRate: row.nativeEngagementRate,
     publishedPosts: row.reportedPublishedPosts,
     reportedPublishedPosts: row.reportedPublishedPosts,
     source: row.source,

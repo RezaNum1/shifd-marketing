@@ -23,13 +23,118 @@ import { buildOverviewReport, buildPerformanceReport, listRecentPublications, lo
 import type { Clock } from '../../shared/time/clock.js'
 import type { InstagramInsightsProvider } from './instagram/provider.js'
 import type { InstagramSyncResult } from './instagram/sync.js'
+import { createBusinessInquiry, createProductionTimeLog, readEvaluation, saveEvaluation, saveEvaluationSnapshot } from './evaluation.js'
 
-const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts', 'evidenceAssetId', 'notes'] as const
+const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts', 'nativeEngagementRate', 'evidenceAssetId', 'notes'] as const
+const evaluationKeys = ['startDate', 'timezone', 'definitions'] as const
+const snapshotKeys = ['stage', 'capturedAt', 'measurements', 'source', 'notes'] as const
+const businessInquiryKeys = ['receivedAt', 'channel', 'companyName', 'prospectId', 'summary', 'relevance', 'source', 'sourceReference', 'followUpNotes'] as const
+const productionTimeKeys = ['contentId', 'minutes', 'occurredAt', 'notes'] as const
 const inquiryKeys = ['weekStart', 'weekEnd', 'count'] as const
 const reportPlatforms = ['combined', 'instagram', 'linkedin'] as const
 const metricPlatforms = ['instagram', 'linkedin'] as const
 
 export async function performanceRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock; instagramProvider: InstagramInsightsProvider }) {
+  app.get('/evaluation', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    return reply.send({ data: await readEvaluation(app.prisma, auth.user.companyId, options.clock.now()) })
+  })
+
+  app.put('/evaluation', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const body = object(request.body, 'Evaluation configuration')
+    allowedKeys(body, evaluationKeys, 'body')
+    const startDate = parseDateOnly(body.startDate, 'startDate').toISOString().slice(0, 10)
+    const company = await app.prisma.company.findUnique({ where: { id: auth.user.companyId }, select: { reportingTimezone: true } })
+    if (!company) throw notFound('Company not found.')
+    const timezone = body.timezone === undefined ? company.reportingTimezone : boundedRequiredText(body.timezone, 'timezone', 80)
+    // Intl throws for unsupported IANA timezones; convert that to a client validation error.
+    try { new Intl.DateTimeFormat('en', { timeZone: timezone }) } catch { throw validationError('The evaluation timezone is invalid.', { timezone: 'Use a valid IANA timezone.' }) }
+    const definitions = body.definitions === undefined ? {} : object(body.definitions, 'definitions')
+    allowedKeys(definitions, ['customNotes'], 'definitions')
+    const customNotes = boundedOptionalText(definitions.customNotes, 'definitions.customNotes', 1000)
+    const created = await saveEvaluation(app.prisma, auth.user.companyId, auth.user.id, startDate, timezone, customNotes ? { customNotes } : {})
+    return reply.status(201).send({ data: { id: created.id, revision: created.revision, startDate: created.startDate.toISOString().slice(0, 10), timezone: created.timezone, definitions: created.definitions, createdAt: created.createdAt.toISOString() } })
+  })
+
+  app.post('/evaluation/:id/snapshots', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const id = routeUuid(requiredText((request.params as Record<string, unknown>).id, 'id'), 'id')
+    const body = object(request.body, 'Evaluation snapshot')
+    allowedKeys(body, snapshotKeys, 'body')
+    const stage = enumValue(body.stage, ['week0', 'week4'] as const, 'stage')!
+    const measurements = object(body.measurements, 'measurements')
+    if (!Object.keys(measurements).length) throw validationError('Provide at least one verified snapshot measurement.')
+    const source = boundedRequiredText(body.source, 'source', 160)
+    const notes = boundedOptionalText(body.notes, 'notes', 2000)
+    const capturedAt = parseTimestamp(boundedRequiredText(body.capturedAt, 'capturedAt', 80), 'capturedAt')
+    const clean: Record<string, number | null> = {}
+    for (const [key, value] of Object.entries(measurements)) {
+      if (value !== null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) throw validationError('Snapshot measurements must be non-negative numbers or null.', { [`measurements.${key}`]: 'Use a non-negative number or null.' })
+      clean[key] = value as number | null
+    }
+    const result = await saveEvaluationSnapshot(app.prisma, auth.user.companyId, auth.user.id, id, { stage, capturedAt, measurements: clean, source, notes })
+    return reply.status(201).send({ data: { ...result, capturedAt: result.capturedAt.toISOString(), createdAt: result.createdAt.toISOString() } })
+  })
+
+  app.get('/business-inquiries', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = queryObject(request)
+    allowedKeys(query, ['start', 'end', 'page', 'limit'], 'query')
+    const start = query.start ? parseTimestamp(query.start, 'start') : undefined
+    const end = query.end ? parseTimestamp(query.end, 'end') : undefined
+    if (start && end && start >= end) throw validationError('Inquiry date range is invalid.')
+    const page = query.page === undefined ? 1 : Number(query.page)
+    const limit = query.limit === undefined ? 50 : Number(query.limit)
+    if (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw validationError('Pagination values are invalid.')
+    const where = { companyId: auth.user.companyId, ...(start || end ? { receivedAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } : {}) }
+    const [data, total] = await Promise.all([
+      app.prisma.businessInquiry.findMany({ where, include: { prospect: { select: { id: true, name: true, industry: true } }, recorder: { select: { id: true, name: true } } }, orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * limit, take: limit }),
+      app.prisma.businessInquiry.count({ where }),
+    ])
+    return reply.send({ data, page: { number: page, limit, total, totalPages: Math.ceil(total / limit) } })
+  })
+
+  app.post('/business-inquiries', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const body = object(request.body, 'Business inquiry')
+    allowedKeys(body, businessInquiryKeys, 'body')
+    const input = {
+      receivedAt: parseTimestamp(boundedRequiredText(body.receivedAt, 'receivedAt', 80), 'receivedAt'),
+      channel: enumValue(body.channel, ['whatsapp', 'instagram', 'linkedin', 'website', 'email', 'phone', 'other'] as const, 'channel')!,
+      companyName: boundedOptionalText(body.companyName, 'companyName', 200),
+      prospectId: parseNullableUuid(body.prospectId, 'prospectId'),
+      summary: boundedRequiredText(body.summary, 'summary', 2000),
+      relevance: enumValue(body.relevance, ['relevant', 'unrelated', 'unreviewed'] as const, 'relevance')!,
+      source: boundedRequiredText(body.source, 'source', 160),
+      sourceReference: boundedOptionalText(body.sourceReference, 'sourceReference', 500),
+      followUpNotes: boundedOptionalText(body.followUpNotes, 'followUpNotes', 2000),
+    }
+    const created = await createBusinessInquiry(app.prisma, auth.user.companyId, auth.user.id, input)
+    return reply.status(201).send({ data: created })
+  })
+
+  app.post('/production-time', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const body = object(request.body, 'Production time')
+    allowedKeys(body, productionTimeKeys, 'body')
+    const contentId = routeUuid(boundedRequiredText(body.contentId, 'contentId', 64), 'contentId')
+    const minutes = assertSafeCount(body.minutes, 'minutes', 1440)
+    if (minutes < 1) throw validationError('Active production time must be between 1 and 1440 minutes.')
+    const occurredAt = body.occurredAt === undefined ? options.clock.now() : parseTimestamp(boundedRequiredText(body.occurredAt, 'occurredAt', 80), 'occurredAt')
+    if (occurredAt > options.clock.now()) throw validationError('Production time cannot be recorded with a future work date.')
+    const created = await createProductionTimeLog(app.prisma, auth.user.companyId, auth.user.id, contentId, minutes, occurredAt, boundedOptionalText(body.notes, 'notes', 2000))
+    return reply.status(201).send({ data: created })
+  })
+
   app.get('/metrics/linkedin', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = parseMetricQuery(request, 'LinkedIn metric query')
@@ -139,6 +244,7 @@ function parseWeeklyMetric(value: unknown): WeeklyMetricInput {
     comments: body.comments === undefined ? 0 : assertSafeCount(body.comments, 'comments'),
     saves: body.saves === undefined ? 0 : assertSafeCount(body.saves, 'saves'),
     publishedPosts: assertSafeCount(body.publishedPosts, 'publishedPosts', 2_147_483_647),
+    nativeEngagementRate: assertOptionalRate(body.nativeEngagementRate, 'nativeEngagementRate'),
     evidenceAssetId: parseNullableUuid(body.evidenceAssetId, 'evidenceAssetId'),
     notes: optionalText(body.notes, 'notes'),
   }
@@ -217,6 +323,24 @@ function parseNullableUuid(value: unknown, path: string) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'string' || !uuid(value)) throw validationError('The UUID is invalid.', { [path]: 'Use a UUID or null.' })
   return value
+}
+
+function assertOptionalRate(value: unknown, path: string): number | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw validationError('The platform engagement rate is invalid.', { [path]: 'Use a non-negative native platform percentage or leave it blank.' })
+  return value
+}
+
+function boundedRequiredText(value: unknown, path: string, max: number) {
+  const result = requiredText(value, path)
+  if (result.length > max) throw validationError('A text field is too long.', { [path]: `Use at most ${max} characters.` })
+  return result
+}
+
+function boundedOptionalText(value: unknown, path: string, max: number) {
+  const result = optionalText(value, path)
+  if (result && result.length > max) throw validationError('A text field is too long.', { [path]: `Use at most ${max} characters.` })
+  return result
 }
 
 function routeId(request: FastifyRequest) {

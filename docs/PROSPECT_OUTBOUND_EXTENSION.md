@@ -276,7 +276,7 @@ Planned and actual timestamps remain UTC instants in PostgreSQL `timestamptz`; s
 
 Focused backend coverage is in `backend/tests/scheduling.test.ts` (P601) for optional targeting, prospect privacy, filtering, cross-tenant rejection, unlinking and general content. Run it only against `shifd_marketing_test` with `npm run test:scheduling`. Calendar frontend validation is in `frontend/src/views/CalendarView.spec.ts` and `frontend/src/api/normalizers.spec.ts`. Schema/client validation, backend build, frontend tests/build, and `git diff --check` are also required.
 
-In this workspace, the scheduling status unit tests (2), calendar/normalizer frontend tests (5), Prisma validation, backend build, frontend build, and `git diff --check` passed. The guarded migration was attempted with `TEST_DATABASE_URL` resolving exactly to `shifd_marketing_test`, then PostgreSQL at `127.0.0.1:5432` returned `P1001`; migration and P601 API/database assertions are not verified here. Run `npx vitest run tests/scheduling.unit.test.ts` from `backend/` and `npx vitest run --config vitest.config.ts src/views/CalendarView.spec.ts src/api/normalizers.spec.ts` from `frontend/` for non-database checks.
+In the earlier Codex sandbox attempt, scheduling unit tests (2), calendar/normalizer frontend tests (5), Prisma validation, backend build, frontend build, and `git diff --check` passed, but PostgreSQL returned `P1001`; the Phase 06 migration and P601 API/database assertions were blocked in that sandbox. **Later host-Mac outcome:** the user confirmed the Phase 06 migration and `npm run test:scheduling` passed locally against `shifd_marketing_test`. Codex did not independently execute that host run. The earlier sandbox P1001 is retained here as environment history, not the latest Phase 06 test result. Run `npx vitest run tests/scheduling.unit.test.ts` from `backend/` and `npx vitest run --config vitest.config.ts src/views/CalendarView.spec.ts src/api/normalizers.spec.ts` from `frontend/` for non-database checks.
 
 Limitations: calendar plans are created from saved M4-approved content; unsaved ideas must first continue through the existing content workflow. Industry remains free text rather than a canonical taxonomy. Publication confirmation is manual; no social publishing or platform metrics are generated. Source claims remain governed by the existing Phase 02 review workflow.
 
@@ -286,6 +286,50 @@ If local PostgreSQL is unavailable in the Codex sandbox, from `backend/` apply t
 node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || url === process.env.DATABASE_URL) throw new Error("Refusing migration outside isolated test database."); const parsed = new URL(url); if (parsed.pathname.replace(/^\//, "") !== "shifd_marketing_test") throw new Error("Refusing migration outside shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:scheduling
 ```
 
-### Phase 07 handoff (future)
+## Phase 07 — Enhanced Performance & Evaluation Dashboard (implemented)
 
-Phase 07 may evaluate planned versus manually confirmed publications, content origin, industry, optional prospect association, platform and timestamps over the four-week field period. Platform-confirmed engagement metrics must remain separate from manual publication records. Phase 06 does not implement analytics dashboards or invent publication/performance outcomes.
+Phase 07 extends the existing M6 Performance Tracker. It keeps Marketing Execution, Instagram and LinkedIn observations, inbound inquiry events, and Phase 04 outbound activity in distinct source sections. The dashboard is company-scoped and uses the company's reporting timezone by default. Planned calendar items remain separate from actual publication records.
+
+### Evaluation configuration and audit history
+
+Configure the evaluation start date in M6. The baseline is the 28 local calendar days immediately before that date; intervention is the 28 local calendar days starting on that date. API ranges use explicit UTC instants derived from local day boundaries and end-exclusive timestamps. The configuration stores its timezone, KPI definitions, optional measurement-definition notes, creator, creation time, and revision. A changed configuration appends a revision rather than rewriting prior settings. Week 0 and Week 4 are manually recorded founder-confirmed snapshots with measurement values, source, capture timestamp, notes, and actor; snapshots are immutable for each revision.
+
+The dashboard reports elapsed intervention days and source availability. Before all 28 intervention days elapse, the intervention can be inspected as partial, but absolute and percentage changes remain N/A. A confirmed baseline zero produces an absolute change and N/A percentage change. Missing values stay N/A. Publication counts use actual `PublicationRecord` values only; a scheduled date never implies publication.
+
+### KPI definitions and sources
+
+- **Primary execution indicator:** posting consistency, calculated separately per platform from actual publication records. Target cadence is two posts per week per platform. Each 28-day period contains four weekly counts; compliance is the share of weeks meeting target. CV is population standard deviation divided by mean weekly posts and is N/A when the mean is zero.
+- **Intervention intensity:** actual publication count per platform plus distinct campaigns with publications. Schedule and cancellation counts are shown separately. Existing M6 lifecycle output continues to distinguish created, approved, scheduled, and published content.
+- **Operational effort:** manually recorded active minutes linked to tenant-owned content, with both the work-completion timestamp and the database recording timestamp. Multiple logs are summed per campaign for median, minimum, maximum, and observations. This is descriptive intervention data; no historical production time is fabricated and no pre/post efficiency claim is made.
+- **Instagram:** existing Graph API post metrics are shown with source, observation time, publication ID, and metric-record ID. Weekly account observations remain separate from post observations. Post reach is not added to account reach and account observations are not summed across days into unique reach. Missing provider metrics display as N/A; Instagram impressions are not invented.
+- **LinkedIn:** weekly manual Analytics records preserve the native engagement-rate percentage, observation interval, source, update time, recorder, and record ID. The rate is entered from LinkedIn Analytics and is not recalculated from likes, comments, saves, or impressions. M6 no longer combines Instagram and LinkedIn engagement rates or reach into a synthetic platform value.
+- **Inbound acquisition signal:** event-level records support WhatsApp, Instagram, LinkedIn, website, email, phone, and other channels. Each records received time, relevance (`relevant`, `unrelated`, or `unreviewed`), company name when known, optional tenant-owned Prospect, summary, source/provenance, source reference, follow-up notes, recorder, and timestamps. Only records explicitly marked relevant count as relevant business inquiries. Replies to outbound outreach remain Phase 04 `OutboundActivity` events and are never copied into the inbound inquiry table.
+- **Outbound execution:** dashboard totals read actual Phase 04 event records only. It excludes drafts, copied email text, pending follow-ups, and scheduled meetings/demonstrations. Event date, source-record ID, prospect, and recorded provenance remain available. Historical, artifact-assisted, and non-artifact-assisted counts use the recorded provenance value; artifact assistance is not inferred from draft existence or date.
+
+No dashboard calculation claims causation, conversion, reach equivalence, recall, or acquisition attribution. KPI comparison rows expose source record IDs; platform account and post source records remain separately inspectable. The asterisked Instagram and LinkedIn headings show maintainable caveat text owned by the application; no unverified advisor wording is attributed.
+
+### API and database changes
+
+- `GET /api/evaluation` returns the current configuration, baseline/intervention boundaries, progress, completeness, source-backed KPIs, comparisons, and recent inquiry records.
+- `PUT /api/evaluation` appends an evaluation revision from `startDate`, optional IANA `timezone`, and optional `definitions.customNotes`.
+- `POST /api/evaluation/:id/snapshots` records a `week0` or `week4` snapshot near its configured local-date boundary.
+- `GET /api/business-inquiries` supports bounded date filtering and pagination; `POST /api/business-inquiries` records an authenticated, company-scoped event and validates an optional Prospect belongs to that company.
+- `POST /api/production-time` records 1–1440 active minutes against content belonging to the authenticated company.
+- Existing `POST` and `PUT /api/metrics/linkedin` accept `nativeEngagementRate`; the response preserves it as `nativeEngagementRate` and `engagementRate` for LinkedIn.
+- Migration `20261012130000_phase_7_evaluation_dashboard` adds the nullable LinkedIn native-rate field and additive `MarketingEvaluation`, `EvaluationSnapshot`, `BusinessInquiry`, and `ProductionTimeLog` tables. Composite foreign keys scope creators, inquiry prospects, and content to the owning company. There are no changes to historical migrations or production data operations.
+
+### Validation
+
+Focused calculation tests: `cd backend && npx vitest run tests/performance.evaluation.unit.test.ts`. Focused database/API regression: `cd backend && npm run test:performance`; this script refuses database names other than `shifd_marketing_test`. Frontend tests: `cd frontend && npx vitest run --config vitest.config.ts src/views/PerformanceView.spec.ts src/stores/performance.spec.ts`. Builds: `cd backend && npm run build`; `cd frontend && npm run build`. Schema: `cd backend && npx prisma validate`. Finish with `git diff --check` from the repository root.
+
+If local PostgreSQL is available, apply the new migration and run the DB/API test using the guarded command below from `backend/`. It requires `TEST_DATABASE_URL` to name `shifd_marketing_test` and to differ from `DATABASE_URL`:
+
+```sh
+node -r dotenv/config -e 'const { spawnSync } = require("node:child_process"); const url = process.env.TEST_DATABASE_URL; if (!url || url === process.env.DATABASE_URL || new URL(url).pathname.replace(/^\//, "") !== "shifd_marketing_test") throw new Error("Refusing migration outside isolated shifd_marketing_test."); const result = spawnSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } }); process.exit(result.status ?? 1);' && npm run test:performance
+```
+
+Limitations: Week 0 / Week 4 snapshots and inquiry qualification require manual founder entry. Historical active production time is unavailable unless it was previously recorded; none is backfilled. LinkedIn metrics remain manual. Instagram metrics are limited to values actually returned by the current Graph API integration. Evaluation revisions and snapshots are retained in the database, while the dashboard presents the latest revision. No platform publishing, engagement-metric collection beyond the existing Instagram sync, or Phase 08 analysis is added.
+
+### Phase 08 handoff
+
+Phase 07 provides stored four-week configurations, week 0 / week 4 snapshots, actual publications, separately scoped native platform observations, inquiry events, outbound activity records, provenance, active-time observations, and source IDs for future evaluation work. Phase 08 remains unimplemented.

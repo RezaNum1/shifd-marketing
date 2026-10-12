@@ -260,7 +260,7 @@ After Instagram confirmation, return Instagram publication, LinkedIn schedule wi
 
 ### Shared read schemas
 
-`PublicationCounts`: `{explicitPosts:number,reportedPosts:number,effectivePosts:number,basis:"max_per_account_interval"}`. `Consistency` is the per-platform object defined in PerformanceReport.consistency below. ReportedPosts is summed nonoverlapping manual/imported counts, not a second authoritative managed-post count. EffectivePosts may include explicit posts outside recorded intervals. Default target is 2/platform/week, server canonical configuration.
+`PublicationCounts`: `{explicitPosts:number,reportedPosts:number,effectivePosts:number,discrepancy:number,basis:"publication_records"}`. `Consistency` is the per-platform object defined in PerformanceReport.consistency below. Actual totals and cadence use PublicationRecord entries only (`effectivePosts === explicitPosts`); `reportedPosts` remains a separate manual/account observation for discrepancy review. Default target is 2/platform/week, server canonical configuration.
 
 `PerformanceReport`:
 

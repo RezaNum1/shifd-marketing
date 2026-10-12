@@ -493,6 +493,7 @@ export interface BackendWeeklyMetric {
   source: string
   engagements?: number | null
   engagementRate?: number | null
+  nativeEngagementRate?: number | null
   evidenceAsset?: BackendAsset | null
   evidence?: BackendAsset | null
   notes: string | null
@@ -515,7 +516,7 @@ export interface BackendPerformanceSummary {
   impressions: number | null
   engagements: number | null
   engagementRate: number | null
-  published: { explicitPosts: number; reportedPosts: number; effectivePosts: number; basis: string }
+  published: { explicitPosts: number; reportedPosts: number; effectivePosts: number; discrepancy?: number; basis: string }
 }
 
 export interface BackendPerformanceReport {
@@ -553,7 +554,7 @@ export interface BackendPerformanceReport {
   }>
   consistency: Array<{
     platform: BackendPlatform
-    published: { explicitPosts: number; reportedPosts: number; effectivePosts: number; basis: string }
+    published: { explicitPosts: number; reportedPosts: number; effectivePosts: number; discrepancy?: number; basis: string }
     targetPerWeek: number
     weeks: number
     expected: number

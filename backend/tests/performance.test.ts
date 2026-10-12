@@ -161,6 +161,10 @@ async function createEvidenceAsset(purpose: 'creative' | 'metric_evidence', owni
 
 async function removeCompany(id: string) {
   if (!id) return
+  await prisma.evaluationSnapshot.deleteMany({ where: { evaluation: { companyId: id } } })
+  await prisma.marketingEvaluation.deleteMany({ where: { companyId: id } })
+  await prisma.businessInquiry.deleteMany({ where: { companyId: id } })
+  await prisma.productionTimeLog.deleteMany({ where: { companyId: id } })
   await prisma.publicationMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
   await prisma.weeklyMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
   await prisma.inboundInquiryMetric.deleteMany({ where: { socialAccount: { companyId: id } } })
@@ -188,6 +192,21 @@ async function removeCompany(id: string) {
   await prisma.socialAccount.deleteMany({ where: { companyId: id } })
   await prisma.user.deleteMany({ where: { companyId: id } })
   await prisma.company.delete({ where: { id } })
+}
+
+async function removeReportContent(id: string) {
+  await prisma.publicationMetric.deleteMany({ where: { publicationRecord: { variant: { contentId: id } } } })
+  await prisma.publicationRecord.deleteMany({ where: { variant: { contentId: id } } })
+  await prisma.contentSchedule.deleteMany({ where: { variant: { contentId: id } } })
+  await prisma.content.update({ where: { id }, data: { currentApprovalId: null } })
+  await prisma.approvalAction.deleteMany({ where: { contentId: id } })
+  await prisma.platformVariant.updateMany({ where: { contentId: id }, data: { currentAssessmentId: null, reuseCreativeFromVariantId: null } })
+  await prisma.brandAssessment.deleteMany({ where: { variant: { contentId: id } } })
+  await prisma.contentEvent.deleteMany({ where: { contentId: id } })
+  await prisma.variantAsset.deleteMany({ where: { variant: { contentId: id } } })
+  await prisma.platformVariant.deleteMany({ where: { contentId: id } })
+  await prisma.contentBrief.deleteMany({ where: { contentId: id } })
+  await prisma.content.delete({ where: { id } })
 }
 
 runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
@@ -261,10 +280,11 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
   it('M1104-M1119: validates LinkedIn manual observations, D-04 intervals, evidence, correction ETags, and no delete route', async () => {
     const auth = await session(email)
     const validStart = new Date('2026-05-25T00:00:00.000Z')
-    const payload = { weekStart: dateText(validStart), weekEnd: dateText(weekEnd(validStart)), followers: 0, reach: null, impressions: 0, likes: 0, comments: 0, saves: 0, publishedPosts: 0, evidenceAssetId: null, notes: 'Zero observation is valid.' }
+    const payload = { weekStart: dateText(validStart), weekEnd: dateText(weekEnd(validStart)), followers: 0, reach: null, impressions: 0, likes: 0, comments: 0, saves: 0, publishedPosts: 0, nativeEngagementRate: 2.75, evidenceAssetId: null, notes: 'Zero observation is valid.' }
     const created = await app.inject({ method: 'POST', url: '/api/metrics/linkedin', headers: headers(auth), payload })
     expect(created.statusCode).toBe(201)
-    expect(created.json().data).toMatchObject({ platform: 'linkedin', source: 'linkedin_manual', followers: 0, reach: null, impressions: 0, engagements: 0, engagementRate: null, publishedPosts: 0, version: 1 })
+    expect(created.json().data).toMatchObject({ platform: 'linkedin', source: 'linkedin_manual', followers: 0, reach: null, impressions: 0, engagements: 0, engagementRate: 2.75, nativeEngagementRate: 2.75, publishedPosts: 0, version: 1 })
+    expect((await app.inject({ method: 'POST', url: '/api/metrics/linkedin', headers: headers(auth), payload: { ...payload, weekStart: '2026-06-01', weekEnd: '2026-06-07', nativeEngagementRate: -1 } })).statusCode).toBe(422)
     const negative = await app.inject({ method: 'POST', url: '/api/metrics/linkedin', headers: headers(auth), payload: { ...payload, weekStart: '2026-06-01', weekEnd: '2026-06-07', impressions: -1 } })
     expect(negative.statusCode).toBe(422)
     const nonMonday = await app.inject({ method: 'POST', url: '/api/metrics/linkedin', headers: headers(auth), payload: { ...payload, weekStart: '2026-09-22', weekEnd: '2026-09-28' } })
@@ -321,7 +341,7 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(await prisma.$queryRaw<Array<{ relname: string }>>`SELECT c.relname FROM pg_class c WHERE c.relname IN ('post_metrics', 'leads', 'customers')`).toEqual([])
   })
 
-  it('R1100-R1119/I1102: calculates account observations, weighted engagement, safe follower growth, reconciliation, consistency, and schedule cohorts', async () => {
+  it('R1100-R1119/I1102: keeps platform measurements distinct, calculates safe follower growth, reconciliation, consistency, and schedule cohorts', async () => {
     const auth = await session(email)
     const response = await app.inject({ method: 'GET', url: '/api/performance?weeks=4&platform=combined', headers: { cookie: auth.cookie } })
     expect(response.statusCode).toBe(200)
@@ -331,10 +351,10 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(report.weekly).toHaveLength(4)
     const instagramRows = (await app.inject({ method: 'GET', url: '/api/performance?weeks=4&platform=instagram', headers: { cookie: auth.cookie } })).json().data.weekly as AnyRecord[]
     expect(instagramRows.some((row) => row.coverage === 'missing')).toBe(true)
-    expect(report.summary.engagementRate).toBeCloseTo((report.summary.engagements / report.summary.impressions) * 100, 10)
-    expect(report.summary.published.basis).toBe('max_per_account_interval')
+    expect(report.summary).toMatchObject({ impressions: null, engagements: null, engagementRate: null })
+    expect(report.summary.published.basis).toBe('publication_records')
     expect(report.summary.published.explicitPosts).toBeGreaterThanOrEqual(2)
-    expect(report.summary.published.effectivePosts).toBeGreaterThanOrEqual(report.summary.published.explicitPosts)
+    expect(report.summary.published.effectivePosts).toBe(report.summary.published.explicitPosts)
     expect(report.consistency).toHaveLength(2)
     expect(report.consistency.every((row: AnyRecord) => row.expected === 8 && row.targetPerWeek === 2 && row.visualPercent <= 100)).toBe(true)
     expect(report.execution.periodBasis).toBe('schedule_cohort')
@@ -356,7 +376,7 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(unchanged.metric).toBeGreaterThan(0)
   })
 
-  it('R1112-R1119/P1100-P1107: reconciles max-not-sum, exposes explicit changes, and joins only account-week metrics', async () => {
+  it('R1112-R1119/P1100-P1107: uses publication records for actual counts and joins only account-week metrics', async () => {
     const auth = await session(email)
     const before = await app.inject({ method: 'GET', url: '/api/performance?weeks=4&platform=instagram', headers: { cookie: auth.cookie } })
     const beforeCounts = before.json().data.summary.published as AnyRecord
@@ -369,19 +389,24 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(joined.platformMetricsForPublicationWeek).not.toHaveProperty('postEngagement')
     const explicitBefore = beforeCounts.explicitPosts
     const extra = await createReportContent('explicit-visible', ['instagram'])
-    const schedule = await createSchedule(extra.id, extra.variants[0]!.id, at('2026-09-13', 12), extra.approval.id)
-    await createPublication(extra.variants[0]!.id, schedule.id, schedule.scheduledAt, at('2026-09-13', 13))
-    const after = await app.inject({ method: 'GET', url: '/api/performance?weeks=4&platform=instagram', headers: { cookie: auth.cookie } })
-    const afterCounts = after.json().data.summary.published as AnyRecord
-    expect(afterCounts.explicitPosts).toBe(explicitBefore + 1)
-    expect(afterCounts.effectivePosts).toBeGreaterThanOrEqual(afterCounts.explicitPosts)
-    expect(beforeCounts.reportedPosts).toBeGreaterThanOrEqual(0)
-    expect(afterCounts.reportedPosts).toBe(beforeCounts.reportedPosts)
-    const bounded = await app.inject({ method: 'GET', url: `/api/publications?start=${encodeURIComponent('2026-09-12T00:00:00+07:00')}&end=${encodeURIComponent('2026-09-13T00:00:00+07:00')}`, headers: { cookie: auth.cookie } })
-    expect(bounded.statusCode).toBe(200)
-    expect(bounded.json().data.every((row: AnyRecord) => row.publication.publishedAt >= '2026-09-11T17:00:00.000Z' && row.publication.publishedAt < '2026-09-12T17:00:00.000Z')).toBe(true)
-    const order = publications.json().data.map((row: AnyRecord) => row.publication.publishedAt)
-    expect(order).toEqual([...order].sort().reverse())
+    try {
+      const schedule = await createSchedule(extra.id, extra.variants[0]!.id, at('2026-09-13', 12), extra.approval.id)
+      await createPublication(extra.variants[0]!.id, schedule.id, schedule.scheduledAt, at('2026-09-13', 13))
+      const after = await app.inject({ method: 'GET', url: '/api/performance?weeks=4&platform=instagram', headers: { cookie: auth.cookie } })
+      const afterCounts = after.json().data.summary.published as AnyRecord
+      expect(afterCounts.explicitPosts).toBe(explicitBefore + 1)
+      expect(afterCounts.effectivePosts).toBe(afterCounts.explicitPosts)
+      expect(afterCounts.basis).toBe('publication_records')
+      expect(beforeCounts.reportedPosts).toBeGreaterThanOrEqual(0)
+      expect(afterCounts.reportedPosts).toBe(beforeCounts.reportedPosts)
+      const bounded = await app.inject({ method: 'GET', url: `/api/publications?start=${encodeURIComponent('2026-09-12T00:00:00+07:00')}&end=${encodeURIComponent('2026-09-13T00:00:00+07:00')}`, headers: { cookie: auth.cookie } })
+      expect(bounded.statusCode).toBe(200)
+      expect(bounded.json().data.every((row: AnyRecord) => row.publication.publishedAt >= '2026-09-11T17:00:00.000Z' && row.publication.publishedAt < '2026-09-12T17:00:00.000Z')).toBe(true)
+      const order = publications.json().data.map((row: AnyRecord) => row.publication.publishedAt)
+      expect(order).toEqual([...order].sort().reverse())
+    } finally {
+      await removeReportContent(extra.id)
+    }
   })
 
   it('O1100-O1110/I1102: preserves Overview mixed periods, derived readiness, live names, and no-write GET behavior', async () => {
@@ -423,5 +448,55 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     expect(disconnected.statusCode).toBe(200)
     expect(disconnected.json().data.status).toBe('disconnected')
     await prisma.socialAccount.update({ where: { id: instagramAccountId }, data: { mode: 'demo', connectionStatus: 'disconnected' } })
+  })
+
+  it('P7001-P7005: configures four-week windows, records inquiry and active time, and enforces company scope', async () => {
+    const auth = await session(email)
+    const otherAuth = await session(otherEmail)
+    const configured = await app.inject({ method: 'PUT', url: '/api/evaluation', headers: headers(auth), payload: { startDate: '2026-09-14' } })
+    expect(configured.statusCode).toBe(201)
+    expect(configured.json().data).toMatchObject({ revision: 1, startDate: '2026-09-14', timezone: 'Asia/Jakarta' })
+    const evaluationId = configured.json().data.id as string
+    const periods = await app.inject({ method: 'GET', url: '/api/evaluation', headers: { cookie: auth.cookie } })
+    expect(periods.statusCode).toBe(200)
+    expect(periods.json().data.periods).toMatchObject({ baseline: { start: '2026-08-16T17:00:00.000Z', endExclusive: '2026-09-13T17:00:00.000Z' }, intervention: { start: '2026-09-13T17:00:00.000Z', endExclusive: '2026-10-11T17:00:00.000Z' } })
+    expect(periods.json().data.progress).toMatchObject({ complete: false })
+    expect(periods.json().data.comparison[0]).toMatchObject({ baseline: 2, intervention: 0, absoluteChange: null, percentageChange: null, status: 'partial' })
+    expect((await app.inject({ method: 'GET', url: '/api/evaluation', headers: { cookie: otherAuth.cookie } })).json().data.evaluation).toBeNull()
+
+    const week0 = await app.inject({ method: 'POST', url: `/api/evaluation/${evaluationId}/snapshots`, headers: headers(auth), payload: { stage: 'week0', capturedAt: '2026-09-14T05:00:00.000Z', measurements: { instagramFollowers: 8, linkedinFollowers: null }, source: 'Native account page' } })
+    expect(week0.statusCode).toBe(201)
+    expect(week0.json().data.measurements).toMatchObject({ instagramFollowers: 8, linkedinFollowers: null })
+
+    const received = await app.inject({ method: 'POST', url: '/api/business-inquiries', headers: headers(auth), payload: { receivedAt: '2026-09-14T10:00:00+07:00', channel: 'whatsapp', companyName: 'Local manufacturer', summary: 'Asked about workflow software.', relevance: 'relevant', source: 'WhatsApp Business record' } })
+    expect(received.statusCode).toBe(201)
+    expect(received.json().data).toMatchObject({ channel: 'whatsapp', relevance: 'relevant', companyId })
+    const inquiries = await app.inject({ method: 'GET', url: '/api/business-inquiries?limit=10', headers: { cookie: auth.cookie } })
+    expect(inquiries.json().data[0].id).toBe(received.json().data.id)
+    const otherActor = await prisma.user.findFirstOrThrow({ where: { companyId: otherCompanyId }, select: { id: true } })
+    const foreignProspect = await prisma.prospect.create({ data: { companyId: otherCompanyId, createdBy: otherActor.id, name: 'Foreign inquiry prospect', normalizedName: 'foreign inquiry prospect', source: 'manual' } })
+    const crossTenantInquiry = await app.inject({ method: 'POST', url: '/api/business-inquiries', headers: headers(auth), payload: { receivedAt: fixedNow.toISOString(), channel: 'website', summary: 'Cross-tenant link must fail.', relevance: 'unreviewed', source: 'test', prospectId: foreignProspect.id } })
+    await prisma.prospect.delete({ where: { id: foreignProspect.id } })
+    expect(crossTenantInquiry.statusCode).toBe(404)
+
+    const foreignContent = await prisma.content.create({ data: { companyId: otherCompanyId, contextType: 'company', createdBy: otherActor.id, masterContent: { title: 'Foreign test content' } } })
+    const content = await prisma.content.findFirstOrThrow({ where: { companyId }, select: { id: true } })
+    const foreignProduction = await app.inject({ method: 'POST', url: '/api/production-time', headers: headers(auth), payload: { contentId: foreignContent.id, minutes: 10, occurredAt: new Date(fixedNow.getTime() - 60_000).toISOString() } })
+    expect(foreignProduction.statusCode).toBe(404)
+
+    const outsidePeriod = await app.inject({ method: 'POST', url: '/api/production-time', headers: headers(auth), payload: { contentId: content.id, minutes: 20, occurredAt: new Date(Date.parse(periods.json().data.periods.baseline.start) - 1).toISOString() } })
+    const production = await app.inject({ method: 'POST', url: '/api/production-time', headers: headers(auth), payload: { contentId: content.id, minutes: 95, occurredAt: new Date(fixedNow.getTime() - 60_000).toISOString(), notes: 'Copy, adaptation, visuals and review.' } })
+    expect(production.statusCode).toBe(201)
+    const atExclusiveEnd = await app.inject({ method: 'POST', url: '/api/production-time', headers: headers(auth), payload: { contentId: content.id, minutes: 15, occurredAt: fixedNow.toISOString(), notes: 'At the current partial-period boundary.' } })
+    expect(outsidePeriod.statusCode).toBe(201)
+    expect(atExclusiveEnd.statusCode).toBe(201)
+    const current = await app.inject({ method: 'GET', url: '/api/evaluation', headers: { cookie: auth.cookie } })
+    expect(current.json().data.baseline.productionTime).toMatchObject({ count: 0, median: null, status: 'missing' })
+    expect(current.json().data.intervention).toMatchObject({ inquiries: { relevant: 1, source: 'business_inquiries' }, productionTime: { median: 95, count: 1 } })
+    expect(current.json().data.intervention.inquiries.sourceRecordIds).toContain(received.json().data.id)
+    expect(current.json().data.intervention.productionTime.sourceRecordIds).toContain(production.json().data.id)
+    expect(current.json().data.intervention.productionTime.sourceRecordIds).not.toContain(outsidePeriod.json().data.id)
+    expect(current.json().data.intervention.productionTime.sourceRecordIds).not.toContain(atExclusiveEnd.json().data.id)
+    expect(current.json().data.intervention.productionTime.sourceObservations).toEqual([expect.objectContaining({ id: production.json().data.id, contentId: content.id, minutes: 95, occurredAt: new Date(fixedNow.getTime() - 60_000).toISOString() })])
   })
 })
