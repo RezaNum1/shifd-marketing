@@ -77,7 +77,14 @@ async function contextReadState(companyId: string, productId: string) {
 runIntegration('Phase 3 Company, Product and Context', () => {
   beforeAll(async () => {
     await prisma.$connect()
-    const migratedCompanies = await prisma.company.findMany({ include: { brandProfile: true, bmcBlocks: true } })
+    // Phase 3 backfills companies that existed when the migration ran. Later
+    // integration fixtures must provision context through bootstrap, and stale
+    // rows from a previously interrupted fixture must not be mistaken for
+    // pre-migration records.
+    const migratedCompanies = await prisma.company.findMany({
+      where: { createdAt: { lt: new Date('2026-09-12T17:00:00.000Z') } },
+      include: { brandProfile: true, bmcBlocks: true },
+    })
     for (const company of migratedCompanies) {
       expect(company.brandProfile).not.toBeNull()
       expect(company.bmcBlocks).toHaveLength(9)
@@ -235,7 +242,11 @@ runIntegration('Phase 3 Company, Product and Context', () => {
     expect((await app.inject({ method: 'GET', url: `/api/products/${productId}`, headers: { cookie: other.cookie } })).statusCode).toBe(404)
     const taxonomy = await app.inject({ method: 'GET', url: '/api/content-taxonomy', headers: { cookie: auth.cookie } })
     expect(taxonomy.statusCode).toBe(200)
-    expect(taxonomy.json().data.pillars.map((x: { code: string }) => x.code)).toEqual(['educational', 'problem', 'product', 'use-case', 'industry', 'thought-leadership', 'company'])
+    const expectedPillars = ['educational', 'problem', 'product', 'use-case', 'industry', 'thought-leadership', 'company']
+    const returnedPillars = taxonomy.json().data.pillars.map((x: { code: string }) => x.code)
+    // The API returns all active global taxonomy rows; verify the shipped defaults
+    // and their order while allowing future or test-owned active entries.
+    expect(returnedPillars.filter((code: string) => expectedPillars.includes(code))).toEqual(expectedPillars)
     expect(taxonomy.json().data.objectives.map((x: { code: string }) => x.code)).toEqual(['awareness', 'education', 'engagement', 'credibility', 'consideration', 'discovery'])
     expect(taxonomy.json().data.platforms.map((x: { code: string }) => x.code)).toEqual(['instagram', 'linkedin'])
     await app.close()

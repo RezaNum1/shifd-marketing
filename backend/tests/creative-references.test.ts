@@ -10,6 +10,7 @@ import { LocalAssetStorage } from '../src/modules/assets/storage.js'
 import { createCreativeReferenceBatch, listCreativeReferenceBatches, openCreativeReference, selectCreativeReference } from '../src/modules/creative-references/service.js'
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 import { CREATIVE_REFERENCE_CONCEPT_OPERATION, CREATIVE_REFERENCE_MODULE, CREATIVE_REFERENCE_PROMPT_REFERENCE, CREATIVE_REFERENCE_PROMPT_VERSION } from '../src/modules/ai/constants.js'
+import { provisionCompanyContext } from '../src/modules/context/service.js'
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL
 if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for Creative Reference database tests.')
@@ -54,7 +55,7 @@ runIntegration('Creative Reference database integration', () => {
   let otherCompanyId = ''
   let actorId = ''
   let contentId: string | null = null
-  let pillarCode = ''
+  const pillarCode = 'educational'
   const input = { platform: 'instagram' as const, style: 'modern_minimal' as const, mood: 'professional' as const, aspectRatio: 'square_1_1' as const, additionalInstruction: null }
 
   beforeAll(async () => {
@@ -67,10 +68,9 @@ runIntegration('Creative Reference database integration', () => {
       ASSET_STORAGE_ROOT: storageRoot,
     })
     await prisma.$connect()
-    const pillar = await prisma.contentPillar.upsert({ where: { code: 'creative-reference-test' }, update: {}, create: { code: 'creative-reference-test', label: 'Creative Reference Test', sortOrder: 999, active: true } })
-    pillarCode = pillar.code
     const company = await prisma.company.create({ data: { name: `Creative Reference Test ${Date.now()}`, description: 'Integration fixture', positioning: 'Workflow clarity', coreValueProposition: 'Clear operations', differentiators: ['Focused'], customerSegments: ['B2B teams'], decisionMakers: ['Operators'], painPoints: ['Fragmented work'], brandProfile: { create: { brandVoice: 'Clear', toneDescription: 'Calm and useful' } }, aiSettings: { create: { provider: 'openai', modelId: 'gpt-5.6-luna', modelDisplayName: 'GPT-5.6 Luna', mode: 'real', generationLanguage: 'English' } } } })
     companyId = company.id
+    await provisionCompanyContext(prisma, companyId)
     const user = await prisma.user.create({ data: { companyId, name: 'Creative Reference Test User', email: `creative-reference-${Date.now()}@example.test`, passwordHash: 'test-only-hash' } })
     actorId = user.id
     const product = await prisma.product.create({ data: { companyId, name: 'Test Product', slug: `creative-reference-${Date.now()}`, description: 'A workflow product', status: 'active', profile: { create: { targetUsers: ['Operators'], targetOrganizations: ['B2B teams'], valueProposition: 'Clear operations' } } } })
@@ -78,29 +78,40 @@ runIntegration('Creative Reference database integration', () => {
     contentId = content.id
     const other = await prisma.company.create({ data: { name: `Other Creative Reference ${Date.now()}`, description: 'Other fixture' } })
     otherCompanyId = other.id
+    await provisionCompanyContext(prisma, otherCompanyId)
   })
 
   afterAll(async () => {
-    if (companyId) {
-      await prisma.requestIdempotency.deleteMany({ where: { companyId } })
-      await prisma.creativeReferenceBatch.deleteMany({ where: { companyId } })
-      await prisma.aiRequestLog.deleteMany({ where: { companyId } })
-      if (contentId) {
-        await prisma.contentBrief.deleteMany({ where: { contentId } })
-        await prisma.platformVariant.deleteMany({ where: { contentId } })
-        await prisma.content.deleteMany({ where: { id: contentId } })
+    const cleanupErrors: unknown[] = []
+    try {
+      for (const fixtureCompanyId of [...new Set([companyId, otherCompanyId].filter(Boolean))]) {
+        try {
+          await prisma.$transaction(async (tx) => {
+            await tx.requestIdempotency.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.creativeReferenceBatch.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.aiRequestLog.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.contentBrief.deleteMany({ where: { content: { companyId: fixtureCompanyId } } })
+            await tx.platformVariant.deleteMany({ where: { content: { companyId: fixtureCompanyId } } })
+            await tx.content.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.productProfile.deleteMany({ where: { product: { companyId: fixtureCompanyId } } })
+            await tx.product.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.bmcBlock.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.brandProfile.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.aiSettings.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.user.deleteMany({ where: { companyId: fixtureCompanyId } })
+            await tx.company.delete({ where: { id: fixtureCompanyId } })
+          })
+        } catch (error) {
+          cleanupErrors.push(error)
+        }
       }
-      await prisma.productProfile.deleteMany({ where: { product: { companyId } } })
-      await prisma.product.deleteMany({ where: { companyId } })
-      await prisma.aiSettings.deleteMany({ where: { companyId } })
-      await prisma.brandProfile.deleteMany({ where: { companyId } })
-      await prisma.user.deleteMany({ where: { companyId } })
-      await prisma.company.delete({ where: { id: companyId } })
+    } finally {
+      try { await prisma.$disconnect() } catch (error) { cleanupErrors.push(error) }
+      if (storageRoot) {
+        try { await rm(storageRoot, { recursive: true, force: true }) } catch (error) { cleanupErrors.push(error) }
+      }
     }
-    if (otherCompanyId) await prisma.company.delete({ where: { id: otherCompanyId } })
-    if (pillarCode) await prisma.contentPillar.delete({ where: { code: pillarCode } }).catch(() => undefined)
-    await prisma.$disconnect()
-    if (storageRoot) await rm(storageRoot, { recursive: true, force: true })
+    if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Creative Reference test fixture cleanup failed.')
   })
 
   it('persists three private references, enforces ownership, selects transactionally, and preserves Content state', async () => {
