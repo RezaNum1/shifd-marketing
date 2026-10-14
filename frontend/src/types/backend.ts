@@ -1,4 +1,4 @@
-export type BackendContextType = 'company' | 'product'
+export type BackendContextType = 'company' | 'product' | 'general'
 export type BackendPlatform = 'instagram' | 'linkedin'
 export type BackendIdeaStatus = 'ready' | 'used' | 'archived'
 export type BackendProductStatus = 'active' | 'inactive' | 'draft'
@@ -185,15 +185,23 @@ export type CreativeReferencePlatform = 'instagram' | 'linkedin'
 export type CreativeReferenceStyle = 'modern_minimal' | 'corporate' | 'editorial' | 'bold_typography' | 'product_ui_focused' | 'abstract_technology'
 export type CreativeReferenceMood = 'professional' | 'confident' | 'approachable' | 'innovative' | 'clean'
 export type CreativeReferenceAspectRatio = 'portrait_4_5' | 'square_1_1' | 'landscape'
+export type CreativeReferenceFormat = 'single_image' | 'carousel'
+export type CreativeReferenceGenerationMode = 'original_design' | 'canva_ready'
 
 export interface BackendCreativeReference {
   id: string
   conceptIndex: number
   conceptName: string
+  templateType: 'educational' | 'product_showcase' | 'process_insight' | 'process_carousel' | null
+  slideNumber: number | null
+  slideCopy: string | null
   rationale: string
   layoutNotes: string
   visualFocus: string
   typographyDirection: string
+  canvaBrief: string | null
+  assetSearchKeywords: string[]
+  carouselOutline: string[]
   imageUrl: string
   mimeType: 'image/png'
   fileSize: number
@@ -212,8 +220,11 @@ export interface BackendCreativeReferenceBatch {
   mood: CreativeReferenceMood
   requestedAspectRatio: CreativeReferenceAspectRatio
   actualGeneratedSize: string
+  creativeFormat: CreativeReferenceFormat
+  generationMode: CreativeReferenceGenerationMode
+  expectedReferenceCount: number
   additionalInstruction: string | null
-  status: 'pending' | 'completed' | 'partial' | 'failed'
+  status: 'pending' | 'completed' | 'partial' | 'failed' | 'cancelled'
   createdAt: string
   completedAt: string | null
   references: BackendCreativeReference[]
@@ -238,7 +249,7 @@ export interface BackendAssetLink {
 
 export interface BackendAssessmentCheck {
   label: string
-  status: 'pass' | 'warning'
+  status: 'pass' | 'warning' | 'not_assessed'
 }
 
 export interface BackendAssessment {
@@ -334,6 +345,7 @@ export interface BackendContent {
   brief: BackendBrief
   master: BackendMaster | null
   visualDirection: BackendVisualDirection | null
+  canvaDesignLink?: BackendCanvaDesignLink | null
   designStatus: BackendDesignStatus
   variants: BackendVariant[]
   schedules: BackendSchedule[]
@@ -348,6 +360,16 @@ export interface BackendContent {
   createdBy: BackendUser
   createdAt: string
   updatedAt: string
+}
+
+export interface BackendCanvaDesignLink {
+  contentId: string
+  companyId: string
+  url: string | null
+  createdAt: string
+  updatedAt: string
+  createdBy: { id: string; name: string }
+  updatedBy: { id: string; name: string }
 }
 
 export interface BackendContentSummary {

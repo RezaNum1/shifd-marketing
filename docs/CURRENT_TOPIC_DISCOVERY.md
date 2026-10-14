@@ -96,26 +96,23 @@ Automated provider and route tests should mock the discovery provider boundary;
 they must not call OpenAI or live web search. Database coverage belongs only on
 `shifd_marketing_test`, never `shifd_marketing_dev`, and covers ownership,
 run/candidate/source persistence, conversion idempotency, old-run preservation,
-failure isolation, and M2 prompt/log identity. Frontend coverage covers the
-manual Create Idea action, no-auto-search behavior, form defaults, loading and
-duplicate-click protection, candidate cards, validated source links, empty
-state, and Use as Idea.
+failure isolation, and M2 prompt/log identity. Frontend coverage covers
+discovery within the unified Content Ideas flow, mode-specific focus, timeframe
+and loading states, inline candidate selection, validated source links,
+empty/error states, and generation grounded in a selected candidate.
 
 ## Manual UAT
 
 1. Start local PostgreSQL, backend, and frontend.
 2. Log in and open Ideas.
-3. Click **Discover Current Topics**.
-4. Select **Shifd Approval**, keep Market as **Indonesia**, and select **Last 7
-   Days**.
-5. Optionally enter: `document approval, business administration, workflow
-   efficiency`.
-6. Click **Discover Topics** once.
-7. Verify up to six current source-backed candidates.
-8. Open at least two source links and confirm they correspond to the topic.
-9. Click **Use as Idea** on one candidate and verify exactly one normal Ready
-   Idea is created.
-10. Continue through the existing content workflow if desired.
+3. Click **Create Ideas** and choose General, Industry-Based, or Product-Based.
+4. Fill its required theme, industry, or product and select a content objective.
+5. Turn on **Ground ideas in current topics** and choose a timeframe.
+6. Click **Find Topics** and verify source-backed candidates appear inline.
+7. Open at least two source links, select a candidate, then click **Generate
+   Ideas**.
+8. Save a generated idea and verify its topic source references are preserved.
+9. Continue through the existing content workflow if desired.
 
 Real provider smoke is environment-dependent. If the execution environment
 cannot reach `api.openai.com`, the smoke is not run there; mocked tests and

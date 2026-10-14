@@ -402,7 +402,20 @@ describe('OpenAI image generation adapter', () => {
     await expect(provider.generateImage(imageRequest)).resolves.toMatchObject({ base64: Buffer.from('png').toString('base64'), providerRequestId: 'image-request-id', inputTokens: null, outputTokens: null })
     expect(create).toHaveBeenCalledTimes(1)
     expect(create.mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-image-2', quality: 'medium', size: '1024x1536', output_format: 'png', n: 1 })
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('background')
     expect(create.mock.calls[0]?.[1]).toEqual({ timeout: 2_345, maxRetries: 0 })
+  })
+
+  it('requests a transparent PNG only for the Canva-ready image mode', async () => {
+    const provider = new OpenAiAiProvider(config)
+    const client = (provider as unknown as { client: SdkClientMock }).client
+    const create = vi.fn().mockReturnValue({ withResponse: vi.fn().mockResolvedValue({ data: { data: [{ b64_json: Buffer.from('png').toString('base64') }] }, request_id: 'transparent-image-id' }) })
+    client.images.generate = create
+
+    await provider.generateImage({ ...imageRequest, background: 'transparent' })
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-image-2', output_format: 'png', background: 'transparent', n: 1 })
   })
 
   it('retains safe diagnostics for image-provider failures without exposing provider bodies', async () => {

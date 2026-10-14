@@ -3,7 +3,7 @@ import type { BackendIdea } from '../types/backend'
 
 export interface IdeaInput {
   title: string
-  contextType: 'company' | 'product'
+  contextType: 'company' | 'product' | 'general'
   productId?: string | null
   pillarCode: string
   objective: string

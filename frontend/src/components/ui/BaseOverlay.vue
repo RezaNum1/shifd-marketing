@@ -8,7 +8,7 @@ const props = withDefaults(
     title: string
     description?: string
     variant?: 'modal' | 'drawer'
-    size?: 'default' | 'wide' | 'navigation'
+    size?: 'default' | 'wide' | 'large' | 'fullscreen' | 'navigation'
     side?: 'left' | 'right'
     dismissible?: boolean
   }>(),

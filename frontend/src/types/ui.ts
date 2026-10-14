@@ -5,6 +5,7 @@ export type IconName =
   | 'library'
   | 'calendar'
   | 'chart'
+  | 'linkedin'
   | 'company'
   | 'product'
   | 'integrations'
@@ -23,7 +24,14 @@ export type IconName =
   | 'info'
   | 'alert'
   | 'plus'
+  | 'edit'
+  | 'copy'
+  | 'archive'
+  | 'trash'
   | 'upload'
+  | 'eye'
+  | 'link'
+  | 'lock'
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 export type ControlSize = 'compact' | 'default' | 'comfortable'
@@ -32,6 +40,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 export interface SelectOption {
   value: string
   label: string
+  description?: string
   disabled?: boolean
 }
 

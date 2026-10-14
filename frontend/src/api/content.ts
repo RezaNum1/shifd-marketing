@@ -1,8 +1,33 @@
 import { createRequestKey, request } from './client'
-import type { BackendApprovalAction, BackendContent, BackendContentSummary, BackendEvent, BackendPlatform } from '../types/backend'
+import type { BackendApprovalAction, BackendCanvaDesignLink, BackendContent, BackendContentSummary, BackendEvent, BackendPlatform } from '../types/backend'
+
+export interface ContentReviewShareStatus {
+  active: boolean
+  expiresAt: string | null
+  createdAt: string | null
+}
+
+export interface PublicReviewContent {
+  title: string
+  brief: { contextType: string; pillarCode: string; objective: string; targetAudience: string; topic: string; angle: string | null; additionalInstructions: string | null }
+  master: { title: string; coreMessage: string; hook: string; body: string; cta: string } | null
+  visualDirection: { format: string; concept: string; structure: string[]; notes: string } | null
+  designStatus: string
+  variants: Array<{
+    platform: BackendPlatform
+    copy: string | null
+    cta: string | null
+    hashtags: string | null
+    visualRecommendation: string | null
+    assets: Array<{ id: string; fileName: string; mimeType: string; width: number; height: number; contentUrl: string }>
+    assessment: { score: number; status: string; recommendation: string; checks: Array<{ label: string; status: 'pass' | 'warning' | 'not_assessed' }>; freshness: string } | null
+  }>
+  updatedAt: string
+  expiresAt: string
+}
 
 export interface ContentBriefInput {
-  contextType: 'company' | 'product'
+  contextType: 'company' | 'product' | 'general'
   productId?: string | null
   pillarCode: string
   objective: string
@@ -14,6 +39,12 @@ export interface ContentBriefInput {
 
 export function listContents() { return request<BackendContentSummary[]>('/contents?limit=100') }
 export function getContent(id: string) { return request<BackendContent>(`/contents/${id}`) }
+export function saveCanvaDesignLink(id: string, url: string) {
+  return request<BackendCanvaDesignLink>(`/contents/${id}/canva-design-link`, { method: 'PUT', json: { url } })
+}
+export function removeCanvaDesignLink(id: string) {
+  return request<BackendCanvaDesignLink | null>(`/contents/${id}/canva-design-link`, { method: 'DELETE', json: {} })
+}
 export function createContent(input: { sourceIdeaId?: string; brief: ContentBriefInput; enabledPlatforms: BackendPlatform[] }, idempotencyKey = createRequestKey('content.create')) {
   return request<BackendContent>('/contents', { method: 'POST', json: input, idempotencyKey })
 }
@@ -46,5 +77,12 @@ export function requestRevision(id: string, reason: string, etag: string | numbe
 }
 export function duplicateContent(id: string, etag: string | number, idempotencyKey = createRequestKey('content.duplicate')) { return request<BackendContent>('/contents/' + id + '/duplicate', { method: 'POST', json: {}, ifMatch: etag, idempotencyKey }) }
 export function archiveContent(id: string, etag: string | number) { return request<BackendContent>('/contents/' + id + '/archive', { method: 'POST', json: {}, ifMatch: etag }) }
+export function deleteContent(id: string, etag: string | number) {
+  return request<void>(`/contents/${id}`, { method: 'DELETE', ifMatch: etag, signal: AbortSignal.timeout(20_000) })
+}
 export function listContentEvents(id: string) { return request<BackendEvent[]>(`/contents/${id}/events?limit=100`) }
 export function listReviewActions(id: string) { return request<BackendApprovalAction[]>(`/contents/${id}/review-actions?limit=100`) }
+export function getReviewShareStatus(id: string) { return request<ContentReviewShareStatus>(`/contents/${id}/review-share`) }
+export function createReviewShare(id: string) { return request<{ token: string; expiresAt: string }>(`/contents/${id}/review-share`, { method: 'POST', json: {} }) }
+export function revokeReviewShare(id: string) { return request<void>(`/contents/${id}/review-share`, { method: 'DELETE', json: {} }) }
+export function getPublicReview(token: string) { return request<PublicReviewContent>(`/public-review/${encodeURIComponent(token)}`) }

@@ -1,6 +1,6 @@
 import { OBJECTIVES, PLATFORMS } from '../context/constants.js'
 
-export const IDEA_CONTEXT_TYPES = ['company', 'product'] as const
+export const IDEA_CONTEXT_TYPES = ['company', 'product', 'general'] as const
 export const IDEA_STATUSES = ['ready', 'used', 'archived'] as const
 export const CONTENT_STAGES = ['draft', 'generated', 'adapted', 'creative_in_progress', 'ready_for_review', 'needs_revision'] as const
 export const PROGRESS_STAGES = ['adapted', 'creative_in_progress', 'ready_for_review'] as const

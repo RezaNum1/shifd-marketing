@@ -28,7 +28,7 @@ const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
 // allowlist; keep it next to the storage boundary so future image consumers do
 // not accidentally broaden this untrusted-upload surface.
 sharp.block({ operation: ['VipsForeignLoad'] })
-sharp.unblock({ operation: ['VipsForeignLoadJpegFile', 'VipsForeignLoadPngFile'] })
+sharp.unblock({ operation: ['VipsForeignLoadJpegFile', 'VipsForeignLoadPngFile', 'VipsForeignLoadPngBuffer'] })
 
 export class AssetTooLargeError extends Error {
   constructor() {

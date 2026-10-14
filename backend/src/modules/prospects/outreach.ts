@@ -5,8 +5,9 @@ import { AppError, aiNotConfigured, aiOutputInvalid, notFound, validationError }
 import { requestHash } from '../context/normalize.js'
 import { AI_MODEL_ID, AI_PROVIDER, PROSPECT_EMAIL_DRAFT_OPERATION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION } from '../ai/constants.js'
 import { PROSPECT_EMAIL_DRAFT_SYSTEM_PROMPT, renderProspectEmailDraftPrompt } from '../ai/prospect-email-draft-prompt.js'
+import { ensureProspectEmailDraftPrompt } from '../ai/seed.js'
 import { calculateCost, mapProviderFailure, usageForDb, type RateSelection } from '../ai/service.js'
-import type { AiProvider, AiProviderResult } from '../ai/provider.js'
+import { AiProviderFailure, type AiProvider, type AiProviderResult } from '../ai/provider.js'
 
 export const DRAFT_OBJECTIVES = ['introduce_shifd_labs', 'introduce_service', 'introduce_shifd_approval', 'explore_partnership', 'follow_up'] as const
 export const DRAFT_OFFERINGS = ['custom_web_application', 'mobile_application', 'workflow_digitalization', 'it_consultation', 'shifd_approval'] as const
@@ -54,8 +55,7 @@ export async function generateProspectEmailDraft(prisma: PrismaClient, config: A
   const prospect = await prisma.prospect.findFirst({ where: { id: prospectId, companyId, archivedAt: null } })
   if (!prospect) throw notFound('Prospect not found.')
   const claims = await getEligibleClaims(prisma, companyId, prospectId, input.claimIds)
-  const promptVersion = await prisma.promptVersion.findFirst({ where: { module: 'M2', operation: PROSPECT_EMAIL_DRAFT_OPERATION, status: 'active' } })
-  if (!promptVersion) throw new AppError(503, 'OUTREACH_NOT_CONFIGURED', 'AI email drafting is not configured for this environment.')
+  const promptVersion = await ensureProspectEmailDraftPrompt(prisma)
   const settings = await prisma.aiSettings.findUnique({ where: { companyId }, select: { modelId: true } })
   const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
   if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
@@ -83,11 +83,11 @@ export async function generateProspectEmailDraft(prisma: PrismaClient, config: A
     result = await provider.generate({ model, outputSchemaVersion: PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION, systemPrompt: PROSPECT_EMAIL_DRAFT_SYSTEM_PROMPT, userPrompt: renderProspectEmailDraftPrompt(snapshot), maxOutputTokens: Math.min(config.aiMaxOutputTokens, 1800), timeoutMs: config.aiRequestTimeoutMs })
     const output = parseEmailOutput(result.text)
     const usage = usageForDb(result)
-    await prisma.aiRequestLog.update({ where: { id: requestId }, data: { status: 'success', completedAt: new Date(), latencyMs: Date.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, estimatedCostUsd: calculateCost(usage, rate), providerRequestId: result.providerRequestId } })
+    await prisma.aiRequestLog.update({ where: { id: requestId }, data: { status: 'success', completedAt: new Date(), latencyMs: Date.now() - startedAt, inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens, estimatedCostUsd: calculateCost(usage, rate), providerRequestId: result.providerRequestId } })
     return { subject: output.subject, body: output.body, generationId: requestId, claims, usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens } }
   } catch (error) {
     const failure = error instanceof AppError ? error : mapProviderFailure(error)
-    await prisma.aiRequestLog.update({ where: { id: requestId }, data: { status: 'failed', completedAt: new Date(), latencyMs: Date.now() - startedAt, inputTokens: result?.inputTokens ?? null, outputTokens: result?.outputTokens ?? null, providerRequestId: result?.providerRequestId ?? null, errorCode: failure.code, errorMessage: failure.message } })
+    await prisma.aiRequestLog.update({ where: { id: requestId }, data: { status: 'failed', completedAt: new Date(), latencyMs: Date.now() - startedAt, inputTokens: result?.inputTokens ?? null, outputTokens: result?.outputTokens ?? null, providerRequestId: error instanceof AiProviderFailure ? error.providerRequestId : result?.providerRequestId ?? null, errorCode: failure.code, errorMessage: failure.message } })
     throw failure
   }
 }
@@ -210,5 +210,5 @@ function isUuid(value: string) { return /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f
 function toJson(value: unknown) { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue }
 async function selectRate(prisma: PrismaClient, model: string): Promise<RateSelection | null> {
   const row = await prisma.aiRateVersion.findFirst({ where: { provider: AI_PROVIDER, model, effectiveFrom: { lte: new Date() } }, orderBy: { effectiveFrom: 'desc' } })
-  return row ? { id: row.id, version: row.version, inputUsdPerMillion: row.inputUsdPerMillion.toString(), outputUsdPerMillion: row.outputUsdPerMillion.toString() } : null
+  return row ? { id: row.id, version: row.version, inputUsdPerMillion: row.inputUsdPerMillion.toString(), cachedInputUsdPerMillion: row.cachedInputUsdPerMillion?.toString() ?? null, outputUsdPerMillion: row.outputUsdPerMillion.toString() } : null
 }

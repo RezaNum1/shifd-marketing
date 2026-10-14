@@ -78,7 +78,7 @@ function details(options: {
   topic: string
   status: ContentLibraryRecord['status']
   platforms: ContentPlatform[]
-  context?: 'company' | 'product'
+  context?: 'company' | 'product' | 'general'
   objective?: string
   audience?: string
   angle?: string

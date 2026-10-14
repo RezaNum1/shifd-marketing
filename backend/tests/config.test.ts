@@ -9,7 +9,7 @@ const valid = {
 
 describe('configuration validation', () => {
   it('loads valid required configuration', () => {
-    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN, sessionIdleMinutes: 480, sessionAbsoluteHours: 24, loginRateLimitMax: 5, loginRateLimitWindowMinutes: 15, openaiApiKey: null, openaiModel: null, openaiImageModel: 'gpt-image-2', openaiImageQuality: 'medium', openaiImageFormat: 'png', aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048, topicDiscoveryMaxOutputTokens: 4_096 })
+    expect(loadConfig(valid)).toMatchObject({ nodeEnv: 'test', port: 3100, host: '127.0.0.1', allowedOrigin: valid.ALLOWED_ORIGIN, sessionIdleMinutes: 480, sessionAbsoluteHours: 24, loginRateLimitMax: 5, loginRateLimitWindowMinutes: 15, openaiApiKey: null, openaiModel: null, openaiImageModel: 'gpt-image-2.5-sunburst', openaiImageQuality: 'medium', openaiImageFormat: 'png', aiRequestTimeoutMs: 60_000, aiMaxOutputTokens: 2_048, topicDiscoveryMaxOutputTokens: 4_096 })
   })
 
   it('fails fast for invalid required values', () => {

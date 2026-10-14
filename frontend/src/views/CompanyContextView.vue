@@ -32,6 +32,11 @@ const completionItems = computed(() => [
   { label: 'BMC', complete: bmcComplete.value },
   { label: 'Brand', complete: brandComplete.value },
 ])
+function bmcDescription(blockId: string): string | undefined {
+  if (blockId === 'customer-segments') return 'Broad market groups for the business model. Use Customer Context for detailed audiences used in content.'
+  if (blockId === 'value-propositions') return 'Business-level value the company delivers. Company Profile holds the concise statement reused in marketing content.'
+  return undefined
+}
 
 function toggleBusinessType(type: CompanyBusinessType) {
   const types = draft.companyProfile.businessTypes
@@ -43,13 +48,24 @@ async function save() {
   if (!draft.companyProfile.description.trim()) errors.push('Company Description')
   requiredErrors.value = errors
   if (errors.length) { tab.value = 'profile'; return }
+  // Keep the legacy API fields in sync with the single editable value fields.
+  draft.companyProfile.positioning = draft.companyProfile.coreValueProposition
+  draft.brandProfile.toneDescription = draft.brandProfile.brandVoice
+  draft.brandProfile.brandKeywords = [...draft.brandProfile.preferredTerms]
   const saved = await store.save(draft)
   if (!saved) return
   savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date())
 }
 function errorFor(label: string) { return requiredErrors.value.includes(label) ? `Enter ${label.toLowerCase()}.` : undefined }
 
-watch(() => store.loaded, (loaded) => { if (loaded) Object.assign(draft, store.snapshot()) }, { immediate: true })
+watch(() => store.loaded, (loaded) => {
+  if (!loaded) return
+  const snapshot = store.snapshot()
+  if (!snapshot.companyProfile.coreValueProposition.trim()) snapshot.companyProfile.coreValueProposition = snapshot.companyProfile.positioning
+  if (!snapshot.brandProfile.brandVoice.trim()) snapshot.brandProfile.brandVoice = snapshot.brandProfile.toneDescription
+  snapshot.brandProfile.preferredTerms = [...new Set([...snapshot.brandProfile.preferredTerms, ...snapshot.brandProfile.brandKeywords])]
+  Object.assign(draft, snapshot)
+}, { immediate: true })
 onMounted(() => { void store.load() })
 </script>
 
@@ -83,8 +99,8 @@ onMounted(() => { void store.load() })
           <BaseTextarea v-model="draft.companyProfile.vision" label="Vision" :rows="3" />
         </div>
       </BaseCard>
-      <BaseCard title="Positioning" description="Describe how Shifd Labs should be understood in plain, practical language.">
-        <div class="context-form-grid"><BaseTextarea v-model="draft.companyProfile.positioning" label="Positioning" :rows="3" /><BaseTextarea v-model="draft.companyProfile.coreValueProposition" label="Core Value Proposition" :rows="3" /></div>
+      <BaseCard title="Company Value" description="Describe the main value your company provides and how it should be understood.">
+        <div class="context-form-grid"><BaseTextarea v-model="draft.companyProfile.coreValueProposition" label="Company Value Proposition" :rows="3" hint="Explain the value and positioning together in one clear statement." /></div>
         <ContextListEditor v-model="draft.companyProfile.differentiators" label="Differentiators" hint="Add the qualities that make your approach distinct." />
       </BaseCard>
       <BaseCard title="Customer Context" description="Editable working context for the teams and people your marketing serves.">
@@ -95,16 +111,16 @@ onMounted(() => { void store.load() })
     <div v-else-if="tab === 'bmc'" id="context-panel-bmc" class="context-stack" role="tabpanel" aria-labelledby="context-tab-bmc" tabindex="0">
       <div class="context-section-intro"><div><h2>Business Model Canvas</h2><p>Keep a concise, editable view of how Shifd Labs creates and delivers value.</p></div><span class="context-muted-note">9 blocks</span></div>
       <section class="bmc-grid" aria-label="Business Model Canvas blocks">
-        <BaseCard v-for="block in draft.bmcBlocks" :key="block.id" :title="block.title"><textarea class="bmc-textarea" :aria-label="block.title" rows="6" placeholder="One entry per line" :value="block.entries.join('\n')" @input="block.entries = ($event.target as HTMLTextAreaElement).value.split('\n').map((entry) => entry.trim()).filter(Boolean)" /><p class="bmc-hint">Use one short entry per line.</p></BaseCard>
+        <BaseCard v-for="block in draft.bmcBlocks" :key="block.id" :title="block.title" :description="bmcDescription(block.id)"><textarea class="bmc-textarea" :aria-label="block.title" rows="6" placeholder="One entry per line" :value="block.entries.join('\n')" @input="block.entries = ($event.target as HTMLTextAreaElement).value.split('\n').map((entry) => entry.trim()).filter(Boolean)" /><p class="bmc-hint">Use one short entry per line.</p></BaseCard>
       </section>
     </div>
 
     <div v-else id="context-panel-brand" class="context-stack" role="tabpanel" aria-labelledby="context-tab-brand" tabindex="0">
-      <BaseCard title="Brand Voice" description="Communication rules inherited by content generation and review.">
-        <div class="context-form-grid"><BaseInput v-model="draft.brandProfile.brandVoice" label="Brand Voice" /><BaseInput v-model="draft.brandProfile.preferredLanguage" label="Preferred Language" /><BaseTextarea v-model="draft.brandProfile.toneDescription" label="Tone Description" :rows="4" /><BaseInput v-model="draft.brandProfile.ctaStyle" label="CTA Style" /></div>
+      <BaseCard title="Brand Voice" description="Set the voice and writing rules inherited by content generation and review.">
+        <div class="context-form-grid"><BaseTextarea v-model="draft.brandProfile.brandVoice" label="Brand Voice and Tone" :rows="3" hint="Describe the personality and tone together, for example: warm, concise, and consultative." /><BaseInput v-model="draft.brandProfile.preferredLanguage" label="Preferred Language" /><BaseInput v-model="draft.brandProfile.ctaStyle" label="CTA Style" /></div>
       </BaseCard>
       <BaseCard title="Communication Guidelines">
-        <div class="context-list-grid brand-list-grid"><ContextListEditor v-model="draft.brandProfile.communicationGuidelines" label="Communication Guidelines" /><ContextListEditor v-model="draft.brandProfile.preferredTerms" label="Preferred Words / Terms" /><ContextListEditor v-model="draft.brandProfile.thingsToAvoid" label="Things to Avoid" /><ContextListEditor v-model="draft.brandProfile.brandKeywords" label="Brand Keywords" /></div>
+        <div class="context-list-grid brand-list-grid"><ContextListEditor v-model="draft.brandProfile.communicationGuidelines" label="Communication Guidelines" /><ContextListEditor v-model="draft.brandProfile.preferredTerms" label="Brand Keywords / Preferred Terms" hint="Keep one list of words and phrases the brand prefers to use." /><ContextListEditor v-model="draft.brandProfile.thingsToAvoid" label="Things to Avoid" /></div>
       </BaseCard>
     </div>
     </template>

@@ -21,11 +21,16 @@ import { useContentIdeasStore } from '../stores/contentIdeas'
 import { useProductsStore } from '../stores/products'
 import { useCompanyContextStore } from '../stores/companyContext'
 import { contentPublications, contentSchedules, contentStatus } from '../utils/contentRecords'
+import { createReviewShare, getReviewShareStatus, revokeReviewShare, type ContentReviewShareStatus } from '../api/content'
 
 type DetailTab = 'overview' | 'instagram' | 'linkedin' | 'creative' | 'history'
 
 const route = useRoute()
 const router = useRouter()
+const contentDetailHelp = {
+  purpose: 'Review one content item, its platform versions, creative assets, approval, schedule, and publication history.',
+  steps: ['Review the Overview and platform tabs to check the saved copy and creative.', 'Use the main action to continue the next available workflow step.', 'Request a revision or duplicate the item when you need a new version.'],
+}
 const library = useContentLibraryStore()
 const workflow = useContentWorkflowStore()
 const products = useProductsStore()
@@ -39,6 +44,11 @@ const revisionModalOpen = ref(false)
 const revisionReason = ref('')
 const revisionError = ref('')
 const detailLoading = ref(true)
+const reviewShare = ref<ContentReviewShareStatus | null>(null)
+const reviewShareUrl = ref('')
+const reviewShareLoading = ref(false)
+const reviewShareError = ref('')
+const reviewShareNotice = ref('')
 
 const record = computed(() => library.records.find((item) => item.id === String(route.params.id)))
 const sourceIdea = computed(() => ideas.ideas.find((idea) => idea.id === record.value?.ideaId))
@@ -148,9 +158,67 @@ function formatDateTime(date: string, time?: string) {
 
 async function loadDetail(id: string) {
   detailLoading.value = true
-  await Promise.all([library.load(), products.load(), companyContext.load(), ideas.load()])
+  await Promise.all([library.load(), products.load(), companyContext.load(), ideas.load(), loadReviewShare(id)])
   await library.getById(id, true)
   detailLoading.value = false
+}
+
+async function loadReviewShare(id: string) {
+  try {
+    reviewShare.value = (await getReviewShareStatus(id)).data
+  } catch {
+    reviewShare.value = null
+  }
+}
+
+async function makeReviewShare() {
+  if (!record.value) return
+  reviewShareLoading.value = true
+  reviewShareError.value = ''
+  reviewShareNotice.value = ''
+  try {
+    const result = await createReviewShare(record.value.id)
+    reviewShareUrl.value = new URL(router.resolve({ name: 'public-review', params: { token: result.data.token } }).href, window.location.origin).toString()
+    reviewShare.value = { active: true, expiresAt: result.data.expiresAt, createdAt: new Date().toISOString() }
+    try {
+      await navigator.clipboard.writeText(reviewShareUrl.value)
+      reviewShareNotice.value = 'Review link created and copied. It expires in 7 days.'
+    } catch {
+      reviewShareNotice.value = 'Review link created. Copy it below; it expires in 7 days.'
+    }
+  } catch {
+    reviewShareError.value = 'Could not create the review link. Try again.'
+  } finally {
+    reviewShareLoading.value = false
+  }
+}
+
+async function copyReviewShare() {
+  if (!reviewShareUrl.value) return
+  try {
+    await navigator.clipboard.writeText(reviewShareUrl.value)
+    reviewShareNotice.value = 'Review link copied.'
+    reviewShareError.value = ''
+  } catch {
+    reviewShareError.value = 'Could not copy the link. Create a new link to copy it again.'
+  }
+}
+
+async function disableReviewShare() {
+  if (!record.value) return
+  reviewShareLoading.value = true
+  reviewShareError.value = ''
+  reviewShareNotice.value = ''
+  try {
+    await revokeReviewShare(record.value.id)
+    reviewShare.value = { active: false, expiresAt: null, createdAt: null }
+    reviewShareUrl.value = ''
+    reviewShareNotice.value = 'Review link disabled.'
+  } catch {
+    reviewShareError.value = 'Could not disable the review link. Try again.'
+  } finally {
+    reviewShareLoading.value = false
+  }
 }
 
 onMounted(() => { void loadDetail(String(route.params.id)) })
@@ -161,7 +229,7 @@ watch(() => String(route.params.id), (id, previousId) => {
 
 <template>
   <div v-if="record && !detailLoading" class="page-stack content-detail-page">
-    <PageHeader :title="record.title" :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Content Library', to: '/content' }, { label: record.title }]">
+    <PageHeader :title="record.title" :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Content Library', to: '/content' }, { label: record.title }]" :help="contentDetailHelp">
       <template #actions>
         <BaseButton v-if="primaryAction" @click="resumeStep"><AppIcon :name="primaryAction.icon" :size="16" />{{ primaryAction.label }}</BaseButton>
         <BaseButton v-if="['Approved', 'Scheduled'].includes(contentStatus(record))" variant="secondary" @click="openRevisionRequest">Request Revision</BaseButton>
@@ -177,7 +245,7 @@ watch(() => String(route.params.id), (id, previousId) => {
 
     <section class="detail-metadata" aria-label="Content metadata">
       <dl>
-        <div><dt>Context</dt><dd>{{ record.context === 'product' ? 'Product' : 'Company' }}</dd></div>
+        <div><dt>Context</dt><dd>{{ record.context === 'product' ? 'Product' : record.context === 'general' ? 'General' : 'Company' }}</dd></div>
         <div><dt>Product</dt><dd>{{ resolvedProductName ?? '—' }}</dd></div>
         <div><dt>Content Pillar</dt><dd>{{ record.pillar }}</dd></div>
         <div><dt>Objective</dt><dd>{{ record.details.objective }}</dd></div>
@@ -218,6 +286,22 @@ watch(() => String(route.params.id), (id, previousId) => {
       </div>
 
       <aside class="detail-side-column">
+        <BaseCard title="Partner review link" description="Share a private, read-only view of this content with your partner.">
+          <div class="review-share-card-body">
+            <StatusBadge v-if="reviewShare?.active" tone="success" dot>Link active</StatusBadge>
+            <StatusBadge v-else tone="neutral">No active link</StatusBadge>
+            <p v-if="reviewShare?.active && reviewShare.expiresAt">Expires {{ formatDateTime(reviewShare.expiresAt) }}. Anyone with the link can view this content until it expires or you disable it.</p>
+            <p v-else>The link shows the brief, final copy, creative, and AI brand assessment. Your approval checklist stays private to your account.</p>
+            <div v-if="reviewShareUrl" class="review-share-url"><span>{{ reviewShareUrl }}</span><BaseButton variant="secondary" size="compact" @click="copyReviewShare"><AppIcon name="copy" :size="14" />Copy</BaseButton></div>
+            <p v-else-if="reviewShare?.active" class="detail-helper">The secret link is only shown when created. Create a replacement to copy a fresh link.</p>
+            <p v-if="reviewShareNotice" class="review-share-notice" role="status">{{ reviewShareNotice }}</p>
+            <InlineAlert v-if="reviewShareError" title="Review link action failed" tone="warning">{{ reviewShareError }}</InlineAlert>
+            <div class="review-share-actions">
+              <BaseButton size="compact" :disabled="reviewShareLoading || contentStatus(record) === 'Archived'" @click="makeReviewShare"><AppIcon name="link" :size="14" />{{ reviewShare?.active ? 'Create new link' : 'Create view-only link' }}</BaseButton>
+              <BaseButton v-if="reviewShare?.active" variant="ghost" size="compact" :disabled="reviewShareLoading" @click="disableReviewShare">Disable link</BaseButton>
+            </div>
+          </div>
+        </BaseCard>
         <BaseCard v-if="Object.keys(record.details.brandAssessments).length" title="AI Brand Assessment" description="Advisory assessment only. Human approval is recorded separately.">
           <div class="assessment-summary-list">
             <div v-for="platform in record.platforms" :key="platform">
@@ -264,6 +348,11 @@ watch(() => String(route.params.id), (id, previousId) => {
     </BaseCard>
 
     <div v-else-if="activeTab === 'creative'" id="detail-panel-creative" class="creative-detail-sections" role="tabpanel" aria-labelledby="detail-tab-creative">
+      <BaseCard title="Design Workspace" description="External design references are documentation only; final creative assets remain uploaded and reviewed separately.">
+        <a v-if="record.details.creative.canvaDesignLink?.url" class="detail-canva-link" :href="record.details.creative.canvaDesignLink.url" target="_blank" rel="noopener noreferrer">Open in Canva <span aria-hidden="true">↗</span></a>
+        <p v-else class="detail-helper">No Canva design link has been saved.</p>
+        <small v-if="record.details.creative.canvaDesignLink?.url" class="detail-helper">Updated {{ new Date(record.details.creative.canvaDesignLink.updatedAt).toLocaleString() }} by {{ record.details.creative.canvaDesignLink.updatedBy.name }}</small>
+      </BaseCard>
       <BaseCard v-if="record.platforms.includes('instagram')" title="Instagram Creative" description="Carousel assets in their saved order."><div v-if="instagramAssets.length" class="asset-grid asset-grid--wide"><ContentAssetThumbnail v-for="asset in instagramAssets" :key="asset.id" :asset="asset" show-metadata @preview="openPreview" /></div><p v-else class="detail-helper">No Instagram creative has been added.</p></BaseCard>
       <BaseCard v-if="record.platforms.includes('linkedin')" title="LinkedIn Creative" :description="record.details.creative.linkedinReusesInstagram ? 'Using the Instagram creative in the same order.' : 'Separate LinkedIn creative assets.'"><template #actions><StatusBadge v-if="record.details.creative.linkedinReusesInstagram" tone="neutral">Using Instagram creative</StatusBadge></template><div v-if="linkedInAssets.length" class="asset-grid asset-grid--wide"><ContentAssetThumbnail v-for="asset in linkedInAssets" :key="asset.id" :asset="asset" show-metadata @preview="openPreview" /></div><p v-else class="detail-helper">No LinkedIn creative has been added.</p></BaseCard>
       <BaseButton v-if="isEditable" variant="secondary" @click="resumeStep(); workflow.activeStep = 'creative'">Continue to Creative</BaseButton>
@@ -311,11 +400,19 @@ watch(() => String(route.params.id), (id, previousId) => {
 .detail-tabs button:focus-visible { outline: 3px solid rgb(29 78 216 / .2); outline-offset: 1px; }
 .detail-overview { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, .75fr); gap: 20px; align-items: start; }
 .detail-main-column, .detail-side-column, .creative-detail-sections, .history-layout { display: flex; flex-direction: column; gap: 20px; }
+.detail-canva-link { display: inline-flex; width: fit-content; gap: 6px; color: var(--color-accent); font-weight: 650; text-decoration: none; }
+.detail-canva-link:hover { text-decoration: underline; }
 .detail-side-column { position: sticky; top: 84px; }
 .detail-field-list, .detail-copy-list { display: grid; gap: 16px; }
 .detail-field-list > div, .detail-copy-list > div { display: grid; gap: 6px; }
 .detail-field-list > div + div, .detail-copy-list > div + div { padding-top: 16px; border-top: 1px solid var(--color-border); }
 .detail-field-list dd, .detail-copy-list dd { color: var(--color-text); line-height: 1.65; }
+.review-share-card-body { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.review-share-card-body > p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 18px; }
+.review-share-url { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+.review-share-url > span { min-width: 0; flex: 1; overflow: hidden; color: var(--color-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.review-share-notice { color: var(--color-success) !important; }
+.review-share-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .detail-field-list.compact { gap: 12px; }
 .preserve-copy { white-space: pre-line; }
 .assessment-summary-list, .schedule-detail-list { display: grid; gap: 10px; }

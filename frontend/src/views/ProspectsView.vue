@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import PageHeaderHelp from '../components/app/PageHeaderHelp.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
@@ -11,6 +12,10 @@ import { archiveProspect, confirmProspectImport, createProspect, listProspects, 
 import type { Prospect, ProspectImportField, ProspectImportPreview, ProspectInput, ProspectStatus } from '../types/prospect'
 
 const router = useRouter()
+const pageHelp = {
+  purpose: 'Keep target organizations and their contact details organized for future outreach.',
+  steps: ['Search or filter the list to find an organization.', 'Add one prospect manually or import a spreadsheet.', 'Open a row to review details, research the company, or manage outreach.'],
+}
 const prospects = ref<Prospect[]>([])
 const search = ref('')
 const industry = ref('')
@@ -39,6 +44,12 @@ const columnMapping = ref<Record<ProspectImportField, string>>(emptyMapping())
 const importResult = ref('')
 type ProspectForm = { name: string; industry: string; website: string; address: string; employeeCount: string | number; employeeSize: string; contactName: string; contactEmail: string; contactPhone: string; notes: string; status: string }
 const statuses = [{ value: '', label: 'All statuses' }, { value: 'lead', label: 'Lead' }, { value: 'qualified', label: 'Qualified' }, { value: 'customer', label: 'Customer' }, { value: 'disqualified', label: 'Disqualified' }]
+const statusDescriptions = [
+  { label: 'Lead', description: 'Newly added and not yet evaluated.' },
+  { label: 'Qualified', description: 'Reviewed and appears to fit your target customer profile.' },
+  { label: 'Customer', description: 'Has purchased or is already a customer.' },
+  { label: 'Disqualified', description: 'Not a fit or no longer being pursued.' },
+]
 const form = ref<ProspectForm>(blank())
 function blank(): ProspectForm { return { name: '', industry: '', website: '', address: '', employeeCount: '', employeeSize: '', contactName: '', contactEmail: '', contactPhone: '', notes: '', status: 'lead' } }
 function emptyMapping(): Record<ProspectImportField, string> { return Object.fromEntries(importFields.map((field) => [field.key, ''])) as Record<ProspectImportField, string> }
@@ -94,7 +105,7 @@ async function archive(item: Prospect, event: Event) {
 <template>
   <section class="prospects-page">
     <header class="page-heading">
-      <div><p class="eyebrow">Prospect Management</p><h1>Target organizations</h1><p>Keep company and contact details ready for future outbound work.</p></div>
+      <div><p class="eyebrow">Prospect Management</p><div class="prospect-title-row"><h1>Target organizations</h1><PageHeaderHelp :help="pageHelp" /></div><p>Keep company and contact details ready for future outbound work.</p></div>
       <div class="prospect-actions"><BaseButton variant="secondary" @click="importOpen = true">Import Excel</BaseButton><BaseButton @click="form = blank(); editorOpen = true">Add Prospect</BaseButton></div>
     </header>
     <p v-if="notice" class="prospect-notice" role="status">{{ notice }}</p>
@@ -102,7 +113,7 @@ async function archive(item: Prospect, event: Event) {
     <div class="prospect-filters"><BaseInput v-model="search" label="Search prospects" type="search" placeholder="Company, industry, contact, website"/><BaseInput v-model="industry" label="Industry" placeholder="Filter by any industry"/><BaseSelect v-model="status" label="Status" :options="statuses"/></div>
     <div class="prospect-table-wrap">
       <table class="prospect-table"><thead><tr><th>Organization</th><th>Industry</th><th>Contact</th><th>Status</th><th>Source</th><th>Actions</th></tr></thead>
-        <tbody><tr v-for="item in prospects" :key="item.id" tabindex="0" @click="router.push(`/prospects/${item.id}`)" @keydown.enter="router.push(`/prospects/${item.id}`)"><td><strong>{{ item.name }}</strong><small>{{ item.website || item.address || 'No website or address' }}</small></td><td>{{ item.industry || '—' }}</td><td>{{ item.contactName || '—' }}<small>{{ item.contactEmail || item.contactPhone || '' }}</small></td><td><span class="prospect-status">{{ statusLabel(item.status) }}</span></td><td>{{ item.source === 'excel_import' ? 'Excel import' : 'Manual' }}</td><td class="row-actions"><button type="button" @click.stop="router.push(`/prospects/${item.id}`)">View / Edit</button><button type="button" @click="archive(item, $event)">Archive</button></td></tr>
+        <tbody><tr v-for="item in prospects" :key="item.id" tabindex="0" @click="router.push(`/prospects/${item.id}`)" @keydown.enter="router.push(`/prospects/${item.id}`)"><td><strong>{{ item.name }}</strong><small>{{ item.website || item.address || 'No website or address' }}</small></td><td>{{ item.industry || '—' }}</td><td>{{ item.contactName || '—' }}<small>{{ item.contactEmail || item.contactPhone || '' }}</small></td><td><span class="prospect-status">{{ statusLabel(item.status) }}</span></td><td>{{ item.source === 'excel_import' ? 'Excel import' : 'Manual' }}</td><td class="row-actions"><button type="button" class="row-action-view" @click.stop="router.push(`/prospects/${item.id}`)">View / Edit</button><button type="button" class="row-action-archive" @click="archive(item, $event)">Archive</button></td></tr>
         <tr v-if="!loading && !error && prospects.length === 0"><td colspan="6" class="prospect-empty">No prospects match these filters. Add one manually or import an Excel workbook.</td></tr>
         <tr v-if="loading"><td colspan="6" class="prospect-empty">Loading prospects…</td></tr></tbody>
       </table>
@@ -110,7 +121,9 @@ async function archive(item: Prospect, event: Event) {
     <div v-if="hasMore && prospects.length" class="prospect-more"><BaseButton variant="secondary" :loading="loading" @click="loadMore">Load more prospects</BaseButton></div>
     <BaseModal v-model="editorOpen" title="Add prospect" description="Enter the organization details you have. Unknown information can stay blank." size="wide">
       <form class="prospect-form" @submit.prevent="save">
-        <BaseInput v-model="form.name" label="Company name" required maxlength="240"/><BaseInput v-model="form.industry" label="Industry / sector"/><BaseInput v-model="form.website" label="Website" type="url"/><BaseInput v-model="form.address" label="Address"/><BaseInput :model-value="form.employeeCount" label="Approximate employee count" type="number" min="0" @update:model-value="form.employeeCount = String($event)"/><BaseInput v-model="form.employeeSize" label="Employee size" placeholder="e.g. 50–200"/><BaseInput v-model="form.contactName" label="Contact name"/><BaseInput v-model="form.contactEmail" label="Contact email" type="email"/><BaseInput v-model="form.contactPhone" label="Contact phone"/><BaseSelect v-model="form.status" label="Prospect status" :options="statuses.slice(1)"/><div class="prospect-form__wide"><BaseTextarea v-model="form.notes" label="Notes" :rows="3"/></div>
+        <BaseInput v-model="form.name" label="Company name" required maxlength="240"/><BaseInput v-model="form.industry" label="Industry / sector"/><BaseInput v-model="form.website" label="Website" type="url"/><BaseInput v-model="form.address" label="Address"/><BaseInput :model-value="form.employeeCount" label="Approximate employee count" type="number" min="0" @update:model-value="form.employeeCount = String($event)"/><BaseInput v-model="form.contactName" label="Contact name"/><BaseInput v-model="form.contactEmail" label="Contact email" type="email"/><BaseInput v-model="form.contactPhone" label="Contact phone"/><BaseSelect v-model="form.status" label="Prospect status" :options="statuses.slice(1)"/>
+        <dl class="prospect-status-help prospect-form__wide" aria-label="Prospect status descriptions"><div v-for="item in statusDescriptions" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.description }}</dd></div></dl>
+        <div class="prospect-form__wide"><BaseTextarea v-model="form.notes" label="Notes" :rows="3"/></div>
         <div class="prospect-form__wide prospect-modal-footer"><BaseButton variant="secondary" @click="editorOpen = false">Cancel</BaseButton><BaseButton type="submit" :loading="saving">Save prospect</BaseButton></div>
       </form>
     </BaseModal>
@@ -142,7 +155,7 @@ async function archive(item: Prospect, event: Event) {
 </template>
 
 <style scoped>
-.prospects-page{display:grid;gap:24px}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.page-heading h1{margin:4px 0 8px;font-size:32px}.page-heading p{margin:0;color:#687581}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#60716e}.prospect-actions,.prospect-modal-footer{display:flex;gap:10px;justify-content:flex-end}.prospect-filters{display:grid;grid-template-columns:minmax(240px,2fr) 1fr 1fr;gap:16px}.prospect-table-wrap,.import-preview{overflow:auto;border:1px solid #e1e7e5;border-radius:14px;background:white}.prospect-table{width:100%;border-collapse:collapse;text-align:left;min-width:720px}.prospect-table th,.prospect-table td{padding:14px 16px;border-bottom:1px solid #edf0ef;font-size:14px}.prospect-table th{color:#687581;font-weight:600;background:#fafcfb}.prospect-table tbody tr[tabindex]{cursor:pointer}.prospect-table tbody tr[tabindex]:hover{background:#f7faf8}.prospect-table small{display:block;color:#77827f;margin-top:4px}.prospect-status{padding:4px 9px;border-radius:99px;background:#edf4f0;font-size:12px}.prospect-empty{text-align:center;color:#697672;padding:36px!important}.prospect-notice{color:#186149}.prospect-error{color:#a13c36}.prospect-form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.prospect-form__wide{grid-column:1/-1}.prospect-import{display:grid;gap:16px}.file-field{display:grid;gap:8px;font-size:13px;font-weight:600}.duplicate-warning{color:#8b5a11}.import-summary{margin:0;color:#3e5a4e}@media(max-width:760px){.page-heading{align-items:flex-start;flex-direction:column}.prospect-filters,.prospect-form{grid-template-columns:1fr}.prospect-form__wide{grid-column:auto}.prospect-actions{width:100%}}
+.prospects-page{display:grid;gap:24px}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.page-heading h1{margin:4px 0 8px;font-size:32px}.prospect-title-row{display:flex;align-items:center;gap:10px}.page-heading p{margin:0;color:#687581}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#60716e}.prospect-actions,.prospect-modal-footer{display:flex;gap:10px;justify-content:flex-end}.prospect-filters{display:grid;grid-template-columns:minmax(240px,2fr) 1fr 1fr;gap:16px}.prospect-table-wrap,.import-preview{overflow:auto;border:1px solid #e1e7e5;border-radius:14px;background:white}.prospect-table{width:100%;border-collapse:collapse;text-align:left;min-width:720px}.prospect-table th,.prospect-table td{padding:14px 16px;border-bottom:1px solid #edf0ef;font-size:14px}.prospect-table th{color:#687581;font-weight:600;background:#fafcfb}.prospect-table tbody tr[tabindex]{cursor:pointer}.prospect-table tbody tr[tabindex]:hover{background:#f7faf8}.prospect-table small{display:block;color:#77827f;margin-top:4px}.prospect-status{padding:4px 9px;border-radius:99px;background:#edf4f0;font-size:12px}.prospect-empty{text-align:center;color:#697672;padding:36px!important}.prospect-notice{color:#186149}.prospect-error{color:#a13c36}.prospect-form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.prospect-form__wide{grid-column:1/-1}.prospect-status-help{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0;padding:14px 16px;border:1px solid #e1e7e5;border-radius:12px;background:#fafcfb}.prospect-status-help div{display:grid;gap:3px}.prospect-status-help dt{font-size:13px;font-weight:600;color:#34423d}.prospect-status-help dd{margin:0;color:#687581;font-size:12px;line-height:1.45}.prospect-import{display:grid;gap:16px}.file-field{display:grid;gap:8px;font-size:13px;font-weight:600}.duplicate-warning{color:#8b5a11}.import-summary{margin:0;color:#3e5a4e}@media(max-width:760px){.page-heading{align-items:flex-start;flex-direction:column}.prospect-filters,.prospect-form{grid-template-columns:1fr}.prospect-form__wide{grid-column:auto}.prospect-status-help{grid-template-columns:1fr}.prospect-actions{width:100%}}
 .prospect-more{display:flex;justify-content:center}
-.row-actions{white-space:nowrap}.row-actions button{border:0;background:transparent;color:#356653;text-decoration:underline;cursor:pointer;padding:5px}.row-actions button:last-child{color:#8b423d}
+.row-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}.row-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:6px 11px;border:1px solid #d8e4dc;border-radius:8px;background:#f2f7f4;color:#2f614b;font:inherit;font-size:13px;font-weight:600;line-height:1.2;text-decoration:none;cursor:pointer;transition:background-color .15s ease,border-color .15s ease,transform .15s ease}.row-action-view:hover{border-color:#b8cebf;background:#e8f1eb}.row-actions .row-action-archive{border-color:#ead8d6;background:#fff;color:#93453f}.row-actions .row-action-archive:hover{border-color:#d9b9b5;background:#fff4f2}.row-actions button:active{transform:translateY(1px)}.row-actions button:focus-visible{outline:2px solid #3c765a;outline-offset:2px}
 </style>

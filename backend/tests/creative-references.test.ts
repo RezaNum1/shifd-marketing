@@ -11,6 +11,8 @@ import { createCreativeReferenceBatch, listCreativeReferenceBatches, openCreativ
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderRequest, type AiProviderResult } from '../src/modules/ai/provider.js'
 import { CREATIVE_REFERENCE_CONCEPT_OPERATION, CREATIVE_REFERENCE_MODULE, CREATIVE_REFERENCE_PROMPT_REFERENCE, CREATIVE_REFERENCE_PROMPT_VERSION } from '../src/modules/ai/constants.js'
 import { provisionCompanyContext } from '../src/modules/context/service.js'
+import { readCanvaDesignLink, removeCanvaDesignLink, saveCanvaDesignLink } from '../src/modules/content/service.js'
+import { readContent } from '../src/modules/content/service.js'
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL
 if (process.env.REQUIRE_DATABASE === '1' && !testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required for Creative Reference database tests.')
@@ -23,10 +25,10 @@ class FakePlanner implements AiProvider {
   isConfigured() { return true }
   async generate(_request: AiProviderRequest): Promise<AiProviderResult> {
     return {
-      text: JSON.stringify({ concepts: [
-        { conceptName: 'Workflow map', rationale: 'Clarifies the operating flow.', layoutNotes: 'Three-step horizontal process.', visualFocus: 'Connected workflow nodes.', typographyDirection: 'Short bold labels with generous spacing.', imagePrompt: 'A workflow map with three connected stages.' },
-        { conceptName: 'Before and after', rationale: 'Makes the transformation visible.', layoutNotes: 'Split composition with a clear center transition.', visualFocus: 'Contrast between fragmented and aligned work.', typographyDirection: 'Compact labels anchored to each side.', imagePrompt: 'A before-and-after workflow transformation.' },
-        { conceptName: 'Interface lens', rationale: 'Connects the idea to product behavior.', layoutNotes: 'Product-inspired frame with a focused central panel.', visualFocus: 'A calm interface-like operating view.', typographyDirection: 'Minimal interface labels and one focal heading.', imagePrompt: 'A product interface-inspired workflow composition.' },
+      text: JSON.stringify({ carouselOutline: [], concepts: [
+        { conceptName: 'Workflow map', templateType: 'educational', rationale: 'Clarifies the operating flow.', layoutNotes: 'Three-step horizontal process.', visualFocus: 'Connected workflow nodes.', typographyDirection: 'Short bold labels with generous spacing.', canvaBrief: 'Place the headline above a simple flow.', assetSearchKeywords: ['workflow diagram', 'connected nodes', 'dot grid'], slideNumber: 0, slideCopy: '', imagePrompt: 'A workflow map with three connected stages.' },
+        { conceptName: 'Before and after', templateType: 'product_showcase', rationale: 'Makes the transformation visible.', layoutNotes: 'Split composition with a clear center transition.', visualFocus: 'Contrast between fragmented and aligned work.', typographyDirection: 'Compact labels anchored to each side.', canvaBrief: 'Use a two-column comparison.', assetSearchKeywords: ['flowchart arrows', 'document line icon', 'mesh gradient'], slideNumber: 0, slideCopy: '', imagePrompt: 'A before-and-after workflow transformation.' },
+        { conceptName: 'Interface lens', templateType: 'process_insight', rationale: 'Connects the idea to product behavior.', layoutNotes: 'Product-inspired frame with a focused central panel.', visualFocus: 'A calm interface-like operating view.', typographyDirection: 'Minimal interface labels and one focal heading.', canvaBrief: 'Keep one focal panel with short labels.', assetSearchKeywords: ['dashboard mockup', 'browser window', 'geometric outline'], slideNumber: 0, slideCopy: '', imagePrompt: 'A product interface-inspired workflow composition.' },
       ] }),
       inputTokens: 10,
       outputTokens: 20,
@@ -38,9 +40,11 @@ class FakePlanner implements AiProvider {
 class FakeImageProvider implements AiImageProvider {
   constructor(private readonly failAt: number | null = null) {}
   calls = 0
+  requests: AiImageProviderRequest[] = []
   isConfigured() { return true }
-  async generateImage(_request: AiImageProviderRequest): Promise<AiImageProviderResult> {
+  async generateImage(request: AiImageProviderRequest): Promise<AiImageProviderResult> {
     this.calls += 1
+    this.requests.push(request)
     if (this.failAt === 0 || this.failAt === this.calls) throw new AiProviderFailure('provider', 'fake image failure', `fake-image-${this.calls}`)
     return { base64: pngBase64, providerRequestId: `fake-image-${this.calls}`, inputTokens: null, outputTokens: null }
   }
@@ -56,7 +60,7 @@ runIntegration('Creative Reference database integration', () => {
   let actorId = ''
   let contentId: string | null = null
   const pillarCode = 'educational'
-  const input = { platform: 'instagram' as const, style: 'modern_minimal' as const, mood: 'professional' as const, aspectRatio: 'square_1_1' as const, additionalInstruction: null }
+  const input = { platform: 'instagram' as const, format: 'single_image' as const, slideCount: 5, style: 'modern_minimal' as const, mood: 'professional' as const, aspectRatio: 'square_1_1' as const, additionalInstruction: null }
 
   beforeAll(async () => {
     storageRoot = await mkdtemp(join(tmpdir(), 'shifd-creative-references-'))
@@ -91,6 +95,8 @@ runIntegration('Creative Reference database integration', () => {
             await tx.creativeReferenceBatch.deleteMany({ where: { companyId: fixtureCompanyId } })
             await tx.aiRequestLog.deleteMany({ where: { companyId: fixtureCompanyId } })
             await tx.contentBrief.deleteMany({ where: { content: { companyId: fixtureCompanyId } } })
+            await tx.variantAsset.deleteMany({ where: { asset: { companyId: fixtureCompanyId } } })
+            await tx.creativeAsset.deleteMany({ where: { companyId: fixtureCompanyId } })
             await tx.platformVariant.deleteMany({ where: { content: { companyId: fixtureCompanyId } } })
             await tx.content.deleteMany({ where: { companyId: fixtureCompanyId } })
             await tx.productProfile.deleteMany({ where: { product: { companyId: fixtureCompanyId } } })
@@ -153,6 +159,12 @@ runIntegration('Creative Reference database integration', () => {
     expect(await prisma.creativeReferenceBatch.count({ where: { contentId: contentId! } })).toBe(2)
     expect(await prisma.promptVersion.count({ where: { module: 'M2', operation: CREATIVE_REFERENCE_CONCEPT_OPERATION, version: CREATIVE_REFERENCE_PROMPT_VERSION } })).toBe(1)
 
+    const canvaReadyImages = new FakeImageProvider()
+    const canvaReady = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), canvaReadyImages, storage, companyId, actorId, contentId!, { ...input, generationMode: 'canva_ready' }, 'batch-canva-ready')
+    expect(canvaReady.body.data.batch).toMatchObject({ generationMode: 'canva_ready', status: 'completed' })
+    expect(canvaReadyImages.calls).toBe(3)
+    expect(canvaReadyImages.requests.every((request) => request.background === 'transparent' && request.outputFormat === 'png')).toBe(true)
+
     const partial = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(2), storage, companyId, actorId, contentId!, input, 'batch-partial')
     expect(partial.body.data.batch.status).toBe('partial')
     expect(partial.body.data.batch.references).toHaveLength(2)
@@ -160,6 +172,41 @@ runIntegration('Creative Reference database integration', () => {
     await expect(createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(0), storage, companyId, actorId, contentId!, input, 'batch-failed')).rejects.toMatchObject({ code: 'AI_PROVIDER_ERROR' })
     const failed = await prisma.creativeReferenceBatch.findFirstOrThrow({ where: { contentId: contentId!, status: 'failed' }, orderBy: { createdAt: 'desc' } })
     expect(await prisma.creativeReference.count({ where: { batchId: failed.id } })).toBe(0)
-    expect(await listCreativeReferenceBatches(prisma, companyId, contentId!)).toHaveLength(4)
+    expect(await listCreativeReferenceBatches(prisma, companyId, contentId!)).toHaveLength(5)
+  })
+
+  it('persists one audited Canva link per Content, supports update and removal, and enforces company ownership', async () => {
+    const editorialState = await prisma.content.findUniqueOrThrow({ where: { id: contentId! }, select: { version: true, editorialStage: true, editorialRevision: true, designStatus: true, currentApprovalId: true } })
+    expect(await readCanvaDesignLink(prisma, companyId, contentId!)).toBeNull()
+    const firstUrl = 'https://www.canva.com/design/DAGfirst/view'
+    const first = await saveCanvaDesignLink(prisma, companyId, contentId!, actorId, firstUrl)
+    expect(first).toMatchObject({ contentId, companyId, url: firstUrl, createdBy: { id: actorId }, updatedBy: { id: actorId } })
+    expect(first?.createdAt).toBeTruthy()
+    expect(first?.updatedAt).toBeTruthy()
+    expect(await readCanvaDesignLink(prisma, companyId, contentId!)).toEqual(first)
+
+    const variant = await prisma.platformVariant.findFirstOrThrow({ where: { contentId: contentId!, platform: 'instagram' } })
+    const asset = await prisma.creativeAsset.create({ data: { companyId, uploadedBy: actorId, purpose: 'creative', fileName: 'final.png', storageKey: `canva-link-final-${Date.now()}`, mimeType: 'image/png', sizeBytes: BigInt(100), width: 10, height: 10, checksumSha256: 'a'.repeat(64) } })
+    await prisma.variantAsset.create({ data: { variantId: variant.id, assetId: asset.id, sortOrder: 0 } })
+
+    const secondUrl = 'https://www.canva.com/design/DAGsecond/edit?utm_content=campaign'
+    const updated = await saveCanvaDesignLink(prisma, companyId, contentId!, actorId, secondUrl)
+    expect(updated?.url).toBe(secondUrl)
+    expect(updated?.createdAt).toBe(first?.createdAt)
+    const content = await readContent(prisma, companyId, contentId!, config)
+    expect(content.canvaDesignLink?.url).toBe(secondUrl)
+    expect(content.variants.find((item) => item.platform === 'instagram')?.ownAssets.map((item) => item.asset.id)).toContain(asset.id)
+    expect(content.designStatus).toBe('not_started')
+
+    await expect(readCanvaDesignLink(prisma, otherCompanyId, contentId!)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(saveCanvaDesignLink(prisma, otherCompanyId, contentId!, actorId, firstUrl)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    const removed = await removeCanvaDesignLink(prisma, companyId, contentId!, actorId)
+    expect(removed?.url).toBeNull()
+    expect(removed?.updatedBy.id).toBe(actorId)
+    expect(await readCanvaDesignLink(prisma, companyId, contentId!)).toEqual(removed)
+    expect(await prisma.creativeAsset.count({ where: { id: asset.id, companyId } })).toBe(1)
+    expect(await prisma.variantAsset.count({ where: { assetId: asset.id, variantId: variant.id } })).toBe(1)
+    expect(await prisma.content.findUniqueOrThrow({ where: { id: contentId! }, select: { version: true, editorialStage: true, editorialRevision: true, designStatus: true, currentApprovalId: true } })).toEqual(editorialState)
   })
 })

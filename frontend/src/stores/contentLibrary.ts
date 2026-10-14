@@ -99,6 +99,33 @@ export const useContentLibraryStore = defineStore('contentLibrary', () => {
     }
   }
 
+  async function remove(id: string) {
+    error.value = ''
+    let version = etagFor(id)
+    if (!version) {
+      await getById(id, true)
+      version = etagFor(id)
+    }
+    if (!version) {
+      error.value = 'Unable to delete this content because its latest version could not be loaded. Refresh the library and try again.'
+      return false
+    }
+    try {
+      await contentApi.deleteContent(id, version)
+      records.value = records.value.filter((record) => record.id !== id)
+      delete canonical.value[id]
+      delete etags.value[id]
+      publicationRecords.value = publicationRecords.value.filter((publication) => publication.contentId !== id)
+      return true
+    } catch (reason: unknown) {
+      error.value = reason instanceof DOMException && reason.name === 'TimeoutError'
+        ? 'Deletion timed out while waiting for the server. Try again; if this continues, check the backend database connection.'
+        : errorMessage(reason, 'Unable to delete this content.')
+      if (error.value.includes('changed elsewhere')) await getById(id, true)
+      return false
+    }
+  }
+
   async function markPublished(contentId: string, platform: ContentPlatform, publication: PublicationInput) {
     const value = canonical.value[contentId] ?? await getById(contentId)
     const variant = value?.variants.find((item) => item.platform === platform)
@@ -154,7 +181,7 @@ export const useContentLibraryStore = defineStore('contentLibrary', () => {
     } catch { /* history is secondary to the canonical content read */ }
   }
 
-  return { records, canonical, etags, publicationRecords, loading, loaded, error, load, getById, getCanonical, etagFor, upsert, duplicate, archive, upsertFromWorkflow, syncScheduledWorkflow, markPublished, getPublicationRecord, getPublishedPublicationRecords, replaceCanonical }
+  return { records, canonical, etags, publicationRecords, loading, loaded, error, load, getById, getCanonical, etagFor, upsert, duplicate, archive, remove, upsertFromWorkflow, syncScheduledWorkflow, markPublished, getPublicationRecord, getPublishedPublicationRecords, replaceCanonical }
 })
 
 function publicationRecord(value: BackendContent['publications'][number]): PublicationRecord {

@@ -17,6 +17,14 @@ import InlineAlert from '../components/ui/InlineAlert.vue'
 const router = useRouter()
 const workflow = useContentWorkflowStore()
 const overview = useOverviewStore()
+const pageHelp = {
+  purpose: 'See the current state of your marketing work in one place, including upcoming posts, items that need attention, and recent performance.',
+  steps: [
+    'Review the attention items first and open anything that needs action.',
+    'Check upcoming and recently published content to follow your schedule.',
+    'Use the shortcuts on a card to continue in the relevant area.',
+  ],
+}
 
 interface CalendarSummaryEntry {
   contentId: string
@@ -54,7 +62,6 @@ const performanceSnapshot = computed(() => {
   return { reach: snapshot?.summary.latestWeeklyReach ?? null, impressions: snapshot?.summary.impressions ?? null, engagementRate: snapshot?.summary.engagementRate ?? null, followers: snapshot?.followers ?? [] }
 })
 const thisWeek = computed(() => report.value?.thisWeek.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
-const thisWeekLabel = computed(() => thisWeek.value.length ? thisWeek.value.map((item) => `${platformLabel(item.platform)} ${item.percent.toFixed(1)}%`).join(' · ') : '—')
 
 const attentionItems = computed(() => {
   const items: { label: string; detail: string; icon: 'alert' | 'calendar' | 'idea' | 'company'; to: string }[] = []
@@ -87,7 +94,7 @@ onMounted(() => { void overview.load(true) })
 
 <template>
   <div class="page-stack overview-page">
-    <PageHeader title="Overview" description="Your marketing execution at a glance." :breadcrumbs="[{ label: 'Platform' }, { label: 'Overview' }]">
+    <PageHeader title="Overview" description="Your marketing execution at a glance." :breadcrumbs="[{ label: 'Platform' }, { label: 'Overview' }]" :help="pageHelp">
       <template #actions>
         <BaseButton variant="secondary" @click="router.push('/content/ideas')"><AppIcon name="idea" :size="16" />Add Idea</BaseButton>
         <BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton>
@@ -101,7 +108,7 @@ onMounted(() => { void overview.load(true) })
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Planned</span><AppIcon name="calendar" :size="17" /></div><strong>{{ report?.plannedPlatformSchedules ?? 0 }}</strong><small>Platform schedules not yet published</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Published Posts</span><AppIcon name="check" :size="17" /></div><strong>{{ publishedPosts }}</strong><small>Recorded platform publications</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Needs Review</span><AppIcon name="alert" :size="17" /></div><strong>{{ needsReview.length }}</strong><small>Ready for review or needs revision</small></div></BaseCard>
-      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Posting Consistency</span><AppIcon name="chart" :size="17" /></div><strong>{{ thisWeekLabel }}</strong><small>Backend report by platform</small></div></BaseCard>
+      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Posting Consistency</span><AppIcon name="chart" :size="17" /></div><strong class="overview-kpi__consistency"><span v-for="item in thisWeek" :key="item.platform">{{ platformLabel(item.platform) }} {{ item.percent.toFixed(1) }}%</span><span v-if="!thisWeek.length">—</span></strong><small>Backend report by platform</small></div></BaseCard>
     </section>
 
     <section class="overview-two-column">
@@ -140,7 +147,8 @@ onMounted(() => { void overview.load(true) })
 .overview-kpi__content { display: grid; gap: 10px; align-content: start; min-height: 108px; }
 .overview-kpi__label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-subtle); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .overview-kpi__label .app-icon { color: var(--color-primary); }
-.overview-kpi strong { display: block; font-size: 28px; line-height: 1.1; letter-spacing: -.03em; }
+.overview-kpi strong { display: block; min-width: 0; font-size: 22px; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.overview-kpi__consistency { display: grid; gap: 2px; }
 .overview-kpi small, .upcoming-item small, .recent-item small { color: var(--color-muted); font-size: 11px; line-height: 1.4; }
 .overview-kpi small { display: block; max-width: 24ch; }
 .overview-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

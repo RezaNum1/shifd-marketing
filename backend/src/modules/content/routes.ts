@@ -6,8 +6,8 @@ import { OBJECTIVES, PILLARS } from '../context/constants.js'
 import { allowedKeys, enumValue, object, optionalText, requiredText, textList } from '../context/normalize.js'
 import { DESIGN_STATUSES, IDEA_CONTEXT_TYPES, IDEA_STATUSES, PLATFORM_CODES, PROGRESS_STAGES, type DesignStatus, type IdeaContextType, type IdeaStatus, type ObjectiveCode, type PlatformCode, type ProgressStage } from './constants.js'
 import {
-  archiveContent, archiveIdea, createContent, createIdea, deleteIdea, duplicateContent, duplicateIdea, listContentEvents,
-  listContents, listIdeas, progressContent, readContent, restoreIdea, type BriefInput, type ContentCreateInput,
+  archiveContent, archiveIdea, createContent, createIdea, deleteContent, deleteIdea, duplicateContent, duplicateIdea, listContentEvents,
+  listContents, listIdeas, progressContent, readCanvaDesignLink, readContent, removeCanvaDesignLink, restoreIdea, saveCanvaDesignLink, normalizeCanvaDesignUrl, type BriefInput, type ContentCreateInput,
   type ContentPatchInput, type IdeaInput, type MasterInput, type VariantCopyInput, type VisualDirectionInput, updateContent,
   updateIdea, updateVariantCopy,
 } from './service.js'
@@ -18,6 +18,7 @@ import { adaptContent } from '../ai/adapt.js'
 import { brandCheckContent } from '../ai/brand.js'
 import { approveContent, listReviewActions, recordOverride, requestRevision, type ReviewChecklist } from '../review/service.js'
 import type { Clock } from '../../shared/time/clock.js'
+import type { AssetStorage } from '../assets/storage.js'
 
 const ideaKeys = ['title', 'contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'notes', 'targetIndustry', 'targetProspectId', 'contentObjective', 'evidenceReferences'] as const
 const briefKeys = ['contextType', 'productId', 'pillarCode', 'objective', 'targetAudience', 'topic', 'angle', 'additionalInstructions'] as const
@@ -25,7 +26,7 @@ const masterKeys = ['title', 'coreMessage', 'hook', 'body', 'cta'] as const
 const visualDirectionKeys = ['format', 'concept', 'structure', 'notes'] as const
 const variantCopyKeys = ['copy', 'cta', 'hashtags', 'visualRecommendation'] as const
 
-export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider; clock: Clock }) {
+export async function contentRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider; storage: AssetStorage; clock: Clock }) {
   app.get('/content-ideas', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = queryObject(request)
@@ -177,6 +178,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
       app.prisma,
       options.config,
       options.aiProvider,
+      options.storage,
       auth.user.companyId,
       auth.user.id,
       routeId(request),
@@ -258,6 +260,27 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     return reply.send({ data: content })
   })
 
+  app.get('/contents/:id/canva-design-link', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    return reply.send({ data: await readCanvaDesignLink(app.prisma, auth.user.companyId, routeId(request)) })
+  })
+
+  app.put('/contents/:id/canva-design-link', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const url = parseCanvaDesignLinkInput(request.body)
+    return reply.send({ data: await saveCanvaDesignLink(app.prisma, auth.user.companyId, routeId(request), auth.user.id, url) })
+  })
+
+  app.delete('/contents/:id/canva-design-link', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    requireEmptyBody(request.body)
+    return reply.send({ data: await removeCanvaDesignLink(app.prisma, auth.user.companyId, routeId(request), auth.user.id) })
+  })
+
   app.patch('/contents/:id', async (request, reply) => {
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
@@ -308,6 +331,14 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     return reply.send({ data: content })
   })
 
+  app.delete('/contents/:id', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    await deleteContent(app.prisma, auth.user.companyId, routeId(request), ifMatch(request))
+    return reply.status(204).send()
+  })
+
   app.get('/contents/:id/events', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = queryObject(request)
@@ -344,6 +375,12 @@ function parseIdeaInput(value: unknown): IdeaInput {
     contentObjective: optionalText(input.contentObjective, 'contentObjective'),
     evidenceReferences: parseEvidenceReferences(input.evidenceReferences),
   }
+}
+
+function parseCanvaDesignLinkInput(value: unknown) {
+  const body = object(value, 'Canva design link request')
+  allowedKeys(body, ['url'], 'body')
+  return normalizeCanvaDesignUrl(body.url)
 }
 
 function parseEvidenceReferences(value: unknown): import('@prisma/client').Prisma.InputJsonValue | null {
@@ -481,7 +518,7 @@ function parseEnabledPlatforms(value: unknown, path: string): PlatformCode[] {
 
 function parseInputProductId(value: unknown, contextType: IdeaContextType, path = 'productId'): string | null {
   const productId = optionalResourceId(value, path)
-  if (contextType === 'company' && productId !== null) throw validationError('Company context cannot select a Product.', { [path]: 'Remove the Product for Company context.' })
+  if (contextType !== 'product' && productId !== null) throw validationError('Only Product context can select a Product.', { [path]: 'Remove the Product unless Product context is selected.' })
   if (contextType === 'product' && productId === null) throw validationError('Product context requires a Product.', { [path]: 'Choose an active Product.' })
   return productId
 }

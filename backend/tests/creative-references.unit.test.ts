@@ -6,10 +6,15 @@ import { CREATIVE_REFERENCE_CONCEPT_OPERATION, CREATIVE_REFERENCE_MODULE, CREATI
 
 const concept = (name: string) => ({
   conceptName: name,
+  templateType: name === 'Workflow' ? 'educational' : name === 'Before and After' ? 'product_showcase' : 'process_insight',
   rationale: `${name} rationale`,
   layoutNotes: `${name} layout`,
   visualFocus: `${name} focus`,
   typographyDirection: `${name} typography`,
+  canvaBrief: `${name} Canva steps`,
+  assetSearchKeywords: ['workflow diagram', 'dot grid', 'mesh gradient'],
+  slideNumber: 0,
+  slideCopy: '',
   imagePrompt: `${name} image prompt`,
 })
 
@@ -18,22 +23,22 @@ describe('AI visual reference concept validation', () => {
     expect(CREATIVE_REFERENCE_MODULE).toBe('M2')
     expect(CREATIVE_REFERENCE_MODULE).not.toBe('M6')
     expect(CREATIVE_REFERENCE_CONCEPT_OPERATION).toBe('creative_reference.concepts')
-    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v1')
-    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v1')
-    expect(CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION).toBe('m2.creative_reference_concepts.v1')
+    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v3')
+    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v3')
+    expect(CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION).toBe('m2.creative_reference_concepts.v3')
   })
 
   it('accepts exactly three distinct structured concepts', () => {
-    expect(parseCreativeReferenceConcepts(JSON.stringify({ concepts: [concept('Workflow'), concept('Before and After'), concept('Product Interface')] }))).toHaveLength(3)
+    expect(parseCreativeReferenceConcepts(JSON.stringify({ carouselOutline: [], concepts: [concept('Workflow'), concept('Before and After'), concept('Product Interface')] }), { format: 'single_image', slideCount: 5, platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'portrait_4_5', additionalInstruction: null })).toHaveLength(3)
   })
 
   it.each([
-    JSON.stringify({ concepts: [concept('A'), concept('B')] }),
-    JSON.stringify({ concepts: [concept('A'), concept('A'), concept('B')] }),
-    JSON.stringify({ concepts: [concept('A'), { ...concept('B'), imagePrompt: '' }, concept('C')] }),
+    JSON.stringify({ carouselOutline: [], concepts: [concept('A'), concept('B')] }),
+    JSON.stringify({ carouselOutline: [], concepts: [concept('A'), concept('A'), concept('B')] }),
+    JSON.stringify({ carouselOutline: [], concepts: [concept('A'), { ...concept('B'), imagePrompt: '' }, concept('C')] }),
     '{not-json}',
   ])('rejects invalid planner output', (value) => {
-    expect(() => parseCreativeReferenceConcepts(value)).toThrow()
+    expect(() => parseCreativeReferenceConcepts(value, { format: 'single_image', slideCount: 5, platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'portrait_4_5', additionalInstruction: null })).toThrow()
   })
 
   it('persists the planner log before the batch FK and never calls the provider after pre-provider persistence fails', async () => {
@@ -53,6 +58,11 @@ describe('AI visual reference concept validation', () => {
       outputSchemaVersion: CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION,
     }
     const tx = {
+      promptVersion: {
+        findUnique: async () => null,
+        updateMany: async () => ({ count: 0 }),
+        create: async () => promptVersion,
+      },
       aiRequestLog: { create: async () => { order.push('ai-log') } },
       creativeReferenceBatch: { create: async () => { order.push('batch'); throw new Error('simulated persistence failure') } },
       requestIdempotency: { create: async () => { order.push('idempotency') } },
@@ -97,7 +107,7 @@ describe('AI visual reference concept validation', () => {
       companyId,
       actorId,
       contentId,
-      { platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'square_1_1', additionalInstruction: null },
+      { platform: 'instagram', format: 'single_image', slideCount: 5, style: 'modern_minimal', mood: 'professional', aspectRatio: 'square_1_1', additionalInstruction: null },
       'fk-order-regression',
     )).rejects.toThrow('simulated persistence failure')
 

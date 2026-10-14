@@ -72,7 +72,7 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
     },
   },
   [M4_OUTPUT_SCHEMA_VERSION]: {
-    name: 'm4_brand_check_v1',
+    name: 'm4_brand_check_v3',
     schema: {
       type: 'object',
       additionalProperties: false,
@@ -97,31 +97,37 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
     },
   },
   [CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION]: {
-    name: 'm2_creative_reference_concepts_v1',
+    name: 'm2_creative_reference_concepts_v3',
     schema: {
       type: 'object',
       additionalProperties: false,
       properties: {
+        carouselOutline: { type: 'array', maxItems: 10, items: { type: 'string' } },
         concepts: {
           type: 'array',
-          minItems: 3,
-          maxItems: 3,
+          minItems: 1,
+          maxItems: 10,
           items: {
             type: 'object',
             additionalProperties: false,
             properties: {
               conceptName: { type: 'string' },
+              templateType: { type: 'string', enum: ['educational', 'product_showcase', 'process_insight', 'process_carousel'] },
               rationale: { type: 'string' },
               layoutNotes: { type: 'string' },
               visualFocus: { type: 'string' },
               typographyDirection: { type: 'string' },
+              canvaBrief: { type: 'string' },
+              assetSearchKeywords: { type: 'array', minItems: 3, maxItems: 8, items: { type: 'string' } },
+              slideNumber: { type: 'integer', minimum: 0, maximum: 10 },
+              slideCopy: { type: 'string' },
               imagePrompt: { type: 'string' },
             },
-            required: ['conceptName', 'rationale', 'layoutNotes', 'visualFocus', 'typographyDirection', 'imagePrompt'],
+            required: ['conceptName', 'templateType', 'rationale', 'layoutNotes', 'visualFocus', 'typographyDirection', 'canvaBrief', 'assetSearchKeywords', 'slideNumber', 'slideCopy', 'imagePrompt'],
           },
         },
       },
-      required: ['concepts'],
+      required: ['carouselOutline', 'concepts'],
     },
   },
   [M2_DISCOVERY_OUTPUT_SCHEMA_VERSION]: {
@@ -240,10 +246,18 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
     }
 
     try {
+      const content = [
+        { type: 'input_text' as const, text: request.userPrompt },
+        ...(request.images ?? []).map((image) => ({
+          type: 'input_image' as const,
+          image_url: `data:${image.mimeType};base64,${image.base64}`,
+          detail: 'low' as const,
+        })),
+      ]
       const { data: response, request_id: sdkRequestId } = await this.client.responses.create({
         model: request.model,
         instructions: request.systemPrompt,
-        input: [{ role: 'user', content: [{ type: 'input_text', text: request.userPrompt }] }],
+        input: [{ role: 'user', content }],
         max_output_tokens: request.maxOutputTokens,
         reasoning: { effort: 'low' },
         store: false,
@@ -255,7 +269,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
             schema: outputFormat.schema,
           },
         },
-      }, { timeout: request.timeoutMs, maxRetries: 0 }).withResponse()
+      }, { timeout: request.timeoutMs, maxRetries: 0, signal: request.signal }).withResponse()
 
       const providerRequestId = getProviderRequestId(sdkRequestId, response)
       if (response.status !== 'completed' || !Array.isArray(response.output) || response.output.length === 0 || hasRefusal(response.output)) {
@@ -275,6 +289,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
       return {
         text,
         inputTokens: safeTokenCount(response.usage?.input_tokens),
+        cachedInputTokens: safeTokenCount(response.usage?.input_tokens_details?.cached_tokens),
         outputTokens: safeTokenCount(response.usage?.output_tokens),
         providerRequestId,
       }
@@ -287,7 +302,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         throw new AiProviderFailure('rate_limit', 'The OpenAI provider rate limit was reached.', safeRequestId(error.requestID), safeDiagnostics(error))
       }
       const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
-      throw new AiProviderFailure('provider', 'The OpenAI provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : null)
+      throw new AiProviderFailure('provider', 'The OpenAI provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : safeUnknownDiagnostics(error))
     }
   }
 
@@ -336,6 +351,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         sources: sourceExtraction.sources,
         sourceDiagnostics: sourceExtraction.diagnostics,
         inputTokens: safeTokenCount(response.usage?.input_tokens),
+        cachedInputTokens: safeTokenCount(response.usage?.input_tokens_details?.cached_tokens),
         outputTokens: safeTokenCount(response.usage?.output_tokens),
         providerRequestId,
       }
@@ -371,7 +387,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
       if (typeof text !== 'string' || !text.trim()) throw new AiProviderFailure('invalid_response', `The provider returned an empty ${label} response.`, providerRequestId)
       try { if (!isRecord(JSON.parse(text))) throw new Error('invalid shape') } catch { throw new AiProviderFailure('invalid_response', `The provider returned invalid ${label} output.`, providerRequestId) }
       const sourceExtraction = collectSources(response)
-      return { text, sources: sourceExtraction.sources, sourceDiagnostics: sourceExtraction.diagnostics, inputTokens: safeTokenCount(response.usage?.input_tokens), outputTokens: safeTokenCount(response.usage?.output_tokens), providerRequestId }
+      return { text, sources: sourceExtraction.sources, sourceDiagnostics: sourceExtraction.diagnostics, inputTokens: safeTokenCount(response.usage?.input_tokens), cachedInputTokens: safeTokenCount(response.usage?.input_tokens_details?.cached_tokens), outputTokens: safeTokenCount(response.usage?.output_tokens), providerRequestId }
     } catch (error) {
       if (error instanceof AiProviderFailure) throw error
       if (error instanceof APIConnectionTimeoutError) throw new AiProviderFailure('timeout', 'The OpenAI provider request timed out.')
@@ -392,8 +408,9 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         quality: request.quality,
         size: request.size,
         output_format: request.outputFormat,
+        ...(request.background ? { background: request.background } : {}),
         n: 1,
-      }, { timeout: request.timeoutMs, maxRetries: 0 }).withResponse()
+      }, { timeout: request.timeoutMs, maxRetries: 0, signal: request.signal }).withResponse()
       const providerRequestId = nonBlankString(sdkRequestId)
       const base64 = response.data?.[0]?.b64_json
       if (typeof base64 !== 'string' || !base64.trim()) {
@@ -403,6 +420,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         base64,
         providerRequestId,
         inputTokens: safeTokenCount(response.usage?.input_tokens),
+        cachedInputTokens: safeTokenCount((response.usage?.input_tokens_details as { cached_tokens?: unknown } | undefined)?.cached_tokens),
         outputTokens: safeTokenCount(response.usage?.output_tokens),
       }
     } catch (error) {
@@ -410,7 +428,7 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
       if (error instanceof APIConnectionTimeoutError) throw new AiProviderFailure('timeout', 'The OpenAI image provider request timed out.')
       if (error instanceof APIError && error.status === 429) throw new AiProviderFailure('rate_limit', 'The OpenAI image provider rate limit was reached.', safeRequestId(error.requestID), safeDiagnostics(error))
       const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
-      throw new AiProviderFailure('provider', 'The OpenAI image provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : null)
+      throw new AiProviderFailure('provider', 'The OpenAI image provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : safeUnknownDiagnostics(error))
     }
   }
 }
@@ -515,6 +533,20 @@ function safeDiagnostics(error: APIError): AiProviderDiagnostics {
     errorCode: safeDiagnosticLabel(error.code),
     errorParam: safeDiagnosticLabel(error.param),
     providerMessage: safeProviderMessage(error),
+  }
+}
+
+function safeUnknownDiagnostics(error: unknown): AiProviderDiagnostics {
+  const name = error instanceof Error ? error.name : typeof error
+  const message = error instanceof Error ? error.message : String(error)
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : null
+  const providerMessage = [message, cause].filter(Boolean).join(' Cause: ').replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]').replace(/(api[_-]?key|authorization|cookie|session(?:[_-]?id)?)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]').replace(/\s+/g, ' ').trim()
+  return {
+    httpStatus: null,
+    errorType: safeDiagnosticLabel(name),
+    errorCode: null,
+    errorParam: null,
+    providerMessage: providerMessage ? providerMessage.slice(0, 500) : null,
   }
 }
 

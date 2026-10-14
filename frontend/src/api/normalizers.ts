@@ -165,6 +165,7 @@ export function content(value: BackendContent): ContentLibraryRecord {
     instagram: assetsFor(value.variants.find((variant) => variant.platform === 'instagram')?.ownAssets.map((link) => link.asset) ?? []),
     linkedin: assetsFor(value.variants.find((variant) => variant.platform === 'linkedin')?.ownAssets.map((link) => link.asset) ?? []),
     linkedinReusesInstagram: Boolean(value.variants.find((variant) => variant.platform === 'linkedin')?.reuseCreativeFromVariantId),
+    canvaDesignLink: value.canvaDesignLink ?? null,
   }
   const details: ContentRecordDetails = {
     angle: value.brief.angle ?? '',
@@ -223,7 +224,7 @@ export function creativeAsset(value: BackendAsset): CreativeAsset {
   return { id: value.id, name: value.fileName, url: value.contentUrl }
 }
 
-function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
+function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product' | 'general'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
   const schedules = value.schedules ?? {}
   const publications = value.publications ?? {}
   return {

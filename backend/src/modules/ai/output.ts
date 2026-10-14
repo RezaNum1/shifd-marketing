@@ -25,7 +25,7 @@ export interface M3Output {
 
 export interface M4Check {
   label: string
-  status: 'pass' | 'warning'
+  status: 'pass' | 'warning' | 'not_assessed'
 }
 
 export interface M4Output {
@@ -86,6 +86,7 @@ export const M4_CHECK_LABELS = [
   'CTA Alignment',
   'Company/Product Context Alignment',
   'Platform Appropriateness',
+  'Visual Creative Review',
 ] as const
 const M4_CHECK_LABEL_SET = new Set<string>(M4_CHECK_LABELS)
 
@@ -114,6 +115,38 @@ export function parseM4Output(text: string): M4Output {
   const expectedStatus = checks.some((check) => check.status === 'warning') ? 'needs_attention' : 'aligned'
   if (value.status !== expectedStatus) throw aiOutputInvalid('The AI brand assessment status does not match its checks.')
   return { score, status: value.status, recommendation, checks }
+}
+
+/**
+ * Scores are derived from evidence checks so a model cannot return a perfect
+ * score while marking one or more dimensions as warnings.
+ */
+export function scoreM4Output(output: M4Output, hasCreativeAssets: boolean, hasVisualEvidence: boolean): M4Output {
+  const checks = [...output.checks]
+  for (const label of M4_CHECK_LABELS.slice(0, 7)) {
+    if (!checks.some((check) => check.label === label)) checks.push({ label, status: 'warning' })
+  }
+  if (hasCreativeAssets) {
+    const visualCheck = checks.find((check) => check.label === 'Visual Creative Review')
+    if (!hasVisualEvidence) {
+      if (visualCheck) visualCheck.status = 'not_assessed'
+      else checks.push({ label: 'Visual Creative Review', status: 'not_assessed' })
+    } else if (!visualCheck) checks.push({ label: 'Visual Creative Review', status: 'warning' })
+  } else {
+    checks.splice(0, checks.length, ...checks.filter((check) => check.label !== 'Visual Creative Review'))
+  }
+  const warnings = checks.filter((check) => check.status === 'warning').length
+  const score = Math.max(0, 100 - warnings * 12)
+  const visualNote = hasCreativeAssets && !hasVisualEvidence
+    ? ' Uploaded creative could not be analyzed; complete the human visual review before approval.'
+    : ''
+  const recommendation = `${output.recommendation.slice(0, 4_000 - visualNote.length)}${visualNote}`
+  return {
+    score,
+    status: warnings > 0 ? 'needs_attention' : 'aligned',
+    recommendation,
+    checks,
+  }
 }
 
 function parseTextObject(value: unknown, keys: readonly string[], path: string) {

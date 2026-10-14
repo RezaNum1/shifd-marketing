@@ -32,6 +32,7 @@ import { prospectRoutes } from './modules/prospects/routes.js'
 import { prospectResearchRoutes } from './modules/prospects/research-routes.js'
 import { prospectOutreachRoutes } from './modules/prospects/outreach-routes.js'
 import { prospectActivityRoutes } from './modules/prospects/activity-routes.js'
+import { reviewShareRoutes } from './modules/review-share/routes.js'
 
 export interface BuildAppOptions {
   config: AppConfig
@@ -75,7 +76,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const imageProvider = options.imageProvider ?? new OpenAiAiProvider(options.config)
   const clock = options.clock ?? systemClock
   const instagramProvider = options.instagramProvider ?? new MetaInstagramInsightsProvider(options.config)
-  await app.register(contentRoutes, { config: options.config, aiProvider, clock, prefix: '/api' })
+  await app.register(contentRoutes, { config: options.config, aiProvider, storage: assetStorage, clock, prefix: '/api' })
+  await app.register(reviewShareRoutes, { config: options.config, storage: assetStorage, prefix: '/api' })
   await app.register(topicDiscoveryRoutes, { config: options.config, provider: discoveryProvider, aiProvider, prefix: '/api' })
   await app.register(prospectResearchRoutes, { config: options.config, provider: prospectResearchProvider, prefix: '/api' })
   await app.register(prospectOutreachRoutes, { config: options.config, provider: aiProvider, prefix: '/api' })

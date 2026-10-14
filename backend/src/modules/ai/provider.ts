@@ -3,13 +3,16 @@ export interface AiProviderRequest {
   outputSchemaVersion: string
   systemPrompt: string
   userPrompt: string
+  images?: Array<{ mimeType: 'image/png' | 'image/jpeg'; base64: string }>
   maxOutputTokens: number
   timeoutMs: number
+  signal?: AbortSignal | undefined
 }
 
 export interface AiProviderResult {
   text: string
   inputTokens: number | null
+  cachedInputTokens?: number | null
   outputTokens: number | null
   providerRequestId: string | null
 }
@@ -46,6 +49,7 @@ export interface TopicDiscoveryProviderResult {
   sources: TopicDiscoverySource[]
   sourceDiagnostics: TopicDiscoverySourceDiagnostics
   inputTokens: number | null
+  cachedInputTokens?: number | null
   outputTokens: number | null
   providerRequestId: string | null
 }
@@ -68,13 +72,16 @@ export interface AiImageProviderRequest {
   quality: 'low' | 'medium' | 'high'
   size: '1024x1024' | '1024x1536' | '1536x1024'
   outputFormat: 'png'
+  background?: 'transparent'
   timeoutMs: number
+  signal?: AbortSignal | undefined
 }
 
 export interface AiImageProviderResult {
   base64: string
   providerRequestId: string | null
   inputTokens: number | null
+  cachedInputTokens?: number | null
   outputTokens: number | null
 }
 

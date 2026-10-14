@@ -30,6 +30,24 @@ export async function seedM2Prompt(prisma: PrismaClient) {
   })
 }
 
+export async function ensureProspectResearchPrompt(prisma: PrismaClient) {
+  return prisma.$transaction((tx) => ensurePrompt(
+    tx,
+    PROSPECT_RESEARCH_METADATA,
+    PROSPECT_RESEARCH_METADATA.templateReference,
+    prospectResearchPromptDigest(),
+  ))
+}
+
+export async function ensureProspectEmailDraftPrompt(prisma: PrismaClient) {
+  return prisma.$transaction((tx) => ensurePrompt(
+    tx,
+    PROSPECT_EMAIL_DRAFT_METADATA,
+    PROSPECT_EMAIL_DRAFT_METADATA.templateReference,
+    prospectEmailDraftPromptDigest(),
+  ))
+}
+
 export function promptSeedRegistry() {
   return [
     { key: 'm2', metadata: M2_PROMPT_METADATA, reference: M2_PROMPT_REFERENCE, digest: promptDigest() },

@@ -3,6 +3,7 @@ import { AppError } from '../errors/AppError.js'
 
 type RuntimeEnvironment = 'development' | 'test' | 'production'
 type ProviderDiagnosticsError = AppError & { providerDiagnostics?: Record<string, unknown> }
+type CreativeReferenceDiagnosticsError = AppError & { creativeReferenceDiagnostics?: Record<string, unknown> }
 
 interface ErrorBody {
   error: {
@@ -27,9 +28,15 @@ export function registerErrorHandler(app: FastifyInstance, nodeEnv: RuntimeEnvir
     }
     if (statusCode >= 500) {
       const providerDiagnostics = nodeEnv === 'development' && appError ? (appError as ProviderDiagnosticsError).providerDiagnostics : undefined
-      request.log.error({ err: error, ...(providerDiagnostics ? { openai: providerDiagnostics } : {}) }, providerDiagnostics ? 'OpenAI API request failed' : 'Unhandled request error')
+      const creativeReferenceDiagnostics = nodeEnv === 'development' && appError ? (appError as CreativeReferenceDiagnosticsError).creativeReferenceDiagnostics : undefined
+      request.log.error({ err: error, ...(providerDiagnostics ? { openai: providerDiagnostics } : {}), ...(creativeReferenceDiagnostics ? { creativeReference: creativeReferenceDiagnostics } : {}) }, creativeReferenceDiagnostics ? 'Creative Reference image processing failed' : providerDiagnostics ? 'OpenAI API request failed' : 'Unhandled request error')
     }
-    else request.log.warn({ code: body.error.code }, 'Request rejected')
+    else {
+      const canvaValidation = body.error.code === 'VALIDATION_ERROR' && request.url.split('?')[0]?.endsWith('/canva-design-link')
+        ? { validationMessage: body.error.message, validationFields: body.error.fields }
+        : {}
+      request.log.warn({ code: body.error.code, ...canvaValidation }, 'Request rejected')
+    }
     return reply.status(statusCode).send(body)
   })
 }

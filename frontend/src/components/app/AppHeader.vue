@@ -2,7 +2,7 @@
 import { useWorkspaceStore } from '../../stores/workspace'
 import AppIcon from '../ui/AppIcon.vue'
 import IconButton from '../ui/IconButton.vue'
-import UserIdentity from './UserIdentity.vue'
+import { language } from '../../i18n/language'
 
 const workspace = useWorkspaceStore()
 </script>
@@ -24,17 +24,13 @@ const workspace = useWorkspaceStore()
       }}</span>
     </div>
     <div class="app-header__tools">
-      <div class="app-header__search" title="Workspace search is coming soon">
-        <AppIcon name="search" :size="18" />
-        <input
-          type="search"
-          disabled
-          aria-label="Search workspace (coming soon)"
-          placeholder="Search workspace…"
-        />
-      </div>
-
-      <div class="app-header__identity"><UserIdentity /></div>
+      <label class="language-picker">
+        <span class="language-picker__flag" aria-hidden="true">{{ language === 'id' ? '🇮🇩' : '🇺🇸' }}</span>
+        <select v-model="language" :aria-label="language === 'id' ? 'Bahasa' : 'Language'">
+          <option value="en">English</option>
+          <option value="id">Indonesia</option>
+        </select>
+      </label>
     </div>
   </header>
 </template>

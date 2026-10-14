@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import InfoTooltip from './InfoTooltip.vue'
 
 const props = defineProps<{
   id: string
@@ -7,6 +8,8 @@ const props = defineProps<{
   hint?: string
   error?: string
   required?: boolean
+  tooltip?: string
+  number?: number
 }>()
 const describedBy = computed(
   () =>
@@ -18,12 +21,11 @@ const describedBy = computed(
 
 <template>
   <div class="ui-field">
-    <label :for="id" class="ui-field__label"
-      >{{ label
-      }}<span v-if="required" class="text-danger" aria-hidden="true">
-        *</span
-      ></label
-    >
+    <div class="ui-field__label-row">
+      <span v-if="number !== undefined" class="ui-field__number">{{ String(number).padStart(2, '0') }}</span>
+      <label :for="id" class="ui-field__label">{{ label }}<span v-if="required" class="text-danger" aria-hidden="true"> *</span></label>
+      <InfoTooltip v-if="tooltip" :text="tooltip" :label="`${label} information`" />
+    </div>
     <slot :described-by="describedBy" />
     <p v-if="hint" :id="`${id}-hint`" class="ui-field__hint">{{ hint }}</p>
     <p v-if="error" :id="`${id}-error`" class="ui-field__error" role="alert">

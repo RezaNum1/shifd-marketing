@@ -105,6 +105,7 @@ export interface ContentRecordDetails {
     instagram: ContentAssetRecord[]
     linkedin: ContentAssetRecord[]
     linkedinReusesInstagram: boolean
+    canvaDesignLink?: import('./backend').BackendCanvaDesignLink | null
   }
   brandAssessments: Partial<Record<ContentPlatform, BrandAssessment>>
   approval?: {
@@ -139,7 +140,7 @@ export interface ContentLibraryRecord {
   id: string
   title: string
   topic: string
-  context: 'company' | 'product'
+  context: 'company' | 'product' | 'general'
   pillar: string
   platforms: ContentPlatform[]
   lifecycle?: ContentLifecycleState
@@ -161,7 +162,7 @@ export interface ContentLibraryRecord {
 }
 
 export interface ContentBrief {
-  context: 'company' | 'product'
+  context: 'company' | 'product' | 'general'
   product: string
   pillar: string
   objective: string
@@ -208,7 +209,7 @@ export type PlatformVariant = InstagramVariant | LinkedInVariant
 
 export interface BrandAssessmentCheck {
   label: string
-  status: 'pass' | 'warning'
+  status: 'pass' | 'warning' | 'not_assessed'
 }
 
 export interface BrandAssessment {

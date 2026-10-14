@@ -34,6 +34,7 @@ model Company {
   products                 Product[]
   contentIdeas             ContentIdea[]
   contents                 Content[]
+  canvaDesignLinks         ContentCanvaDesignLink[]
   idempotencyRecords       RequestIdempotency[]
   assets                   CreativeAsset[]
   aiSettings               AiSettings?
@@ -98,6 +99,9 @@ model User {
   recordedEvaluationSnapshots EvaluationSnapshot[] @relation("EvaluationSnapshotRecorder")
   recordedBusinessInquiries BusinessInquiry[] @relation("InquiryRecorder")
   recordedProductionTimeLogs ProductionTimeLog[] @relation("ProductionTimeRecorder")
+  createdCanvaDesignLinks   ContentCanvaDesignLink[] @relation("CanvaDesignLinkCreator")
+  updatedCanvaDesignLinks   ContentCanvaDesignLink[] @relation("CanvaDesignLinkUpdater")
+  createdReviewShares       ContentReviewShare[]
 
   @@unique([companyId, id])
   @@index([companyId])
@@ -733,7 +737,9 @@ model Content {
   productionTimeLogs       ProductionTimeLog[]
   aiRequests               AiRequestLog[]
   creativeReferenceBatches CreativeReferenceBatch[]
+  canvaDesignLink          ContentCanvaDesignLink?
   approvalActions          ApprovalAction[]         @relation("ContentApprovalActions")
+  reviewShares             ContentReviewShare[]
   currentApprovalId        String?                  @map("current_approval_id") @db.Uuid
   // Keep Prisma's client-side relation scalar-only; the Phase 9 migration's
   // composite FK still enforces that the pointed action belongs to this Content.
@@ -843,6 +849,39 @@ model CreativeAsset {
 
   @@index([companyId, createdAt])
   @@map("creative_assets")
+}
+
+model ContentCanvaDesignLink {
+  companyId String   @map("company_id") @db.Uuid
+  contentId String   @map("content_id") @db.Uuid
+  url       String?  @db.VarChar(2048)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedBy String   @map("updated_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  content   Content  @relation(fields: [companyId, contentId], references: [companyId, id], onDelete: Cascade)
+  creator   User     @relation("CanvaDesignLinkCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  updater   User     @relation("CanvaDesignLinkUpdater", fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  @@id([companyId, contentId])
+  @@index([contentId])
+  @@map("content_canva_design_links")
+}
+
+model ContentReviewShare {
+  id        String    @id @default(uuid()) @db.Uuid
+  contentId String    @map("content_id") @db.Uuid
+  createdBy String    @map("created_by") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  content   Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  creator   User      @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([contentId, expiresAt])
+  @@map("content_review_shares")
 }
 
 model ContentSchedule {
@@ -1072,6 +1111,7 @@ model AiRequestLog {
   inputHash                       String                    @map("input_hash")
   inputSnapshot                   Json                      @map("input_snapshot")
   inputTokens                     BigInt?                   @map("input_tokens")
+  cachedInputTokens               BigInt?                   @map("cached_input_tokens")
   outputTokens                    BigInt?                   @map("output_tokens")
   estimatedCostUsd                Decimal?                  @map("estimated_cost_usd") @db.Decimal(18, 8)
   costBasis                       Json?                     @map("cost_basis")
@@ -1112,6 +1152,9 @@ model CreativeReferenceBatch {
   mood                         String
   requestedAspectRatio         String              @map("requested_aspect_ratio")
   actualGeneratedSize          String              @map("actual_generated_size")
+  creativeFormat               String              @default("single_image") @map("creative_format")
+  generationMode               String              @default("original_design") @map("generation_mode")
+  expectedReferenceCount       Int                 @default(3) @map("expected_reference_count")
   additionalInstruction        String?             @map("additional_instruction")
   status                       String
   conceptPlannerAiRequestLogId String?             @map("concept_planner_ai_request_log_id") @db.Uuid
@@ -1132,10 +1175,16 @@ model CreativeReference {
   batchId             String                 @map("batch_id") @db.Uuid
   conceptIndex        Int                    @map("concept_index")
   conceptName         String                 @map("concept_name")
+  templateType        String?                @map("template_type")
+  slideNumber         Int?                   @map("slide_number")
+  slideCopy           String?                @map("slide_copy")
   rationale           String
   layoutNotes         String                 @map("layout_notes")
   visualFocus         String                 @map("visual_focus")
   typographyDirection String                 @map("typography_direction")
+  canvaBrief          String?                @map("canva_brief")
+  assetSearchKeywords String[]               @default([]) @map("asset_search_keywords")
+  carouselOutline     String[]               @default([]) @map("carousel_outline")
   imagePrompt         String                 @map("image_prompt")
   storageKey          String                 @unique @map("storage_key")
   mimeType            String                 @map("mime_type")
@@ -1160,6 +1209,7 @@ model AiRateVersion {
   model               String
   version             String
   inputUsdPerMillion  Decimal  @map("input_usd_per_million") @db.Decimal(18, 8)
+  cachedInputUsdPerMillion Decimal? @map("cached_input_usd_per_million") @db.Decimal(18, 8)
   outputUsdPerMillion Decimal  @map("output_usd_per_million") @db.Decimal(18, 8)
   effectiveFrom       DateTime @map("effective_from") @db.Timestamptz(3)
   sourceReference     String   @map("source_reference")

@@ -14,6 +14,7 @@ const paths: Record<IconName, string[]> = {
     'M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M7 3v4 M17 3v4 M3 10h18 M7 14h2 M13 14h2 M7 17h2',
   ],
   chart: ['M3 17 9 11l4 3 8-10 M16 4h5v5 M3 21h18'],
+  linkedin: ['M4 4h16v16H4z M8 10v6 M8 7h.01 M12 16v-6 M12 12a2 2 0 0 1 4 0v4'],
   company: [
     'M4 21V3h11v18 M15 9h5v12 M2 21h20 M8 7h3 M8 11h3 M8 15h3 M8 21v-3h3v3',
   ],
@@ -41,7 +42,14 @@ const paths: Record<IconName, string[]> = {
   info: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20 M12 11v6 M12 7h.01'],
   alert: ['m12 3 10 18H2z M12 9v5 M12 17h.01'],
   plus: ['M12 5v14 M5 12h14'],
+  edit: ['M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z'],
+  copy: ['M8 8h12v13H8z M16 8V3H4v13h4'],
+  archive: ['M3 4h18v4H3z M5 8v12h14V8 M10 12h4'],
+  trash: ['M3 6h18 M8 6V4h8v2 M19 6l-1 15H6L5 6 M10 11v6 M14 11v6'],
   upload: ['M12 16V3 m-5 5 5-5 5 5 M4 15v6h16v-6'],
+  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+  link: ['M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7 M14 11a5 5 0 0 0-7.1 0l-3 3A5 5 0 0 0 11 21.1l1.7-1.7'],
+  lock: ['M5 10h14v11H5z M8 10V7a4 4 0 0 1 8 0v3 M12 14v3'],
 }
 </script>
 

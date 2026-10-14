@@ -36,7 +36,7 @@ export interface AiRequestLog {
   promptVersion: string
   inputTokens: number
   outputTokens: number
-  estimatedCostUsd: number
+  estimatedCostUsd: number | null
   latencyMs?: number
   status: AiRequestStatus
   createdAt: string

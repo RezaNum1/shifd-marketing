@@ -2,7 +2,8 @@
 import AppBrand from './AppBrand.vue'
 import AppNavigation from './AppNavigation.vue'
 import UserIdentity from './UserIdentity.vue'
-import IconButton from '../ui/IconButton.vue'
+import BaseButton from '../ui/BaseButton.vue'
+import AppIcon from '../ui/AppIcon.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -20,9 +21,10 @@ async function signOut() {
     <AppNavigation />
     <div class="app-sidebar__footer">
       <UserIdentity />
-      <div class="app-sidebar__footer-actions">
-        <IconButton icon="arrow-left" label="Sign out" @click="signOut" />
-      </div>
+      <BaseButton variant="secondary" size="compact" class="app-sidebar__sign-out" @click="signOut">
+        <AppIcon name="arrow-left" :size="16" />
+        <span>Sign out</span>
+      </BaseButton>
     </div>
   </aside>
 </template>

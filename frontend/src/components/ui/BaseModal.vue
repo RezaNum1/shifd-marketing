@@ -4,7 +4,7 @@ withDefaults(
   defineProps<{
     title: string
     description?: string
-    size?: 'default' | 'wide'
+    size?: 'default' | 'wide' | 'large' | 'fullscreen'
     dismissible?: boolean
   }>(),
   { dismissible: true },

@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import TrendChart from '../components/performance/TrendChart.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
-import BaseModal from '../components/ui/BaseModal.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
@@ -24,14 +23,29 @@ type PlatformFilter = 'combined' | PerformancePlatform
 type PeriodWeeks = 4 | 8 | 12
 
 const router = useRouter()
+const route = useRoute()
+const isEvaluationPage = computed(() => !route || route.name === 'performance-evaluation' || route.path === '/performance/evaluation')
+const overviewHelp = {
+  purpose: 'Summarize publishing results and social channel performance for the selected period.',
+  steps: [
+    'Choose a reporting period and platform at the top of the page.',
+    'Review the metric cards and charts to understand recent results.',
+    'Open Evaluation for the research comparison or LinkedIn Metrics to add weekly LinkedIn data.',
+  ],
+}
+const evaluationHelp = {
+  purpose: 'Compare the four weeks before an intervention with the four weeks after it, using recorded marketing activity and platform observations.',
+  steps: [
+    'Set the intervention start date and save it. The four weeks before that date are the baseline.',
+    'At Week 0 and Week 4, save verified follower counts and their source.',
+    'Review the results table. Open Additional data and activity to record production time or incoming business inquiries.',
+  ],
+}
 const performance = usePerformanceStore()
 const contentLibrary = useContentLibraryStore()
 const ui = useUiStore()
 const period = ref('8')
 const platform = ref<PlatformFilter>('combined')
-const logModalOpen = ref(false)
-const logError = ref('')
-const logForm = reactive({ platform: 'linkedin' as PerformancePlatform, weekStart: '2026-09-07', followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' })
 const prospects = ref<Prospect[]>([])
 const platformRows = ['instagram', 'linkedin'] as const
 const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
@@ -51,7 +65,6 @@ watch(() => evaluation.value?.evaluation, (config) => { if (config) { evaluation
 
 const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }]
 const platformOptions: SelectOption[] = [{ value: 'combined', label: 'Combined' }, { value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
-const logPlatformOptions: SelectOption[] = [{ value: 'linkedin', label: 'LinkedIn' }]
 /* Legacy mock-derived selectors are kept below only as a migration marker. */
 /*
 const periodWeeks = computed(() => Number(period.value) as PeriodWeeks)
@@ -260,20 +273,6 @@ function formatPercent(value: number | null) { return value === null ? 'Not avai
 function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
 function signedNumber(value: number | null) { return value === null ? 'Not available' : `${value >= 0 ? '+' : ''}${formatNumber(value)}` }
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
-function openLog() { resetLog(); logError.value = ''; logModalOpen.value = true }
-function resetLog() { Object.assign(logForm, { platform: 'linkedin', weekStart: report.value?.period.recordedWeekStarts.at(-1) ?? new Date().toISOString().slice(0, 10), followers: '', reach: '', impressions: '', likes: '', comments: '', saves: '', publishedPosts: '' }) }
-function addDays(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
-async function saveMetric() {
-  const required = ['followers', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts'] as const
-  if (!logForm.weekStart || required.some((key) => logForm[key] === '' || Number(logForm[key]) < 0) || (logForm.reach !== '' && Number(logForm.reach) < 0)) { logError.value = 'Enter a valid week and non-negative metric values.'; return }
-  const saved = await performance.addWeeklyMetric({ platform: 'linkedin', weekStart: logForm.weekStart, weekEnd: addDays(logForm.weekStart, 6), followers: Number(logForm.followers), reach: logForm.reach === '' ? null : Number(logForm.reach), impressions: Number(logForm.impressions), likes: Number(logForm.likes), comments: Number(logForm.comments), saves: Number(logForm.saves), publishedPosts: Number(logForm.publishedPosts) })
-  if (!saved) { logError.value = performance.error || 'Unable to save the LinkedIn metrics.'; return }
-  logModalOpen.value = false
-  logError.value = ''
-  await performance.loadReport(periodWeeks.value, platform.value)
-  ui.notify('Weekly LinkedIn metrics saved.', 'success')
-}
-function exportReport() { ui.notify('Report export is not part of the backend contract.', 'info') }
 function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
 function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
 function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
@@ -300,7 +299,7 @@ async function saveBusinessInquiry() {
 }
 async function saveProductionTime() {
   if (!productionForm.contentId || !productionForm.minutes) return
-  const saved = await performance.addProductionTime({ contentId: productionForm.contentId, minutes: Number(productionForm.minutes), notes: productionForm.notes || undefined })
+  const saved = await performance.addProductionTime({ contentId: productionForm.contentId, minutes: Number(productionForm.minutes), occurredAt: new Date(productionForm.occurredAt).toISOString(), notes: productionForm.notes || undefined })
   if (saved) { productionForm.minutes = ''; productionForm.notes = ''; ui.notify('Active production time recorded.', 'success') }
 }
 onMounted(async () => {
@@ -314,36 +313,42 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 
 <template>
   <div class="page-stack performance-page">
-    <PageHeader title="Performance" description="Track content execution and social media performance over time." :breadcrumbs="[{ label: 'Planning & Insights' }, { label: 'Performance' }]">
-      <template #actions><div class="performance-header-controls"><BaseSelect v-model="period" label="Evaluation period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="exportReport"><AppIcon name="library" :size="16" />Export Report</BaseButton><BaseButton @click="openLog"><AppIcon name="plus" :size="16" />Log Weekly Metrics</BaseButton></div></template>
+    <PageHeader :title="isEvaluationPage ? 'Performance Evaluation' : 'Performance'" :description="isEvaluationPage ? 'Set the evaluation period, record verified observations, and review the supporting evidence.' : 'A focused view of publishing activity and channel results.'" :breadcrumbs="[{ label: 'Performance', to: '/performance' }, ...(isEvaluationPage ? [{ label: 'Evaluation' }] : [])]" :help="isEvaluationPage ? evaluationHelp : overviewHelp">
+      <template #actions><div v-if="!isEvaluationPage" class="performance-header-controls"><BaseSelect v-model="period" label="Reporting period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="router.push('/performance/evaluation')"><AppIcon name="check" :size="16" />Open Evaluation</BaseButton></div><div v-else class="performance-header-controls"><BaseButton variant="secondary" @click="router.push('/performance')"><AppIcon name="arrow-left" :size="16" />Back to Performance</BaseButton><BaseButton variant="secondary" @click="router.push('/performance/linkedin')"><AppIcon name="linkedin" :size="16" />LinkedIn Metrics</BaseButton></div></template>
     </PageHeader>
     <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
     <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
 
     <template v-if="performance.loaded || evaluation">
-    <section class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Observed platform-account metrics from the backend report. Reach, followers, impressions, and engagement are reported separately.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report <em>API source when configured</em></span><span>LinkedIn · Manual Entry <em>Weekly account metrics</em></span><span>WhatsApp · Manual Entry <em>Supplementary inquiry volume</em></span></div></section>
+    <section v-if="!isEvaluationPage" class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Metrics summarize the selected period. Missing provider values appear as “Not available”.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report</span><span>LinkedIn · Manual entry</span></div></section>
 
-    <section class="evaluation-section" aria-label="Four-week research evaluation">
-      <BaseCard title="Four-Week Research Evaluation" description="Configure a local-date baseline and intervention. Configuration changes create a new revision and preserve earlier snapshots.">
-        <div class="evaluation-controls"><BaseInput v-model="evaluationStart" label="Evaluation start date" type="date" /><BaseInput v-model="measurementDefinitionNotes" label="Measurement definition notes (optional)" /><BaseButton :disabled="evaluationSaving || !evaluationStart" @click="saveEvaluation">{{ evaluationSaving ? 'Saving…' : evaluation?.evaluation ? 'Save New Revision' : 'Configure Evaluation' }}</BaseButton></div>
+    <section v-if="isEvaluationPage" class="evaluation-section" aria-label="Four-week research evaluation">
+      <BaseCard title="1. Set the evaluation dates" description="Choose when the 4-week intervention begins. The 4 weeks before it become the baseline.">
+        <p class="form-guidance">Start here even if you have not entered any measurements yet. Saving a changed date creates a new revision and keeps the previous results.</p>
+        <div class="evaluation-controls"><BaseInput v-model="evaluationStart" label="Intervention start date" type="date" /><BaseInput v-model="measurementDefinitionNotes" label="Custom measurement notes (optional)" /><BaseButton :disabled="evaluationSaving || !evaluationStart" @click="saveEvaluation">{{ evaluationSaving ? 'Saving…' : evaluation?.evaluation ? 'Save New Revision' : 'Set evaluation dates' }}</BaseButton></div>
         <p class="helper-text">{{ evaluationPeriodsLabel }} · Timezone: {{ evaluation?.evaluation?.timezone ?? 'Asia/Jakarta' }}</p>
         <div v-if="performance.evaluationLoading" class="evaluation-note" role="status">Loading evaluation data…</div>
         <InlineAlert v-else-if="performance.evaluationError" title="Evaluation data unavailable" tone="danger">{{ performance.evaluationError }}</InlineAlert>
         <template v-if="evaluation?.evaluation">
           <div class="evaluation-progress"><div><strong>{{ evaluation.progress.elapsedDays }} / 28 intervention days</strong><span>{{ evaluation.progress.complete ? 'Four-week intervention complete' : 'Partial intervention; changes remain unavailable until all 28 days elapse.' }}</span></div><div class="progress-track"><span :style="{ width: `${evaluation.progress.elapsedPercent}%` }" /></div></div>
-          <div class="source-status-list"><div v-for="source in evaluation.completeness.sources" :key="source.source"><span>{{ source.source }}</span><strong>{{ source.status.replace('_', ' ') }} · {{ source.records }} records</strong></div></div>
-          <div class="evaluation-snapshot">
-            <strong>Week 0 / Week 4 verified snapshot</strong>
-            <div class="evaluation-controls"><BaseSelect v-model="snapshotForm.stage" label="Snapshot" :options="[{ value: 'week0', label: 'Week 0' }, { value: 'week4', label: 'Week 4' }]" size="compact" /><BaseInput v-model="snapshotForm.instagramFollowers" label="Instagram followers" type="number" min="0" /><BaseInput v-model="snapshotForm.linkedinFollowers" label="LinkedIn followers" type="number" min="0" /><BaseInput v-model="snapshotForm.source" label="Measurement source" /><BaseInput v-model="snapshotForm.notes" label="Notes" /><BaseButton @click="saveSnapshot">Record Snapshot</BaseButton></div>
-            <p v-if="evaluation.evaluation.snapshots.length" class="helper-text">Recorded snapshots: {{ evaluation.evaluation.snapshots.map(item => `${item.stage} · ${formatDate(item.capturedAt)}`).join(' | ') }}</p>
-            <p v-else class="helper-text">No snapshots are recorded yet. Enter verified native account counts at each measurement boundary.</p>
-          </div>
-          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table"><caption>Baseline and intervention KPI comparison</caption><thead><tr><th>KPI</th><th>Baseline</th><th>Intervention</th><th>Absolute change</th><th>Change %</th><th>Source / status</th></tr></thead><tbody><tr v-for="item in evaluation.comparison" :key="item.kpi"><th scope="row">{{ item.kpi }}</th><td>{{ formatMaybeNumber(item.baseline) }}</td><td>{{ formatMaybeNumber(item.intervention) }}</td><td>{{ comparisonChange(item.absoluteChange) }}</td><td>{{ formatPercent(item.percentageChange) }}</td><td>{{ item.source }} · {{ item.status }}<small v-if="item.sourceRecordIds?.length">{{ item.sourceRecordIds.join(', ') }}</small></td></tr></tbody></table></div>
+          <details class="evaluation-details"><summary>View data source status</summary><div class="source-status-list"><div v-for="source in evaluation.completeness.sources" :key="source.source"><span>{{ source.source }}</span><strong>{{ source.status.replace('_', ' ') }} · {{ source.records }} records</strong></div></div></details>
         </template>
+      </BaseCard>
+
+      <BaseCard v-if="evaluation?.evaluation" title="2. Record follower snapshots" description="Save the Instagram or LinkedIn follower count at the start and end of the intervention.">
+        <p class="form-guidance">Choose a checkpoint, copy the current follower count from the platform, and note where you checked it. Leave a platform blank if you could not verify its count.</p>
+        <div class="snapshot-form"><BaseSelect v-model="snapshotForm.stage" label="Measurement point" :options="[{ value: 'week0', label: 'Week 0 · intervention start' }, { value: 'week4', label: 'Week 4 · intervention end' }]" /><BaseInput v-model="snapshotForm.instagramFollowers" label="Instagram followers" type="number" min="0" /><BaseInput v-model="snapshotForm.linkedinFollowers" label="LinkedIn followers" type="number" min="0" /><BaseInput v-model="snapshotForm.source" label="Where did you check?" /><BaseInput v-model="snapshotForm.notes" label="Notes (optional)" /><BaseButton @click="saveSnapshot">Save snapshot</BaseButton></div>
+        <p v-if="evaluation.evaluation.snapshots.length" class="helper-text">Saved checkpoints: {{ evaluation.evaluation.snapshots.map(item => `${item.stage} · ${formatDate(item.capturedAt)}`).join(' · ') }}</p>
+        <p v-else class="helper-text">No snapshots saved yet.</p>
+      </BaseCard>
+
+      <BaseCard v-if="evaluation?.evaluation" title="3. Compare results" description="Compare the 4-week baseline with the intervention. Missing or incomplete values appear as N/A.">
+        <details class="evaluation-details" open><summary>Baseline and intervention comparison</summary><div class="evaluation-table-wrap"><table class="performance-table evaluation-table"><caption>Baseline and intervention KPI comparison</caption><thead><tr><th>KPI</th><th>Baseline</th><th>Intervention</th><th>Absolute change</th><th>Change %</th><th>Source / status</th></tr></thead><tbody><tr v-for="item in evaluation.comparison" :key="item.kpi"><th scope="row">{{ item.kpi }}</th><td>{{ formatMaybeNumber(item.baseline) }}</td><td>{{ formatMaybeNumber(item.intervention) }}</td><td>{{ comparisonChange(item.absoluteChange) }}</td><td>{{ formatPercent(item.percentageChange) }}</td><td>{{ item.source }} · {{ item.status }}<small v-if="item.sourceRecordIds?.length">{{ item.sourceRecordIds.join(', ') }}</small></td></tr></tbody></table></div></details>
       </BaseCard>
     </section>
 
-    <section v-if="evaluation?.evaluation && evaluation.baseline && evaluation.intervention" class="evaluation-section">
+    <details v-if="isEvaluationPage && evaluation?.evaluation && evaluation.baseline && evaluation.intervention" class="evaluation-details evaluation-more"><summary><strong>Additional data and activity</strong><span>Production time, inquiries, platform observations, outbound activity, and source records</span></summary>
+    <section class="evaluation-section">
       <div class="evaluation-two-column">
         <BaseCard title="Marketing Execution" description="Posting consistency is based on actual publication records. Variability uses population standard deviation ÷ mean across four weeks.">
           <div class="platform-execution-grid"><div v-for="name in platformRows" :key="name" class="platform-execution"><strong>{{ platformLabel(name) }} · target 2/week</strong><p>Baseline weekly posts: {{ evaluation.baseline.cadence[name].weeklyCounts.join(' · ') }} <span>({{ evaluation.baseline.cadence[name].weeksMeetingTarget }}/4 weeks at target)</span></p><p>Intervention weekly posts: {{ evaluation.intervention.cadence[name].weeklyCounts.join(' · ') }} <span>({{ evaluation.intervention.cadence[name].weeksMeetingTarget }}/4 weeks at target)</span></p><p>CV: {{ formatMaybeNumber(evaluation.baseline.cadence[name].coefficientOfVariation, '×') }} baseline · {{ formatMaybeNumber(evaluation.intervention.cadence[name].coefficientOfVariation, '×') }} intervention</p></div></div>
@@ -354,7 +359,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
         <BaseCard title="Content Production Time" description="Active founder minutes recorded per content campaign. Idle and waiting time are excluded; intervention values are descriptive.">
           <div class="output-grid"><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.median, ' min') }}</strong><span>Intervention median</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.minimum, ' min') }}</strong><span>Minimum</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.maximum, ' min') }}</strong><span>Maximum</span></div><div><strong>{{ evaluation.intervention.productionTime.count }}</strong><span>Recorded campaigns</span></div></div>
           <p class="helper-text">No comparable pre-deployment efficiency claim is made. Session records:</p><ul class="inquiry-record-list"><li v-for="observation in evaluation.intervention.productionTime.sourceObservations" :key="observation.id">{{ observation.contentId }} · {{ observation.minutes }} active minutes · completed {{ observation.occurredAt }} · recorded {{ observation.recordedAt }} · user {{ observation.recordedBy }} · {{ observation.id }}</li><li v-if="!evaluation.intervention.productionTime.sourceObservations.length">No session records.</li></ul>
-          <form class="evaluation-form" @submit.prevent="saveProductionTime"><BaseSelect v-model="productionForm.contentId" label="Content campaign" :options="[{ value: '', label: 'Choose saved content' }, ...contentOptions]" required /><BaseInput v-model="productionForm.minutes" label="Active minutes" type="number" min="1" max="1440" required /><BaseInput v-model="productionForm.occurredAt" label="Work completed at" type="datetime-local" required /><BaseInput v-model="productionForm.notes" label="Included active work (optional)" /><BaseButton type="submit" :disabled="!productionForm.contentId || !productionForm.minutes">Record Active Time</BaseButton></form>
+          <form class="evaluation-form" @submit.prevent="saveProductionTime"><p class="form-guidance">Record focused work for one saved content item. Count time spent creating or editing; exclude waiting, meetings, and breaks.</p><BaseSelect v-model="productionForm.contentId" label="Content campaign" :options="[{ value: '', label: 'Choose saved content' }, ...contentOptions]" required /><BaseInput v-model="productionForm.minutes" label="Active minutes" type="number" min="1" max="1440" required /><BaseInput v-model="productionForm.occurredAt" label="Work completed at" type="datetime-local" required /><BaseInput v-model="productionForm.notes" label="Included active work (optional)" /><BaseButton type="submit" :disabled="!productionForm.contentId || !productionForm.minutes">Record Active Time</BaseButton></form>
         </BaseCard>
       </div>
       <div class="evaluation-two-column">
@@ -370,7 +375,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
         <BaseCard title="Inbound Business Inquiries" description="Founder-recorded incoming messages, kept separate from replies to outbound outreach.">
           <p><strong>{{ evaluation.intervention.inquiries.relevant }}</strong> relevant · {{ evaluation.intervention.inquiries.unreviewed }} unreviewed during intervention; baseline {{ evaluation.baseline.inquiries.relevant }} relevant.</p>
           <div class="inquiry-weekly-trend"><span v-for="week in evaluation.intervention.inquiries.weekly" :key="week.weekStart">{{ week.weekStart }} · {{ week.relevant }} relevant / {{ week.recorded }} recorded</span></div>
-          <form class="evaluation-form" @submit.prevent="saveBusinessInquiry"><BaseInput v-model="inquiryForm.receivedAt" label="Received at" type="datetime-local" required /><BaseSelect v-model="inquiryForm.channel" label="Channel" :options="[{ value: 'whatsapp', label: 'WhatsApp Business' }, { value: 'instagram', label: 'Instagram message' }, { value: 'linkedin', label: 'LinkedIn message' }, { value: 'website', label: 'Website' }, { value: 'other', label: 'Other' }]" /><BaseInput v-model="inquiryForm.companyName" label="Company / sender name (optional)" /><BaseSelect v-model="inquiryForm.prospectId" label="Existing prospect (optional)" :options="prospectOptions" /><BaseInput v-model="inquiryForm.summary" label="Inquiry summary" required /><BaseSelect v-model="inquiryForm.relevance" label="Qualification" :options="[{ value: 'unreviewed', label: 'Needs review' }, { value: 'relevant', label: 'Relevant business inquiry' }, { value: 'unrelated', label: 'Unrelated' }]" /><BaseInput v-model="inquiryForm.source" label="Evidence / provenance" required /><BaseInput v-model="inquiryForm.sourceReference" label="Source reference (optional)" /><BaseButton type="submit" :disabled="!inquiryForm.summary.trim()">Record Inquiry</BaseButton></form>
+          <form class="evaluation-form" @submit.prevent="saveBusinessInquiry"><p class="form-guidance">Log an incoming business message. Replies to outbound outreach belong in Prospect Management and should not be recorded here.</p><BaseInput v-model="inquiryForm.receivedAt" label="Received at" type="datetime-local" required /><BaseSelect v-model="inquiryForm.channel" label="Channel" :options="[{ value: 'whatsapp', label: 'WhatsApp Business' }, { value: 'instagram', label: 'Instagram message' }, { value: 'linkedin', label: 'LinkedIn message' }, { value: 'website', label: 'Website' }, { value: 'other', label: 'Other' }]" /><BaseInput v-model="inquiryForm.companyName" label="Company / sender name (optional)" /><BaseSelect v-model="inquiryForm.prospectId" label="Existing prospect (optional)" :options="prospectOptions" /><BaseInput v-model="inquiryForm.summary" label="Inquiry summary" required /><BaseSelect v-model="inquiryForm.relevance" label="Qualification" :options="[{ value: 'unreviewed', label: 'Needs review' }, { value: 'relevant', label: 'Relevant business inquiry' }, { value: 'unrelated', label: 'Unrelated' }]" /><BaseInput v-model="inquiryForm.source" label="Evidence / provenance" required /><BaseInput v-model="inquiryForm.sourceReference" label="Source reference (optional)" /><BaseButton type="submit" :disabled="!inquiryForm.summary.trim()">Record Inquiry</BaseButton></form>
           <ul class="inquiry-record-list"><li v-for="inquiry in evaluation.inquiries.slice(0, 5)" :key="inquiry.id">{{ formatDate(inquiry.receivedAt) }} · {{ inquiry.channel }} · {{ inquiry.relevance }} · {{ inquiry.companyName || inquiry.prospect?.name || 'Name unknown' }} · {{ inquiry.summary }} · {{ inquiry.source }} · recorded by {{ inquiry.recordedBy }} · {{ inquiry.id }}</li><li v-if="!evaluation.inquiries.length">No inquiry events recorded.</li></ul>
         </BaseCard>
         <BaseCard title="Outbound Activities" description="Aggregated from actual Phase 04 events. Drafts, copies, scheduled follow-ups, and inbound inquiries are excluded.">
@@ -384,8 +389,9 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
       </div>
       <BaseCard title="KPI Definitions and Caveats" description="The asterisks identify platform-specific measures; wording is maintained here without attributing unverified footnote text to the advisor."><p>* Instagram uses available Graph API observations. Account reach remains account scoped; post reach/views/interactions remain post scoped. LinkedIn values come from native Analytics entry, and native engagement rate is not recalculated. Missing values are unavailable, not zero.</p><p>Baseline and intervention comparisons use 28 local calendar days. Percentage change is N/A when baseline is zero; incomplete intervention comparisons remain N/A until all four weeks elapse. Observed changes do not establish causation, recall, or acquisition attribution.</p><p>Posting target: two actual publication records weekly per platform. CV uses population standard deviation divided by mean; CV is N/A when mean weekly count is zero. Planned and cancelled calendar records do not count as published.</p></BaseCard>
     </section>
+    </details>
 
-    <section class="kpi-grid" aria-label="Primary metrics">
+    <section v-if="!isEvaluationPage" class="kpi-grid" aria-label="Primary metrics">
       <BaseCard v-for="card in [
         { label: 'Follower Growth', value: followerChangeLabel, detail: `${followerChangeDetail} · first-to-latest account observation`, icon: 'company' },
         { label: platform === 'combined' ? 'Combined Platform Reach' : 'Weekly Reach', value: formatKpiNumber(latestReach), detail: latestReachDetail, icon: 'chart' },
@@ -396,33 +402,39 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
       ]" :key="card.label" class="kpi-card"><div class="kpi-card-content"><div class="kpi-card__top"><span>{{ card.label }}</span><AppIcon :name="card.icon" :size="17" /></div><strong>{{ card.value }}</strong><small>{{ card.detail }}</small></div></BaseCard>
     </section>
 
-    <section class="chart-grid">
+    <section v-if="!isEvaluationPage" class="chart-grid">
       <BaseCard title="Weekly Reach" :description="platform === 'combined' ? 'Combined Platform Reach across the selected period.' : `${platformLabel(platform)} reach across the selected period.`"><template #actions><div class="chart-legend"><span v-for="item in reachChart" :key="item.label"><i :style="{ background: item.color }" />{{ item.label }}</span></div></template><TrendChart :labels="chartLabels" :series="reachChart" :format-value="formatNumber" /></BaseCard>
       <BaseCard title="Follower Trend" description="Platform follower counts are shown separately when Combined is selected."><template #actions><div class="chart-legend"><span v-for="item in followerChart" :key="item.label"><i :style="{ background: item.color }" />{{ item.label }}</span></div></template><TrendChart :labels="chartLabels" :series="followerChart" :format-value="formatNumber" /></BaseCard>
     </section>
 
-    <section class="performance-two-column">
+    <section v-if="!isEvaluationPage" class="performance-two-column">
       <BaseCard title="Posting Consistency" description="Published posts compared with the configured target of 2 posts per week per platform."><div class="consistency-list"><div v-for="item in consistency" :key="item.platform" class="consistency-row"><div class="consistency-row__heading"><strong>{{ platformLabel(item.platform) }}</strong><StatusBadge :tone="toneForConsistency(item.percent)">{{ formatPercent(item.percent) }}</StatusBadge></div><div class="consistency-row__meta"><span>Target: {{ item.expected }} posts</span><span>Published: {{ item.published }} / {{ item.expected }}</span></div><div class="progress-track"><span :style="{ width: `${Math.min(100, item.percent)}%` }" :class="{ 'is-complete': item.percent >= 100 }" /></div></div></div></BaseCard>
       <BaseCard title="Execution Summary" description="A compact view of planned and recorded publication work."><dl class="summary-list"><div><dt>Planned</dt><dd>{{ executionSummary.planned }}</dd></div><div><dt>Published</dt><dd>{{ executionSummary.published }}</dd></div><div><dt>Pending Publication</dt><dd>{{ executionSummary.pending }}</dd></div><div><dt>On-time Publication</dt><dd>{{ executionSummary.onTime }}</dd></div></dl><p class="helper-text">These counts use the backend execution report.</p></BaseCard>
     </section>
 
-    <section class="performance-two-column">
+    <section v-if="!isEvaluationPage" class="performance-two-column">
       <BaseCard title="Content Output" description="Throughput by lifecycle state. Volume is reported without interpreting quality."><div class="output-grid"><div><strong>{{ outputBreakdown.created }}</strong><span>Content Created</span></div><div><strong>{{ outputBreakdown.approved }}</strong><span>Content Approved</span></div><div><strong>{{ outputBreakdown.scheduled }}</strong><span>Content Scheduled</span></div><div><strong>{{ outputBreakdown.published }}</strong><span>Content Published</span></div></div></BaseCard>
       <BaseCard title="Supplementary Inquiry Volume" description="Supplementary Metric · WhatsApp Business manual tracking."><template #actions><strong class="inquiry-total">{{ inquiryTotal }} inquiries</strong></template><div class="inquiry-chart"><div v-for="item in inquiryWindow" :key="item.id" class="inquiry-bar"><span :style="{ height: `${Math.max(8, (item.count / Math.max(1, ...inquiryWindow.map((entry) => entry.count))) * 100)}%` }" /><small>{{ formatDate(item.weekStart, { month: 'short', day: 'numeric' }) }}</small><b>{{ item.count }}</b></div></div><p class="helper-text">Inquiry counts are observed supplementary data; no attribution to individual posts is inferred.</p></BaseCard>
     </section>
 
-      <BaseCard title="Recent Published Content" description="Instagram publication metrics are read-only observations from the matched media object. A dash means the provider did not return that metric."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
+      <BaseCard v-if="!isEvaluationPage" title="Recent Published Content" description="Recent publications with metrics returned by the connected platform."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
 
-    <div class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>LinkedIn metrics are currently entered manually.</span></div>
+    <div v-if="!isEvaluationPage" class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>Enter weekly LinkedIn observations from this menu.</span></div>
     </template>
 
-    <BaseModal v-model="logModalOpen" title="Log Weekly Metrics" description="Record observed LinkedIn platform metrics for a completed week. Reach may be left blank when it was not reported."><form class="metrics-form" @submit.prevent="saveMetric"><BaseSelect v-model="logForm.platform" label="Platform" :options="logPlatformOptions" required /><BaseInput v-model="logForm.weekStart" label="Week Start" type="date" required /><div class="metrics-form__grid"><BaseInput v-model="logForm.followers" label="Ending Followers" type="number" min="0" required /><BaseInput v-model="logForm.reach" label="Reach" type="number" min="0" /><BaseInput v-model="logForm.impressions" label="Impressions" type="number" min="0" required /><BaseInput v-model="logForm.likes" label="Likes" type="number" min="0" required /><BaseInput v-model="logForm.comments" label="Comments" type="number" min="0" required /><BaseInput v-model="logForm.saves" label="Saves" type="number" min="0" required /><BaseInput v-model="logForm.publishedPosts" label="Published Posts" type="number" min="0" required /></div><p v-if="logError" class="form-error" role="alert">{{ logError }}</p><div class="modal-actions"><BaseButton variant="ghost" type="button" @click="logModalOpen = false">Cancel</BaseButton><BaseButton type="submit">Save Metrics</BaseButton></div></form></BaseModal>
   </div>
 </template>
 
 <style scoped>
 .performance-page { max-width: 1280px; }
+.form-guidance { flex-basis: 100%; margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.55; }
 .evaluation-section { display: grid; gap: 18px; }
+.evaluation-details { border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.evaluation-details > summary { display: flex; align-items: center; gap: 8px; padding: 14px 16px; color: var(--color-ink); cursor: pointer; font-size: 13px; font-weight: 600; list-style-position: inside; }
+.evaluation-details[open] > summary { border-bottom: 1px solid var(--color-border); }
+.evaluation-details > :not(summary) { margin: 14px 16px; }
+.evaluation-more > summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+.evaluation-more > summary span { color: var(--color-muted); font-size: 12px; font-weight: 400; }
 .evaluation-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .evaluation-controls, .evaluation-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
 .evaluation-controls > *, .evaluation-form > * { flex: 1 1 170px; }
@@ -433,6 +445,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .source-status-list div { grid-template-columns: 1fr auto; align-items: center; font-size: 11px; }
 .source-status-list strong { color: var(--color-muted); text-transform: capitalize; }
 .evaluation-snapshot { margin-top: 14px; }
+.snapshot-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; }
 .evaluation-table-wrap { overflow-x: auto; margin-top: 16px; }
 .evaluation-table { min-width: 820px; }
 .platform-execution-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -500,6 +513,6 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } }
-@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list, .snapshot-form { grid-template-columns: 1fr; } }
 </style>

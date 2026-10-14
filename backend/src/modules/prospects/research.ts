@@ -5,6 +5,7 @@ import { AppError, aiNotConfigured, aiOutputInvalid, conflict, notFound } from '
 import { requestHash } from '../context/normalize.js'
 import { AI_MODEL_ID, AI_PROVIDER, PROSPECT_RESEARCH_OPERATION, PROSPECT_RESEARCH_SCHEMA_VERSION } from '../ai/constants.js'
 import { PROSPECT_RESEARCH_SYSTEM_PROMPT, renderProspectResearchPrompt } from '../ai/prospect-research-prompt.js'
+import { ensureProspectResearchPrompt } from '../ai/seed.js'
 import { mapProviderFailure } from '../ai/service.js'
 import type { ProspectResearchProvider, ProspectResearchProviderResult, TopicDiscoverySource } from '../ai/provider.js'
 
@@ -57,8 +58,7 @@ export async function researchProspect(prisma: PrismaClient, config: AppConfig, 
   if (!prospect) throw notFound('Prospect not found.')
   const pending = await prisma.prospectResearchRun.findFirst({ where: { companyId, prospectId, status: 'pending' }, select: { id: true } })
   if (pending) throw conflict('Research is already running for this prospect.')
-  const prompt = await prisma.promptVersion.findFirst({ where: { module: 'M2', operation: PROSPECT_RESEARCH_OPERATION, status: 'active' } })
-  if (!prompt) throw new AppError(503, 'RESEARCH_NOT_CONFIGURED', 'Company Research is not configured for this environment.')
+  const prompt = await ensureProspectResearchPrompt(prisma)
   const settings = await prisma.aiSettings.findUnique({ where: { companyId }, select: { modelId: true } })
   const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
   if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()

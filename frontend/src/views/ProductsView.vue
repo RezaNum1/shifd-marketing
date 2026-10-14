@@ -22,7 +22,7 @@ const search = ref('')
 const statusFilter = ref<'All' | ProductStatus>('All')
 const modalOpen = ref(false)
 const attempted = ref(false)
-const form = ref({ name: '', description: '', category: '', status: 'Draft' as ProductStatus, url: '' })
+const form = ref({ name: '', description: '' })
 const statusOptions: SelectOption[] = [{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }, { value: 'Draft', label: 'Draft' }]
 const filterOptions: SelectOption[] = [{ value: 'All', label: 'All Products' }, ...statusOptions]
 const filteredProducts = computed(() => store.products.filter((product) => {
@@ -30,11 +30,11 @@ const filteredProducts = computed(() => store.products.filter((product) => {
   return (!query || [product.name, product.description, product.category].some((value) => value.toLowerCase().includes(query))) && (statusFilter.value === 'All' || product.status === statusFilter.value)
 }))
 function tone(status: ProductStatus): Tone { return status === 'Active' ? 'success' : status === 'Inactive' ? 'neutral' : 'warning' }
-function openAdd() { form.value = { name: '', description: '', category: '', status: 'Draft', url: '' }; attempted.value = false; modalOpen.value = true }
+function openAdd() { form.value = { name: '', description: '' }; attempted.value = false; modalOpen.value = true }
 async function save() {
   attempted.value = true
   if (!form.value.name.trim() || !form.value.description.trim()) return
-  const product = await store.addProduct(form.value)
+  const product = await store.addProduct({ ...form.value, category: '', status: 'Draft', url: '' })
   if (!product) return
   modalOpen.value = false
   router.push(`/context/products/${product.id}`)
@@ -58,7 +58,7 @@ onMounted(() => { void store.load() })
     </section>
     <BaseCard v-else-if="store.loaded && !store.products.length"><EmptyState icon="product" title="No products found." description="Add a product to start defining product-specific marketing context."><BaseButton @click="openAdd">Add Product</BaseButton></EmptyState></BaseCard>
     <BaseCard v-else-if="store.loaded"><EmptyState icon="search" title="No products match these filters." description="Try another search or clear your filters."><BaseButton variant="secondary" @click="search = ''; statusFilter = 'All'">Clear Filters</BaseButton></EmptyState></BaseCard>
-    <BaseModal v-model="modalOpen" title="Add Product" description="Create a product record and its editable context layer."><form class="product-form" @submit.prevent="save"><BaseInput v-model="form.name" label="Product Name" required :error="attempted && !form.name.trim() ? 'Enter a product name.' : undefined" /><BaseTextarea v-model="form.description" label="Description" :rows="3" required :error="attempted && !form.description.trim() ? 'Enter a description.' : undefined" /><BaseInput v-model="form.category" label="Category" /><BaseSelect v-model="form.status" label="Status" :options="statusOptions" /><BaseInput v-model="form.url" label="Product URL" type="url" /><div class="modal-actions"><BaseButton variant="ghost" type="button" @click="modalOpen = false">Cancel</BaseButton><BaseButton type="submit">Save Product</BaseButton></div></form></BaseModal>
+    <BaseModal v-model="modalOpen" title="Add Product" description="Start with the product name and a short description. Add its category, status, and URL in the product context form next."><form class="product-form" @submit.prevent="save"><BaseInput v-model="form.name" label="Product Name" required :error="attempted && !form.name.trim() ? 'Enter a product name.' : undefined" /><BaseTextarea v-model="form.description" label="Product Description" :rows="3" required hint="A short summary is enough to create the product. You can complete the rest on the next page." :error="attempted && !form.description.trim() ? 'Enter a product description.' : undefined" /><div class="modal-actions"><BaseButton variant="ghost" type="button" @click="modalOpen = false">Cancel</BaseButton><BaseButton type="submit">Continue to Product Context</BaseButton></div></form></BaseModal>
   </div>
 </template>
 

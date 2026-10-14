@@ -15,7 +15,7 @@ import { useCompanyContextStore } from '../stores/companyContext'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { useProductsStore } from '../stores/products'
 import { useUiStore } from '../stores/ui'
-import type { PromptVersion } from '../types/ai'
+import type { AiRequestLog, PromptVersion } from '../types/ai'
 import type { SelectOption } from '../types/ui'
 
 const router = useRouter()
@@ -45,7 +45,12 @@ const activeProduct = computed(() => products.products.find((product) => product
 const totalRequests = computed(() => ai.usage?.requests ?? ai.requestLogs.length)
 const inputTokens = computed(() => ai.usage?.inputTokens ?? ai.requestLogs.reduce((sum, item) => sum + item.inputTokens, 0))
 const outputTokens = computed(() => ai.usage?.outputTokens ?? ai.requestLogs.reduce((sum, item) => sum + item.outputTokens, 0))
-const estimatedCost = computed(() => ai.usage?.estimatedCostUsd === null ? null : ai.usage ? Number(ai.usage.estimatedCostUsd) : ai.requestLogs.reduce((sum, item) => sum + item.estimatedCostUsd, 0))
+const estimatedCost = computed(() => {
+  if (ai.usage) return ai.usage.estimatedCostUsd === null ? null : Number(ai.usage.estimatedCostUsd)
+  const knownCosts = ai.requestLogs.flatMap((item) => item.estimatedCostUsd === null ? [] : [item.estimatedCostUsd])
+  return knownCosts.length ? knownCosts.reduce((sum, cost) => sum + cost, 0) : null
+})
+const unknownCostRequests = computed(() => ai.usage?.unknownCostRequests ?? ai.requestLogs.filter((item) => item.estimatedCostUsd === null).length)
 
 async function saveChanges() {
   if (await ai.saveSettings({ ...ai.settings, generationLanguage: draft.generationLanguage as 'English' | 'Indonesian' })) ui.notify('Changes saved', 'success')
@@ -55,7 +60,27 @@ function contentTitle(contentId?: string) {
   if (!contentId) return 'No linked content'
   return contentLibrary.records.find((record) => record.id === contentId)?.title ?? 'Content unavailable'
 }
-function formatCost(value: number | null) { return value === null ? '—' : `$${value.toFixed(2)}` }
+function formatCost(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return '—'
+  return `$${value.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`
+}
+function requestCost(request: AiRequestLog) {
+  if (request.estimatedCostUsd !== null) return request.estimatedCostUsd
+  const model = request.model.trim().toLowerCase().replace(/[\s_]+/g, '-')
+  const createdAt = Date.parse(request.createdAt)
+  const supportedModel = model === 'gpt-5.6-luna'
+  if (request.status !== 'Success' || request.provider.toLowerCase() !== 'openai' || !supportedModel || !Number.isFinite(createdAt) || createdAt < Date.UTC(2026, 6, 30) || request.inputTokens <= 0 || request.outputTokens <= 0) return null
+
+  // Fallback for request records without a persisted estimate. This mirrors
+  // the verified, uncached-input rate recorded by the backend migration.
+  return Number(((request.inputTokens * 0.2 + request.outputTokens * 1.2) / 1_000_000).toFixed(8))
+}
+function requestCostTitle(request: AiRequestLog) {
+  if (request.estimatedCostUsd !== null) return undefined
+  return requestCost(request) === null
+    ? 'No verified rate or token usage is available for this request.'
+    : 'Fallback estimate using GPT-5.6 Luna rates with uncached input tokens.'
+}
 watch(() => ai.settings.generationLanguage, (value) => { draft.generationLanguage = value })
 onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.load(), products.load()]) })
 </script>
@@ -82,9 +107,9 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
 
     <BaseCard title="Prompt Versions" description="Prompt versions help keep AI-assisted content generation consistent and traceable."><BaseTable caption="Prompt versions" :columns="promptColumns" :rows="ai.promptVersions"><template #cell-operation="{ row }"><strong>{{ row.operation }}</strong><small class="table-subtext">{{ row.module }}</small></template><template #cell-status="{ row }"><StatusBadge tone="success">{{ row.status }}</StatusBadge></template><template #cell-actions="{ row }"><BaseButton variant="ghost" size="compact" @click="viewPrompt(row)">View Details</BaseButton></template></BaseTable></BaseCard>
 
-    <BaseCard title="AI Usage" description="Backend request usage for transparency; this is not production billing."><div class="usage-grid"><div><span>Requests</span><strong>{{ totalRequests }}</strong></div><div><span>Input Tokens</span><strong>{{ inputTokens.toLocaleString() }}</strong></div><div><span>Output Tokens</span><strong>{{ outputTokens.toLocaleString() }}</strong></div><div><span>Estimated Cost</span><strong>{{ formatCost(estimatedCost) }}</strong></div></div></BaseCard>
+    <BaseCard title="AI Usage" description="Token-based estimate from verified model rates. Cache-write charges and other provider billing adjustments are not included."><div class="usage-grid"><div><span>Requests</span><strong>{{ totalRequests }}</strong></div><div><span>Input Tokens</span><strong>{{ inputTokens.toLocaleString() }}</strong></div><div><span>Output Tokens</span><strong>{{ outputTokens.toLocaleString() }}</strong></div><div><span>Estimated Cost (USD)</span><strong>{{ formatCost(estimatedCost) }}</strong></div></div><p v-if="unknownCostRequests" class="usage-cost-note">Cost is unavailable for {{ unknownCostRequests }} request{{ unknownCostRequests === 1 ? '' : 's' }} because a verified rate or token usage is missing.</p></BaseCard>
 
-    <BaseCard title="Recent AI Requests" description="Backend request records retained for workflow traceability."><BaseTable caption="Recent AI requests" :columns="requestColumns" :rows="ai.requestLogs"><template #cell-operation="{ row }"><strong>{{ row.operation }}</strong><small class="table-subtext">{{ row.module }} · {{ row.promptVersion }}</small></template><template #cell-content="{ row }">{{ contentTitle(row.contentId) }}</template><template #cell-tokens="{ row }">{{ row.inputTokens.toLocaleString() }} / {{ row.outputTokens.toLocaleString() }}</template><template #cell-cost="{ row }">{{ formatCost(row.estimatedCostUsd) }}</template><template #cell-status="{ row }"><StatusBadge :tone="row.status === 'Success' ? 'success' : 'warning'">{{ row.status }}</StatusBadge></template></BaseTable></BaseCard>
+    <BaseCard title="Recent AI Requests" description="Backend request records retained for workflow traceability."><BaseTable caption="Recent AI requests" :columns="requestColumns" :rows="ai.requestLogs"><template #cell-operation="{ row }"><strong>{{ row.operation }}</strong><small class="table-subtext">{{ row.module }} · {{ row.promptVersion }}</small></template><template #cell-content="{ row }">{{ contentTitle(row.contentId) }}</template><template #cell-tokens="{ row }">{{ row.inputTokens.toLocaleString() }} / {{ row.outputTokens.toLocaleString() }}</template><template #cell-cost="{ row }"><span :title="requestCostTitle(row)">{{ formatCost(requestCost(row)) }}</span></template><template #cell-status="{ row }"><StatusBadge :tone="row.status === 'Success' ? 'success' : 'warning'">{{ row.status }}</StatusBadge></template></BaseTable></BaseCard>
 
     <BaseModal v-model="promptDetailsOpen" title="Prompt Version Details" :description="selectedPrompt?.operation"><dl v-if="selectedPrompt" class="ai-details"><div><dt>Operation</dt><dd>{{ selectedPrompt.operation }}</dd></div><div><dt>Module</dt><dd>{{ selectedPrompt.module }}</dd></div><div><dt>Version</dt><dd>{{ selectedPrompt.version }}</dd></div><div><dt>Status</dt><dd>{{ selectedPrompt.status }}</dd></div><div><dt>Updated At</dt><dd>{{ selectedPrompt.updatedAt }}</dd></div></dl></BaseModal>
     </template>
@@ -121,6 +146,7 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
 .usage-grid div { display: grid; gap: 6px; padding: 15px; background: var(--color-surface); }
 .usage-grid span { color: var(--color-subtle); font-size: 11px; }
 .usage-grid strong { font-size: 22px; }
+.usage-cost-note { margin: 12px 0 0; color: var(--color-subtle); font-size: 12px; line-height: 1.5; }
 @media (max-width: 760px) { .ai-top-grid, .context-summary { grid-template-columns: 1fr; } .usage-grid { grid-template-columns: repeat(2, 1fr); } .operation-row { grid-template-columns: 38px minmax(0, 1fr); } .operation-row > .ui-badge { grid-column: 2; justify-self: start; } }
 @media (max-width: 480px) { .usage-grid { grid-template-columns: 1fr; } }
 </style>

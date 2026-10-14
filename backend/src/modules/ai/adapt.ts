@@ -229,8 +229,8 @@ async function buildAdaptationInput(
   if (!content) throw notFound()
   if (content.archivedAt) throw conflict('Archived Content cannot be adapted.')
   if (!content.brief) throw inputNotReady(['brief'])
-  if (content.contextType !== 'company' && content.contextType !== 'product') throw inputNotReady(['content.contextType'])
-  if (content.contextType === 'company' && content.productId !== null) throw inputNotReady(['content.productId'])
+  if (!['company', 'product', 'general'].includes(content.contextType)) throw inputNotReady(['content.contextType'])
+  if (content.contextType !== 'product' && content.productId !== null) throw inputNotReady(['content.productId'])
   if (content.contextType === 'product' && !content.productId) throw inputNotReady(['content.productId'])
   if (content.brief.pillarCode === '' || !content.brief.targetAudience.trim() || !content.brief.topic.trim()) {
     throw inputNotReady(['brief'])
@@ -253,7 +253,7 @@ async function buildAdaptationInput(
     description: resolved.company.profile.description,
     brandVoice: resolved.company.brand.brandVoice,
   })
-  if (!companyReady.ready && !comparisonOnly) throw inputNotReady(companyReady.missing)
+  if (content.contextType !== 'general' && !companyReady.ready && !comparisonOnly) throw inputNotReady(companyReady.missing)
   if (content.contextType === 'product') {
     if (!resolved.product) throw inputNotReady(['product'])
     const productReady = productContextReadiness(resolved.product.profile)
@@ -307,9 +307,9 @@ async function buildAdaptationInput(
     },
     targetVariant,
     brief,
-    company: resolved.company,
-    product: resolved.product,
-    resolvedBrand: resolved.resolvedBrand,
+    company: content.contextType === 'general' ? null : resolved.company,
+    product: content.contextType === 'product' ? resolved.product : null,
+    resolvedBrand: content.contextType === 'general' ? null : resolved.resolvedBrand,
     contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
     ai: execution,
   }
@@ -331,9 +331,9 @@ async function buildAdaptationInput(
     brief,
     master,
     visualDirection,
-    company: resolved.company,
-    product: resolved.product,
-    resolvedBrand: resolved.resolvedBrand,
+    company: content.contextType === 'general' ? null : resolved.company,
+    product: content.contextType === 'product' ? resolved.product : null,
+    resolvedBrand: content.contextType === 'general' ? null : resolved.resolvedBrand,
     contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
     ai: execution,
   }
@@ -375,7 +375,7 @@ async function buildAdaptationInput(
     relevantSnapshot,
     inputHash,
     idempotencyHash,
-    userPrompt: comparisonOnly ? '' : renderM3DataPrompt({ company: resolved.company, product: resolved.product, brief, master, visualDirection, platform: { code: platform }, execution }),
+    userPrompt: comparisonOnly ? '' : renderM3DataPrompt({ company: content.contextType === 'general' ? null : resolved.company, product: content.contextType === 'product' ? resolved.product : null, brief, master, visualDirection, platform: { code: platform }, execution }),
     rate,
     platform,
   }
@@ -416,7 +416,7 @@ async function finalizeAdaptation(
     if (stale) {
       await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {
         status: 'stale', completedAt: new Date(), latencyMs,
-        inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+        inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
         providerRequestId: providerResult.providerRequestId,
         errorCode: 'INPUT_CHANGED', errorMessage: 'The relevant platform adaptation inputs changed while the AI request was running.',
       } })
@@ -467,7 +467,7 @@ async function finalizeAdaptation(
     const estimatedCost = calculateCost(usage, prepared.rate)
     await tx.aiRequestLog.update({ where: { id: prepared.aiRequestId }, data: {
       status: 'success', completedAt: new Date(), latencyMs,
-      inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+      inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
       estimatedCostUsd: estimatedCost, providerRequestId: providerResult.providerRequestId,
     } })
     const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel })
@@ -484,10 +484,10 @@ async function finalizeAdaptation(
 }
 
 async function finalizeFailedRequest(prisma: PrismaClient, aiRequestId: string, failure: { code: string; message: string }, latencyMs: number, providerResult: AiProviderResult | null, providerRequestId: string | null = null) {
-  const usage = providerResult ? usageForDb(providerResult) : { inputTokens: null, outputTokens: null }
+  const usage = providerResult ? usageForDb(providerResult) : { inputTokens: null, cachedInputTokens: null, outputTokens: null }
   await prisma.aiRequestLog.update({ where: { id: aiRequestId }, data: {
     status: 'failed', completedAt: new Date(), errorCode: failure.code, errorMessage: failure.message,
-    latencyMs, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    latencyMs, inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
     providerRequestId: providerRequestId ?? providerResult?.providerRequestId ?? null,
   } })
 }
@@ -536,7 +536,7 @@ async function lockContent(tx: Prisma.TransactionClient, companyId: string, cont
 async function selectRate(tx: Prisma.TransactionClient, model: string): Promise<RateSelection | null> {
   const row = await tx.aiRateVersion.findFirst({ where: { provider: AI_PROVIDER, model, effectiveFrom: { lte: new Date() } }, orderBy: { effectiveFrom: 'desc' } })
   if (!row) return null
-  return { id: row.id, version: row.version, inputUsdPerMillion: row.inputUsdPerMillion.toString(), outputUsdPerMillion: row.outputUsdPerMillion.toString() }
+  return { id: row.id, version: row.version, inputUsdPerMillion: row.inputUsdPerMillion.toString(), cachedInputUsdPerMillion: row.cachedInputUsdPerMillion?.toString() ?? null, outputUsdPerMillion: row.outputUsdPerMillion.toString() }
 }
 
 function parseMaster(value: Prisma.JsonValue | null) {

@@ -19,6 +19,10 @@ import type { Product, ProductProfile } from '../types/productContext'
 import type { Tone } from '../types/ui'
 
 const route = useRoute(); const router = useRouter(); const store = useProductsStore()
+const pageHelp = {
+  purpose: 'Define the audience, value, and marketing details for this product while inheriting shared company context.',
+  steps: ['Update the product name, description, and status.', 'Add target users, value propositions, key messages, and supportable proof points.', 'Choose whether to inherit the company brand tone, then save your changes.'],
+}
 const product = computed(() => store.getProduct(String(route.params.id)))
 const profile = computed(() => product.value ? store.getProfile(product.value.id) : undefined)
 const draftProduct = reactive<Product>({ id: '', companyId: '', name: '', slug: '', description: '', category: '', status: 'Draft', url: '', createdAt: '', updatedAt: '' })
@@ -35,18 +39,19 @@ watch([() => String(route.params.id), product, profile], () => {
   if (!product.value || !profile.value) return
   Object.assign(draftProduct, JSON.parse(JSON.stringify(product.value)))
   Object.assign(draftProfile, JSON.parse(JSON.stringify(profile.value)))
+  if (!draftProfile.valueProposition.trim()) draftProfile.valueProposition = draftProfile.positioning
   initialized.value = true
   savedAt.value = null
 }, { immediate: true })
 
-async function save() { if (!draftProduct.name.trim() || !draftProduct.description.trim()) return; const saved = await store.saveProduct(draftProduct, draftProfile); if (saved) savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()) }
+async function save() { if (!draftProduct.name.trim() || !draftProduct.description.trim()) return; draftProfile.positioning = draftProfile.valueProposition; const saved = await store.saveProduct(draftProduct, draftProfile); if (saved) savedAt.value = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()) }
 
 onMounted(() => { const id = String(route.params.id); void Promise.all([store.loadProduct(id), store.loadResolvedContext(id, true), useCompanyContextStore().load()]) })
 </script>
 
 <template>
   <div v-if="product && profile && resolved" class="page-stack product-context-page">
-    <PageHeader :title="draftProduct.name" description="Define product-specific audience, positioning, and marketing context." :breadcrumbs="[{ label: 'Context Engine' }, { label: 'Products', to: '/context/products' }, { label: draftProduct.name }]">
+    <PageHeader :title="draftProduct.name" description="Define product-specific audience, value, and marketing context." :breadcrumbs="[{ label: 'Context Engine' }, { label: 'Products', to: '/context/products' }, { label: draftProduct.name }]" :help="pageHelp">
       <template #actions><StatusBadge :tone="productStatusTone" dot>{{ draftProduct.status }}</StatusBadge><span v-if="savedAt && !dirty" class="product-saved"><AppIcon name="check" :size="15" />Saved {{ savedAt }}</span><BaseButton :disabled="!dirty" @click="save">Save Changes</BaseButton></template>
     </PageHeader>
     <BaseCard class="inheritance-card"><div class="inheritance-card__icon"><AppIcon name="company" :size="18" /></div><div><strong>Inherits company context from {{ resolved.company.companyProfile.name }}</strong><p>Brand, market, and business context remain managed in Company Context.</p></div><BaseButton variant="secondary" size="compact" @click="router.push('/context/company')">View Company Context</BaseButton></BaseCard>
@@ -54,7 +59,7 @@ onMounted(() => { const id = String(route.params.id); void Promise.all([store.lo
 
     <BaseCard title="Product Information"><div class="product-form-grid"><BaseInput v-model="draftProduct.name" label="Product Name" required /><BaseInput v-model="draftProduct.category" label="Category" /><BaseTextarea v-model="draftProduct.description" label="Product Description" :rows="3" required /><BaseSelect v-model="draftProduct.status" label="Status" :options="statusOptions" /><BaseInput v-model="draftProduct.url" label="Product URL" type="url" /></div></BaseCard>
     <BaseCard title="Target Audience" description="Editable product context, not validated customer research."><div class="product-lists-grid"><ContextListEditor v-model="draftProfile.targetUsers" label="Target Users" /><ContextListEditor v-model="draftProfile.targetOrganizations" label="Target Organizations" /><ContextListEditor v-model="draftProfile.decisionMakers" label="Decision Makers" /><ContextListEditor v-model="draftProfile.problemsAddressed" label="Problems Addressed" /></div></BaseCard>
-    <BaseCard title="Product Value"><div class="product-form-grid"><BaseTextarea v-model="draftProfile.valueProposition" label="Value Proposition" :rows="3" /><BaseTextarea v-model="draftProfile.positioning" label="Product Positioning" :rows="3" /></div><div class="product-lists-grid product-lists-grid--four"><ContextListEditor v-model="draftProfile.features" label="Key Features" /><ContextListEditor v-model="draftProfile.benefits" label="Key Benefits" /><ContextListEditor v-model="draftProfile.differentiators" label="Differentiators" /><ContextListEditor v-model="draftProfile.useCases" label="Use Cases" /></div></BaseCard>
+    <BaseCard title="Product Value" description="Explain what the product helps customers achieve and what makes it useful."><div class="product-form-grid"><BaseTextarea v-model="draftProfile.valueProposition" label="Product Value Proposition" :rows="3" hint="Describe the product's value and positioning together in one clear statement." /></div><div class="product-lists-grid product-lists-grid--four"><ContextListEditor v-model="draftProfile.features" label="Key Features" /><ContextListEditor v-model="draftProfile.benefits" label="Key Benefits" /><ContextListEditor v-model="draftProfile.differentiators" label="Differentiators" /><ContextListEditor v-model="draftProfile.useCases" label="Use Cases" /></div></BaseCard>
     <BaseCard title="Marketing Context"><div class="product-form-grid"><BaseSelect v-model="draftProfile.campaignObjective" label="Campaign Objective" :options="campaignObjectiveOptions" /><BaseInput v-model="draftProfile.defaultCta" label="Default CTA" /><ContextListEditor v-model="draftProfile.keyMessages" label="Key Messages" /><ContextListEditor v-model="draftProfile.proofPoints" label="Proof Points" hint="Add only evidence or claims that can be supported." /></div></BaseCard>
     <BaseCard title="Communication / Tone" description="Product context can inherit the Company Brand values without copying them."><label class="tone-toggle"><input v-model="draftProfile.inheritCompanyTone" type="checkbox" /> <span><strong>Inherit Company Brand Tone</strong><small>Use the current Company Context brand rules dynamically.</small></span></label><div v-if="draftProfile.inheritCompanyTone" class="inherited-tone-grid"><div><span>Inherited Brand Voice</span><strong>{{ resolvedTone }}</strong></div><div><span>Inherited CTA Style</span><strong>{{ resolved.company.brandProfile.ctaStyle }}</strong></div><div><span>Inherited Preferred Language</span><strong>{{ resolved.company.brandProfile.preferredLanguage }}</strong></div></div><div v-else class="tone-override"><BaseTextarea v-model="draftProfile.toneOverride" label="Product Tone Override" :rows="3" hint="This overrides only the brand voice; other Company Context remains inherited." /><div class="tone-resolution-grid"><div><span>Inherited Company Brand Voice</span><strong>{{ resolved.company.brandProfile.brandVoice }}</strong></div><div><span>Resolved Product Brand Voice</span><strong>{{ resolvedTone }}</strong></div></div></div></BaseCard>
   </div>

@@ -106,12 +106,15 @@ const contentInclude = {
   product: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
   brief: true,
+  canvaDesignLink: { include: { creator: { select: { id: true, name: true } }, updater: { select: { id: true, name: true } } } },
   currentApproval: { include: { actor: { select: { id: true, name: true } } } },
   variants: {
     orderBy: { platform: 'asc' },
     include: {
       assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } },
-      reuseCreativeFromVariant: true,
+      reuseCreativeFromVariant: {
+        include: { assetLinks: { orderBy: { sortOrder: 'asc' }, include: { asset: true } } },
+      },
       currentAssessment: true,
       schedule: { include: { creator: { select: { id: true, name: true } } } },
       publication: { include: { marker: { select: { id: true, name: true } } } },
@@ -121,6 +124,67 @@ const contentInclude = {
 
 export type ContentRow = Prisma.ContentGetPayload<{ include: typeof contentInclude }>
 export type CompleteContentRow = ContentRow & { brief: NonNullable<ContentRow['brief']> }
+
+const canvaDesignLinkInclude = { creator: { select: { id: true, name: true } }, updater: { select: { id: true, name: true } } } satisfies Prisma.ContentCanvaDesignLinkInclude
+
+export function normalizeCanvaDesignUrl(value: unknown): string {
+  if (typeof value !== 'string') throw validationError('A Canva design URL is required.', { url: 'Enter a valid Canva design URL.' })
+  const input = value.trim()
+  if (!input || input.length > 2048) throw validationError('The Canva design URL is invalid.', { url: 'Use a URL of at most 2048 characters.' })
+  let url: URL
+  try { url = new URL(input) } catch { throw validationError('The Canva design URL is invalid.', { url: 'Enter a valid Canva design URL.' }) }
+  const hostname = url.hostname.toLowerCase()
+  const canvaDomains = ['canva.com', 'canva.site', 'canva.link']
+  const isCanvaHost = canvaDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+  if (!isCanvaHost) throw validationError('Only Canva links are supported.', { url: 'Use a canva.com, canva.site, or canva.link URL.' })
+  if (url.username || url.password) throw validationError('Canva links cannot contain login credentials.', { url: 'Copy the share link directly from Canva.' })
+  if (url.port) throw validationError('Custom ports are not supported for Canva links.', { url: 'Copy the standard Canva share link.' })
+  // Canva share links should be stored with HTTPS even if a copied link uses
+  // the HTTP form; browsers and Canva both redirect these to the secure URL.
+  if (url.protocol === 'http:') url.protocol = 'https:'
+  if (url.protocol !== 'https:') {
+    throw validationError('Only HTTPS Canva design links are supported.', { url: 'Copy a design or share link from Canva.' })
+  }
+  return url.toString()
+}
+
+export async function readCanvaDesignLink(prisma: PrismaClient, companyId: string, contentId: string) {
+  const content = await prisma.content.findFirst({ where: { id: contentId, companyId }, select: { id: true } })
+  if (!content) throw notFound()
+  const row = await prisma.contentCanvaDesignLink.findUnique({ where: { companyId_contentId: { companyId, contentId } }, include: canvaDesignLinkInclude })
+  return mapCanvaDesignLink(row)
+}
+
+export async function saveCanvaDesignLink(prisma: PrismaClient, companyId: string, contentId: string, actorId: string, url: string) {
+  const [content, actor] = await Promise.all([
+    prisma.content.findFirst({ where: { id: contentId, companyId }, select: { id: true } }),
+    prisma.user.findFirst({ where: { id: actorId, companyId }, select: { id: true } }),
+  ])
+  if (!content || !actor) throw notFound()
+  const row = await prisma.contentCanvaDesignLink.upsert({
+    where: { companyId_contentId: { companyId, contentId } },
+    create: { companyId, contentId, url, createdBy: actorId, updatedBy: actorId },
+    update: { url, updatedBy: actorId },
+    include: canvaDesignLinkInclude,
+  })
+  return mapCanvaDesignLink(row)
+}
+
+export async function removeCanvaDesignLink(prisma: PrismaClient, companyId: string, contentId: string, actorId: string) {
+  const [content, actor] = await Promise.all([
+    prisma.content.findFirst({ where: { id: contentId, companyId }, select: { id: true } }),
+    prisma.user.findFirst({ where: { id: actorId, companyId }, select: { id: true } }),
+  ])
+  if (!content || !actor) throw notFound()
+  await prisma.contentCanvaDesignLink.updateMany({ where: { companyId, contentId }, data: { url: null, updatedBy: actorId } })
+  const row = await prisma.contentCanvaDesignLink.findUnique({ where: { companyId_contentId: { companyId, contentId } }, include: canvaDesignLinkInclude })
+  return mapCanvaDesignLink(row)
+}
+
+function mapCanvaDesignLink(row: Prisma.ContentCanvaDesignLinkGetPayload<{ include: typeof canvaDesignLinkInclude }> | null) {
+  if (!row) return null
+  return { contentId: row.contentId, companyId: row.companyId, url: row.url, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), createdBy: row.creator, updatedBy: row.updater }
+}
 
 export async function createIdea(prisma: PrismaClient, companyId: string, actorId: string, input: IdeaInput, idempotencyKey: string) {
   return executeIdempotent(prisma, {
@@ -562,6 +626,39 @@ export async function archiveContent(prisma: PrismaClient, companyId: string, co
   })
 }
 
+export async function deleteContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`
+    await tx.$executeRaw`SET LOCAL statement_timeout = '12s'`
+    await lockContent(tx, companyId, contentId, expectedVersion)
+    const variantIds = (await tx.platformVariant.findMany({ where: { contentId }, select: { id: true } })).map((variant) => variant.id)
+    const schedules = await tx.contentSchedule.findMany({ where: { variantId: { in: variantIds } }, select: { id: true } })
+    const scheduleIds = schedules.map((schedule) => schedule.id)
+    const publicationIds = (await tx.publicationRecord.findMany({ where: { variantId: { in: variantIds } }, select: { id: true } })).map((publication) => publication.id)
+    const aiRequestIds = (await tx.aiRequestLog.findMany({ where: { contentId }, select: { id: true } })).map((log) => log.id)
+
+    await tx.content.update({ where: { id: contentId }, data: { currentApprovalId: null } })
+    if (variantIds.length) await tx.platformVariant.updateMany({ where: { id: { in: variantIds } }, data: { currentAssessmentId: null, reuseCreativeFromVariantId: null } })
+    if (publicationIds.length) await tx.publicationMetric.deleteMany({ where: { publicationRecordId: { in: publicationIds } } })
+    if (variantIds.length) await tx.publicationRecord.deleteMany({ where: { variantId: { in: variantIds } } })
+    if (scheduleIds.length) await tx.contentSchedule.deleteMany({ where: { id: { in: scheduleIds } } })
+    await tx.approvalAction.deleteMany({ where: { contentId } })
+    if (variantIds.length) await tx.brandAssessment.deleteMany({ where: { variantId: { in: variantIds } } })
+    if (variantIds.length) await tx.variantAsset.deleteMany({ where: { variantId: { in: variantIds } } })
+    if (variantIds.length) await tx.contentEvent.deleteMany({ where: { variantId: { in: variantIds } } })
+    await tx.contentEvent.deleteMany({ where: { contentId } })
+    await tx.productionTimeLog.deleteMany({ where: { contentId } })
+    await tx.creativeReferenceBatch.deleteMany({ where: { contentId } })
+    if (aiRequestIds.length) {
+      await tx.requestIdempotency.deleteMany({ where: { aiRequestId: { in: aiRequestIds } } })
+      await tx.aiRequestLog.deleteMany({ where: { id: { in: aiRequestIds } } })
+    }
+    if (variantIds.length) await tx.platformVariant.deleteMany({ where: { id: { in: variantIds } } })
+    await tx.contentBrief.deleteMany({ where: { contentId } })
+    await tx.content.delete({ where: { id: contentId } })
+  }, { maxWait: 5_000, timeout: 15_000 })
+}
+
 export async function listContentEvents(prisma: PrismaClient, companyId: string, contentId: string, options: { limit: number; cursor?: { createdAt: Date; id: string } | undefined }) {
   await getContentAggregate(prisma, companyId, contentId)
   const filters: Prisma.ContentEventWhereInput[] = [{ contentId }]
@@ -612,7 +709,7 @@ async function validateBriefReference(db: Db, companyId: string, brief: BriefInp
 }
 
 async function validateContextProduct(db: Db, companyId: string, contextType: IdeaContextType, productId: string | null, requireActive: boolean) {
-  if (contextType === 'company') {
+  if (contextType !== 'product') {
     if (productId !== null) throw validationError('Company context cannot select a Product.', { productId: 'Remove the Product for Company context.' })
     return
   }
@@ -727,6 +824,7 @@ export async function assessmentFreshness(db: Db, companyId: string, content: Co
         hashtags: variant.hashtags,
         visualRecommendation: variant.visualRecommendation,
         adaptedFromMasterRevision: variant.adaptedFromMasterRevision,
+        assets: (variant.assetLinks.length ? variant.assetLinks : variant.reuseCreativeFromVariant?.assetLinks ?? []).map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
       }
       const hash = brandRelevantInputHash({
         content: { id: content.id, contextType: content.contextType, productId: content.productId, masterRevision: content.masterRevision, master, visualDirection },
@@ -896,6 +994,7 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
     },
     master,
     visualDirection: direction,
+    canvaDesignLink: mapCanvaDesignLink(content.canvaDesignLink),
     designStatus: content.designStatus,
     variants: content.variants.map((variant) => mapVariant(variant, content.variants, content.masterRevision, Boolean(master), freshness, content.id, asOf)),
     schedules: content.variants.flatMap((variant) => variant.schedule ? [mapSchedule(variant.schedule, content.id, variant.platform, variant.publication, asOf)] : []),

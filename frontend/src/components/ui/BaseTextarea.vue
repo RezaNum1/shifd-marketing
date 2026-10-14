@@ -9,6 +9,8 @@ withDefaults(
     label: string
     hint?: string
     error?: string
+    tooltip?: string
+    number?: number
     required?: boolean
     rows?: number
   }>(),
@@ -24,6 +26,8 @@ const generatedId = useId()
     :label="label"
     :hint="hint"
     :error="error"
+    :tooltip="tooltip"
+    :number="number"
     :required="required"
     v-slot="{ describedBy }"
   >

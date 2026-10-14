@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import ContentIdeaEditor from '../components/content/ContentIdeaEditor.vue'
@@ -12,7 +12,6 @@ import BaseTable from '../components/ui/BaseTable.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import InlineAlert from '../components/ui/InlineAlert.vue'
-import BaseDrawer from '../components/ui/BaseDrawer.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import * as topicDiscoveryApi from '../api/topicDiscovery'
@@ -48,17 +47,19 @@ const editingIdea = ref<ContentIdea>()
 const deleteConfirmIdea = ref<ContentIdea | null>(null)
 const deleteModalOpen = computed({ get: () => deleteConfirmIdea.value !== null, set: (v) => { if (!v) deleteConfirmIdea.value = null } })
 const deleteLoading = ref(false)
-const discoveryOpen = ref(false)
 const discoveryLoading = ref(false)
 const discoveryError = ref('')
 const discoveryProduct = ref('')
 const discoveryTimeframe = ref<'last_7_days' | 'last_30_days'>('last_7_days')
 const discoveryFocus = ref('')
 const discoveryRun = ref<TopicDiscoveryRun | null>(null)
-const usingCandidateId = ref<string | null>(null)
 const ideationOpen = ref(false)
 const ideationLoading = ref(false)
 const ideationError = ref('')
+const ideaMode = ref<'general' | 'industry' | 'product'>('general')
+const ideaTheme = ref('')
+const useCurrentTopics = ref(false)
+const selectedTopicId = ref('')
 const ideationIndustry = ref('')
 const customIndustry = ref('')
 const ideationProspectId = ref('')
@@ -79,6 +80,7 @@ const industryOptions = computed(() => [{ value: '', label: 'General content (no
 const targetProspectOptions = computed(() => [{ value: '', label: 'No prospect (optional)' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
 const ideationProductOptions = computed(() => [{ value: '', label: 'Company / services' }, ...products.productOptions])
 const selectedIndustry = computed(() => ideationIndustry.value === '__custom__' ? customIndustry.value.trim() || null : ideationIndustry.value || null)
+const selectedTopic = computed(() => discoveryRun.value?.candidates.find((candidate) => candidate.id === selectedTopicId.value) ?? null)
 const tabs = ['All', 'Ready', 'Used', 'Archived'] as const
 const columns: TableColumn[] = [
   { key: 'idea', label: 'Idea' }, { key: 'context', label: 'Context' },
@@ -89,7 +91,6 @@ const contextOptions = [{ value: 'all', label: 'All Contexts' }, ...ideaContextO
 const productOptions = computed(() => [{ value: 'all', label: 'All Products' }, ...products.productOptions])
 const pillars = [{ value: 'all', label: 'All Pillars' }, ...pillarOptions]
 const objectives = [{ value: 'all', label: 'All Objectives' }, ...ideaObjectiveOptions]
-const discoveryProductOptions = computed(() => [{ value: '', label: 'Company / All products' }, ...products.productOptions])
 const discoveryTimeframeOptions = [{ value: 'last_7_days', label: 'Last 7 days' }, { value: 'last_30_days', label: 'Last 30 days' }]
 const activeFilters = computed(() => Boolean(search.value.trim()) || status.value !== 'All'
   || [context.value, product.value, pillar.value, objective.value].some((value) => value !== 'all'))
@@ -144,13 +145,38 @@ async function deleteIdea() {
   if (await store.remove(id)) ui.notify('Idea deleted.', 'success')
   deleteLoading.value = false
 }
-function openDiscovery() { discoveryError.value = ''; discoveryOpen.value = true }
-function openIdeation() { ideationError.value = ''; ideationOpen.value = true }
-function discoverForIdeation() {
-  discoveryProduct.value = ideationProductId.value
-  discoveryFocus.value = selectedIndustry.value ? `Industry: ${selectedIndustry.value}` : ''
-  ideationOpen.value = false
-  openDiscovery()
+function openIdeation() { ideationOpen.value = true; ideationError.value = ''; discoveryError.value = '' }
+function changeIdeaMode(mode: 'general' | 'industry' | 'product') {
+  if (ideaMode.value === mode) return
+  ideaMode.value = mode
+  ideaTheme.value = ''
+  ideationIndustry.value = ''
+  customIndustry.value = ''
+  ideationProspectId.value = ''
+  ideationProductId.value = ''
+  ideationAudience.value = ''
+  ideationGuidance.value = ''
+  ideationObjective.value = mode === 'product' ? 'product_introduction' : mode === 'industry' ? 'industry_education' : 'brand_awareness'
+  useCurrentTopics.value = false
+  selectedTopicId.value = ''
+  discoveryRun.value = null
+  discoveryError.value = ''
+  ideationError.value = ''
+  generatedIdeas.value = []
+}
+function toggleCurrentTopics() {
+  if (useCurrentTopics.value) return
+  discoveryRun.value = null
+  selectedTopicId.value = ''
+  discoveryError.value = ''
+}
+function discoveryFocusForMode() {
+  const parts = [
+    ideaMode.value === 'general' ? ideaTheme.value.trim() : '',
+    ideaMode.value === 'industry' ? `Industry: ${selectedIndustry.value ?? ''}` : '',
+    ideaMode.value === 'product' ? ideaTheme.value.trim() : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
 }
 function chooseProspect() {
   const prospect = prospects.value.find((item) => item.id === ideationProspectId.value)
@@ -158,10 +184,16 @@ function chooseProspect() {
   if (prospect?.industry && ideationIndustry.value === '__custom__' && !customIndustry.value) customIndustry.value = prospect.industry
 }
 async function generateIndustryIdeas() {
-  if (ideationLoading.value) return
+  if (ideationLoading.value || !canGenerateIdeas.value) return
   ideationLoading.value = true; ideationError.value = ''; generatedIdeas.value = []
   try {
-    const result = await industryIdeationApi.generateIndustryIdeas({ industry: selectedIndustry.value, prospectId: ideationProspectId.value || null, productId: ideationProductId.value || null, audience: ideationAudience.value.trim() || null, objective: ideationObjective.value, guidance: ideationGuidance.value.trim() || null })
+    const guidanceParts = [
+      ideaMode.value === 'general' ? `Exploration theme: ${ideaTheme.value.trim()}` : '',
+      ideaMode.value === 'product' && ideaTheme.value.trim() ? `Supporting focus: ${ideaTheme.value.trim()}` : '',
+      ideationGuidance.value.trim(),
+      selectedTopic.value ? `Ground ideas in this current topic: ${selectedTopic.value.title}. ${selectedTopic.value.summary} Suggested angle: ${selectedTopic.value.contentAngle}` : '',
+    ].filter(Boolean)
+    const result = await industryIdeationApi.generateIndustryIdeas({ industry: ideaMode.value === 'industry' ? selectedIndustry.value : null, prospectId: ideationProspectId.value || null, productId: ideaMode.value === 'product' || (ideaMode.value === 'industry' && ideationProductId.value) ? ideationProductId.value || null : null, audience: ideationAudience.value.trim() || null, objective: ideationObjective.value, guidance: guidanceParts.join('\n\n') || null })
     generatedIdeas.value = result.data.ideas
   } catch (reason: unknown) { ideationError.value = errorMessage(reason, 'Content ideation could not be completed.') }
   finally { ideationLoading.value = false }
@@ -170,46 +202,56 @@ async function useGeneratedIdea(item: IndustryIdea, index: number, continueToCon
   if (savingIdeaIndex.value !== null) return
   savingIdeaIndex.value = index
   const objectiveMap: Record<string, string> = { brand_awareness: 'awareness', industry_education: 'education', problem_awareness: 'discovery', product_introduction: 'consideration', thought_leadership: 'credibility', engagement: 'engagement' }
-  const idea = await store.save({ title: item.title, contextType: ideationProductId.value ? 'product' : 'company', productId: ideationProductId.value || undefined, pillar: ideationObjective.value === 'thought_leadership' ? 'thought-leadership' : ideationObjective.value === 'product_introduction' ? 'product' : 'industry', objective: objectiveMap[ideationObjective.value], targetAudience: item.targetAudience, notes: [`Angle: ${item.angle}`, `Hook: ${item.hook}`, `Talking points: ${item.talkingPoints.join('; ')}`, `Industry relevance: ${item.industryRelevance}`, `Shifd capability: ${item.capability}`, `Suggested format: ${item.format}${item.platform ? ` (${item.platform})` : ''}`, `Soft CTA: ${item.softCta}`].join('\n'), targetIndustry: selectedIndustry.value ?? undefined, targetProspectId: ideationProspectId.value || undefined, contentObjective: ideationObjective.value, evidenceReferences: item.evidence }, undefined)
+  const topicEvidence = selectedTopic.value ? [{ claim: `Current topic grounding: ${selectedTopic.value.title}. ${selectedTopic.value.contentAngle}`, sources: selectedTopic.value.sources.map((source) => ({ title: source.title, url: source.url })) }] : []
+  const idea = await store.save({ title: item.title, contextType: ideaMode.value === 'product' ? 'product' : 'company', productId: ideaMode.value === 'product' ? ideationProductId.value || undefined : undefined, pillar: ideationObjective.value === 'thought_leadership' ? 'thought-leadership' : ideationObjective.value === 'product_introduction' ? 'product' : 'industry', objective: objectiveMap[ideationObjective.value], targetAudience: item.targetAudience, notes: [`Angle: ${item.angle}`, `Hook: ${item.hook}`, `Talking points: ${item.talkingPoints.join('; ')}`, `Industry relevance: ${item.industryRelevance}`, `Shifd capability: ${item.capability}`, `Suggested format: ${item.format}${item.platform ? ` (${item.platform})` : ''}`, `Soft CTA: ${item.softCta}`, selectedTopic.value ? `Current topic: ${selectedTopic.value.title}` : '', ideaMode.value === 'general' ? `Exploration theme: ${ideaTheme.value.trim()}` : ''].filter(Boolean).join('\n'), targetIndustry: ideaMode.value === 'industry' ? selectedIndustry.value ?? undefined : undefined, targetProspectId: ideationProspectId.value || undefined, contentObjective: ideationObjective.value, evidenceReferences: [...item.evidence, ...topicEvidence] }, undefined)
   savingIdeaIndex.value = null
   if (!idea) { ideationError.value = store.error || 'The idea could not be saved.'; return }
   ui.notify('Idea saved to the M2 Ideas library.', 'success')
   if (continueToContent) createContent(idea)
   else await store.load(true)
 }
+const canDiscoverTopics = computed(() => ideaMode.value !== 'general' || Boolean(ideaTheme.value.trim()))
+const canGenerateCore = computed(() => Boolean(ideationObjective.value) && (ideaMode.value === 'general' ? Boolean(ideaTheme.value.trim()) : ideaMode.value === 'industry' ? Boolean(selectedIndustry.value) : Boolean(ideationProductId.value)))
+const canGenerateIdeas = computed(() => canGenerateCore.value && (!useCurrentTopics.value || Boolean(selectedTopic.value)))
+const ideationPrimaryLabel = computed(() => useCurrentTopics.value && !selectedTopic.value ? 'Find Topics' : 'Generate Ideas')
+
+watch([ideaMode, ideaTheme, ideationIndustry, customIndustry, ideationProductId, discoveryTimeframe], () => {
+  generatedIdeas.value = []
+  if (discoveryRun.value) {
+    discoveryRun.value = null
+    selectedTopicId.value = ''
+  }
+})
+watch([ideationAudience, ideationObjective, ideationGuidance, ideationProspectId], () => { generatedIdeas.value = [] })
+
+function submitIdeation() {
+  if (useCurrentTopics.value && !selectedTopic.value) return discover()
+  return generateIndustryIdeas()
+}
+
 async function discover() {
-  if (discoveryLoading.value) return
+  if (discoveryLoading.value || !canDiscoverTopics.value) return
   discoveryLoading.value = true
   discoveryError.value = ''
+  selectedTopicId.value = ''
+  discoveryProduct.value = ideaMode.value === 'product' || ideaMode.value === 'industry' ? ideationProductId.value : ''
+  discoveryFocus.value = discoveryFocusForMode()
   try {
     const result = await topicDiscoveryApi.discoverTopics({ productId: discoveryProduct.value || null, market: 'ID', timeframe: discoveryTimeframe.value, focus: discoveryFocus.value.trim() || null })
     discoveryRun.value = result.data
+    selectedTopicId.value = result.data.candidates[0]?.id ?? ''
   } catch (reason: unknown) {
     discoveryError.value = errorMessage(reason, 'Current topic discovery could not be completed.')
   } finally { discoveryLoading.value = false }
 }
-async function useCandidate(candidateId: string) {
-  if (usingCandidateId.value) return
-  usingCandidateId.value = candidateId
-  discoveryError.value = ''
-  try {
-    const result = await topicDiscoveryApi.useTopicCandidate(candidateId)
-    const candidate = discoveryRun.value?.candidates.find((item) => item.id === candidateId)
-    if (candidate) { candidate.selectedAt = new Date().toISOString(); candidate.createdIdeaId = result.data.id }
-    await store.load(true)
-    ui.notify('The current topic was added as a Ready Idea.', 'success')
-  } catch (reason: unknown) {
-    discoveryError.value = errorMessage(reason, 'The topic could not be converted into an Idea.')
-  } finally { usingCandidateId.value = null }
-}
 
-onMounted(() => { void Promise.all([store.load(), products.load(), companyContext.loadTaxonomy(), companyContext.load(), prospectsApi.listProspects(new URLSearchParams({ limit: '100', archived: 'false' })).then((result) => { prospects.value = result.data }).catch(() => undefined), topicDiscoveryApi.latestDiscovery().then((result) => { discoveryRun.value = result.data }).catch(() => undefined)]) })
+onMounted(() => { void Promise.all([store.load(), products.load(), companyContext.loadTaxonomy(), companyContext.load(), prospectsApi.listProspects(new URLSearchParams({ limit: '100', archived: 'false' })).then((result) => { prospects.value = result.data }).catch(() => undefined)]) })
 </script>
 
 <template>
   <div class="page-stack ideas-page">
     <PageHeader title="Content Ideas" description="Capture and organize ideas before turning them into marketing content." :breadcrumbs="[{ label: 'Content Studio' }, { label: 'Ideas' }]">
-      <template #actions><BaseButton variant="secondary" @click="startNewContent">Create Content</BaseButton><BaseButton variant="secondary" @click="openDiscovery"><AppIcon name="search" :size="16" />Discover Current Topics</BaseButton><BaseButton variant="secondary" @click="openIdeation"><AppIcon name="idea" :size="16" />Generate Ideas</BaseButton><BaseButton @click="edit()"><AppIcon name="plus" :size="16" />Add Idea</BaseButton></template>
+      <template #actions><BaseButton variant="secondary" @click="startNewContent">Create Content</BaseButton><BaseButton variant="secondary" @click="openIdeation"><AppIcon name="idea" :size="16" />Create Ideas</BaseButton><BaseButton @click="edit()"><AppIcon name="plus" :size="16" />Add Idea</BaseButton></template>
     </PageHeader>
 
     <div class="idea-tabs" role="group" aria-label="Idea status">
@@ -232,7 +274,7 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 
     <BaseTable v-if="store.loaded && filteredIdeas.length" :columns="columns" :rows="filteredIdeas" caption="Content ideas">
       <template #cell-idea="{ row }"><div class="idea-title"><strong>{{ row.title }}</strong><p class="idea-targeting">{{ ideaTargetingLabel(row) }}</p><p v-if="row.notes">{{ row.notes }}</p></div></template>
-      <template #cell-context="{ row }"><div class="idea-cell"><strong>{{ row.contextType === 'product' ? products.nameFor(row.productId) : companyContext.companyProfile.name }}</strong><span>{{ row.contextType === 'product' ? 'Product' : 'Company' }}</span></div></template>
+  <template #cell-context="{ row }"><div class="idea-cell"><strong>{{ row.contextType === 'product' ? products.nameFor(row.productId) : row.contextType === 'general' ? 'General topic' : companyContext.companyProfile.name }}</strong><span>{{ row.contextType === 'product' ? 'Product' : row.contextType === 'general' ? 'General' : 'Company' }}</span></div></template>
       <template #cell-pillar="{ row }"><div class="idea-cell"><strong>{{ label(pillarOptions, row.pillar) }}</strong><span>{{ label(ideaObjectiveOptions, row.objective) }}</span></div></template>
       <template #cell-audience="{ row }"><span class="idea-audience">{{ row.targetAudience || '—' }}</span></template>
       <template #cell-status="{ row }"><StatusBadge :tone="row.status === 'Ready' ? 'success' : row.status === 'Used' ? 'info' : 'neutral'" dot>{{ row.status }}</StatusBadge></template>
@@ -252,21 +294,64 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 
     <ContentIdeaEditor v-model="editorOpen" :idea="editingIdea" @saved="clearFilters(); ui.notify('Idea saved.', 'success')" />
 
-    <BaseDrawer v-model="ideationOpen" title="Generate Content Ideas" description="Create practical M2 ideas with optional industry and prospect targeting." size="default">
-      <form class="discovery-form" @submit.prevent="generateIndustryIdeas">
-        <BaseSelect v-model="ideationIndustry" label="Target industry" :options="industryOptions" hint="Choose an industry from prospects, enter one, or keep general content." />
-        <BaseInput v-if="ideationIndustry === '__custom__'" v-model="customIndustry" label="Custom industry" maxlength="120" placeholder="For example, healthcare distribution" />
-        <BaseSelect v-model="ideationProspectId" label="Target prospect (optional)" :options="targetProspectOptions" hint="The prospect is only used as optional context; choosing one does not assert a problem." @update:model-value="chooseProspect" />
-        <BaseSelect v-model="ideationProductId" label="Shifd Labs context" :options="ideationProductOptions" />
+    <BaseModal v-model="ideationOpen" title="Create Ideas" description="Build content ideas from a theme, an industry, or a Shifd product." size="large">
+      <form class="discovery-form ideation-form" @submit.prevent="submitIdeation">
+        <fieldset class="idea-mode-selector">
+          <legend>How would you like to explore?</legend>
+          <div role="group" aria-label="Idea mode">
+            <button v-for="mode in [{ value: 'general', label: 'General Idea' }, { value: 'industry', label: 'Industry-Based' }, { value: 'product', label: 'Product-Based' }]" :key="mode.value" type="button" :aria-pressed="ideaMode === mode.value" @click="changeIdeaMode(mode.value as 'general' | 'industry' | 'product')">{{ mode.label }}</button>
+          </div>
+        </fieldset>
+
+        <BaseInput v-if="ideaMode === 'general'" v-model="ideaTheme" label="Exploration theme" required placeholder="For example, digital approval or paperless workflow" />
+        <template v-else-if="ideaMode === 'industry'">
+          <BaseSelect v-model="ideationIndustry" label="Target industry" :options="industryOptions.filter((option) => option.value !== '')" required hint="Choose an industry from prospects or enter one manually." />
+          <BaseInput v-if="ideationIndustry === '__custom__'" v-model="customIndustry" label="Custom industry" required maxlength="120" placeholder="For example, healthcare distribution" />
+        </template>
+        <template v-else>
+          <BaseSelect v-model="ideationProductId" label="Shifd product" :options="products.productOptions" required />
+          <BaseInput v-model="ideaTheme" label="Supporting keyword or focus (optional)" placeholder="For example, approval visibility" />
+        </template>
+
         <BaseSelect v-model="ideationObjective" label="Content objective" :options="ideationObjectiveOptions" required />
-        <BaseInput v-model="ideationAudience" label="Target audience / decision-maker (optional)" placeholder="For example, operations leaders" />
-        <BaseTextarea v-model="ideationGuidance" label="Custom guidance (optional)" :rows="2" maxlength="600" placeholder="Themes, voice, or constraints" />
+        <BaseInput v-model="ideationAudience" label="Audience or decision-maker (optional)" placeholder="For example, operations leaders" />
+
+        <label class="current-topics-toggle"><input v-model="useCurrentTopics" type="checkbox" @change="toggleCurrentTopics"><span><strong>Ground ideas in current topics</strong><small>Find timely, source-backed topics before generating ideas.</small></span></label>
+        <template v-if="useCurrentTopics">
+          <div class="current-topic-controls">
+            <BaseSelect v-model="discoveryTimeframe" label="Search timeframe" :options="discoveryTimeframeOptions" required />
+            <div class="discovery-market"><span class="discovery-label">Market</span><strong>Indonesia</strong><span>Sources are searched with Indonesia context.</span></div>
+          </div>
+        </template>
+
+        <details class="ideation-advanced">
+          <summary>Advanced guidance <span>Optional prospect context and constraints</span></summary>
+          <div class="ideation-advanced__fields">
+            <BaseSelect v-model="ideationProspectId" label="Target prospect (optional)" :options="targetProspectOptions" hint="Adds prospect context; choosing one does not assert a problem." @update:model-value="chooseProspect" />
+            <BaseSelect v-if="ideaMode === 'industry'" v-model="ideationProductId" label="Shifd product context (optional)" :options="ideationProductOptions" />
+            <BaseTextarea v-model="ideationGuidance" label="Custom guidance (optional)" :rows="3" maxlength="600" placeholder="Themes, voice, or constraints" />
+          </div>
+        </details>
+
         <p v-if="ideationError" class="discovery-error" role="alert">{{ ideationError }}</p>
-        <div class="discovery-actions"><BaseButton variant="secondary" type="button" @click="discoverForIdeation">Find current industry topics</BaseButton><BaseButton type="submit" :loading="ideationLoading" :disabled="ideationLoading">Generate 3–5 Ideas</BaseButton></div>
+        <p v-if="discoveryError" class="discovery-error" role="alert">{{ discoveryError }}</p>
+        <div class="discovery-actions"><BaseButton type="submit" :loading="discoveryLoading || ideationLoading" :disabled="discoveryLoading || ideationLoading || !canGenerateCore">{{ ideationPrimaryLabel }}</BaseButton></div>
       </form>
-      <InlineAlert v-if="ideationLoading" title="Generating ideas">Using the selected Shifd Labs context and approved prospect research, when available…</InlineAlert>
-      <EmptyState v-else-if="!generatedIdeas.length" icon="idea" title="Ready to ideate" description="Choose an optional target, then generate ideas for human review." />
-      <div v-else class="discovery-results">
+
+      <InlineAlert v-if="discoveryLoading" title="Finding current topics">Searching recent sources for topics relevant to this idea mode…</InlineAlert>
+      <div v-if="useCurrentTopics && discoveryRun" class="discovery-results">
+        <div class="discovery-results__header"><div><h3>Choose a current topic</h3><p>{{ discoveryRun.timeframe === 'last_7_days' ? 'Last 7 days' : 'Last 30 days' }} · searched {{ new Date(discoveryRun.searchedAt).toLocaleString() }}</p></div><StatusBadge tone="info">{{ discoveryRun.candidates.length }} topics</StatusBadge></div>
+        <EmptyState v-if="!discoveryRun.candidates.length" icon="search" title="No strong current topics were found." description="Try a broader focus or expand the timeframe, then search again." />
+        <article v-for="candidate in discoveryRun.candidates" :key="candidate.id" class="topic-card" :class="{ 'topic-card--selected': selectedTopicId === candidate.id }">
+          <div class="topic-card__top"><span class="topic-card__position">{{ String(candidate.position).padStart(2, '0') }}</span><div><h4>{{ candidate.title }}</h4><p>{{ candidate.summary }}</p></div></div>
+          <dl class="topic-card__details"><div><dt>Why it matters now</dt><dd>{{ candidate.whyCurrent }}</dd></div><div><dt>Why it fits Shifd</dt><dd>{{ candidate.relevanceToCompany }}</dd></div><div><dt>Suggested angle</dt><dd>{{ candidate.contentAngle }}</dd></div></dl>
+          <div class="topic-card__sources"><strong>Sources</strong><a v-for="source in candidate.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}<small>{{ source.publisher || sourceDomain(source.url) }}<template v-if="source.publishedAt"> · {{ source.publishedAt }}</template></small></a></div>
+          <BaseButton variant="secondary" size="compact" :aria-pressed="selectedTopicId === candidate.id" @click="selectedTopicId = candidate.id">{{ selectedTopicId === candidate.id ? 'Selected for ideas' : 'Use this topic' }}</BaseButton>
+        </article>
+      </div>
+      <InlineAlert v-if="ideationLoading" title="Generating ideas">Using your selected context and guidance to create ideas for review…</InlineAlert>
+      <EmptyState v-else-if="!generatedIdeas.length && !discoveryRun" icon="idea" title="Ready to create ideas" description="Start with one clear theme, industry, or product. You can add more guidance when needed." />
+      <div v-else-if="generatedIdeas.length" class="discovery-results">
         <article v-for="(item, index) in generatedIdeas" :key="`${index}-${item.title}`" class="topic-card">
           <div class="topic-card__top"><span class="topic-card__position">{{ String(index + 1).padStart(2, '0') }}</span><div><h4>{{ item.title }}</h4><p>{{ item.angle }}</p><small class="idea-targeting">{{ generatedTargetingLabel() }}</small></div></div>
           <dl class="topic-card__details"><div><dt>Opening hook</dt><dd>{{ item.hook }}</dd></div><div><dt>Target audience</dt><dd>{{ item.targetAudience }}</dd></div><div><dt>Industry relevance</dt><dd>{{ item.industryRelevance }}</dd></div><div><dt>Shifd Labs capability</dt><dd>{{ item.capability }}</dd></div><div><dt>Talking points</dt><dd>{{ item.talkingPoints.join(' · ') }}</dd></div><div><dt>Suggested format</dt><dd>{{ item.format }}<template v-if="item.platform"> · {{ item.platform }}</template></dd></div><div><dt>Soft CTA</dt><dd>{{ item.softCta }}</dd></div></dl>
@@ -275,7 +360,7 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
         </article>
       </div>
       <template #footer><BaseButton variant="ghost" @click="ideationOpen = false">Close</BaseButton></template>
-    </BaseDrawer>
+    </BaseModal>
 
     <BaseModal
       v-model="deleteModalOpen"
@@ -291,30 +376,6 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
       </template>
     </BaseModal>
 
-    <BaseDrawer v-model="discoveryOpen" title="Discover Current Topics" description="Search current web sources for timely topics relevant to your company and product." size="default">
-      <form class="discovery-form" @submit.prevent="discover">
-        <BaseSelect v-model="discoveryProduct" label="Product" :options="discoveryProductOptions" hint="Choose a product or use company context." />
-        <BaseSelect v-model="discoveryTimeframe" label="Timeframe" :options="discoveryTimeframeOptions" required />
-        <div class="discovery-market"><span class="discovery-label">Market</span><strong>Indonesia</strong><span>Sources are searched with Indonesia context.</span></div>
-        <BaseTextarea v-model="discoveryFocus" label="Focus (optional)" :rows="3" maxlength="240" hint="Add a short business or product focus." />
-        <p v-if="discoveryError" class="discovery-error" role="alert">{{ discoveryError }}</p>
-        <div class="discovery-actions"><BaseButton type="submit" :loading="discoveryLoading" :disabled="discoveryLoading">Discover Topics</BaseButton></div>
-      </form>
-
-      <div v-if="discoveryRun" class="discovery-results">
-        <div class="discovery-results__header"><div><h3>Current signal</h3><p>Snapshot searched {{ new Date(discoveryRun.searchedAt).toLocaleString() }} · {{ discoveryRun.timeframe === 'last_7_days' ? 'Last 7 days' : 'Last 30 days' }}</p></div><StatusBadge tone="info">{{ discoveryRun.candidates.length }} topics</StatusBadge></div>
-        <EmptyState v-if="!discoveryRun.candidates.length" icon="search" title="No strong current topics were found for this context and time range." description="Change the focus or expand from 7 days to 30 days, then discover again." />
-        <article v-for="candidate in discoveryRun.candidates" :key="candidate.id" class="topic-card">
-          <div class="topic-card__top"><span class="topic-card__position">{{ String(candidate.position).padStart(2, '0') }}</span><div><h4>{{ candidate.title }}</h4><p>{{ candidate.summary }}</p></div></div>
-          <dl class="topic-card__details"><div><dt>Why it matters now</dt><dd>{{ candidate.whyCurrent }}</dd></div><div><dt>Why it fits Shifd</dt><dd>{{ candidate.relevanceToCompany }}</dd></div><div><dt>Suggested angle</dt><dd>{{ candidate.contentAngle }}</dd></div></dl>
-          <div class="topic-card__meta"><span>Objective: {{ candidate.suggestedObjective }}</span><span>Platforms: {{ candidate.suggestedPlatforms.join(' · ') }}</span></div>
-          <div class="topic-card__sources"><strong>Sources</strong><a v-for="source in candidate.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}<small>{{ source.publisher || sourceDomain(source.url) }}<template v-if="source.publishedAt"> · {{ source.publishedAt }}</template></small></a></div>
-          <BaseButton v-if="!candidate.createdIdeaId" variant="secondary" size="compact" :loading="usingCandidateId === candidate.id" :disabled="Boolean(usingCandidateId)" @click="useCandidate(candidate.id)">Use as Idea</BaseButton>
-          <StatusBadge v-else tone="success">Added as Idea</StatusBadge>
-        </article>
-      </div>
-      <template #footer><BaseButton variant="ghost" @click="discoveryOpen = false">Close</BaseButton></template>
-    </BaseDrawer>
   </div>
 </template>
 
@@ -338,6 +399,21 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 .idea-delete-btn:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent) !important; }
 .idea-delete-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .discovery-form { display: grid; gap: 18px; }
+.ideation-form { gap: 20px; }
+.idea-mode-selector { min-width: 0; padding: 0; border: 0; }
+.idea-mode-selector legend { margin-bottom: 10px; color: var(--color-muted); font-size: 13px; font-weight: 600; }
+.idea-mode-selector > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: var(--radius-control); background: var(--color-well); }
+.idea-mode-selector button { min-height: 40px; padding: 8px 10px; border-radius: calc(var(--radius-control) - 3px); color: var(--color-muted); font-size: 13px; }
+.idea-mode-selector button[aria-pressed='true'] { background: var(--color-surface); color: var(--color-accent); box-shadow: 0 1px 3px rgb(15 23 42 / 10%); font-weight: 600; }
+.current-topics-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); cursor: pointer; }
+.current-topics-toggle input { margin: 3px 0 0; accent-color: var(--color-accent); }
+.current-topics-toggle span { display: grid; gap: 3px; }
+.current-topics-toggle strong { font-size: 13px; }
+.current-topics-toggle small, .ideation-advanced summary span { color: var(--color-muted); font-size: 12px; }
+.current-topic-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ideation-advanced { border-top: 1px solid var(--color-border); padding-top: 14px; }
+.ideation-advanced summary { display: grid; gap: 3px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.ideation-advanced__fields { display: grid; gap: 16px; padding-top: 16px; }
 .discovery-market { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--radius-control); background: var(--color-well); color: var(--color-muted); font-size: 12px; }
 .discovery-market strong { color: var(--color-ink); font-size: 14px; }
 .discovery-label, .topic-card dt { color: var(--color-subtle); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
@@ -348,6 +424,7 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 .discovery-results__header h3 { font-size: 16px; font-weight: 700; }
 .discovery-results__header p { color: var(--color-muted); font-size: 12px; margin-top: 4px; }
 .topic-card { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.topic-card--selected { border-color: var(--color-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 12%, transparent); }
 .topic-card__top { display: flex; gap: 12px; }
 .topic-card__position { color: var(--color-subtle); font-size: 12px; font-weight: 700; }
 .topic-card h4 { font-size: 15px; font-weight: 700; line-height: 1.4; }
@@ -363,4 +440,5 @@ onMounted(() => { void Promise.all([store.load(), products.load(), companyContex
 .topic-card__sources small { color: var(--color-muted); font-size: 11px; }
 @media (max-width: 1200px) { .idea-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .idea-filters > :first-child { grid-column: 1 / -1; } }
 @media (max-width: 520px) { .idea-filters { grid-template-columns: minmax(0, 1fr); } .idea-tabs button { padding-inline: 10px; } }
+@media (max-width: 520px) { .idea-mode-selector > div, .current-topic-controls { grid-template-columns: minmax(0, 1fr); } }
 </style>

@@ -28,12 +28,12 @@ const hasWarning = () => props.assessment.status === 'Needs Attention' || props.
       </StatusBadge>
     </div>
     <div v-if="assessment.state !== 'needs-recheck'" class="assessment-score-row">
-      <strong>{{ assessment.score }}<small>/100</small></strong><span>Backend textual/context assessment</span>
+      <strong>{{ assessment.score }}<small>/100</small></strong><span>{{ assessment.checks.some((check) => check.label === 'Visual Creative Review' && check.status !== 'not_assessed') ? 'Text, context, and creative reviewed' : 'Text and context only' }}</span>
     </div>
     <div class="assessment-check-list">
       <div v-for="check in assessment.checks" :key="check.label">
         <span>{{ check.label }}</span>
-        <StatusBadge :tone="check.status === 'pass' ? 'success' : 'warning'">{{ check.status === 'pass' ? 'Pass' : 'Warning' }}</StatusBadge>
+        <StatusBadge :tone="check.status === 'pass' ? 'success' : check.status === 'warning' ? 'warning' : 'info'">{{ check.status === 'pass' ? 'Pass' : check.status === 'warning' ? 'Warning' : 'Not analyzed' }}</StatusBadge>
       </div>
     </div>
     <InlineAlert :title="assessment.state === 'needs-recheck' ? 'Re-check required' : 'Recommendation'" :tone="assessment.state === 'needs-recheck' ? 'warning' : 'info'">

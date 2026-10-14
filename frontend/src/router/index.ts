@@ -31,6 +31,8 @@ const routes: RouteRecordRaw[] = pages.map((page) => ({
                     ? () => import('../views/CalendarView.vue')
                     : page.name === 'performance'
                       ? () => import('../views/PerformanceView.vue')
+                    : page.name === 'performance-evaluation'
+                      ? () => import('../views/PerformanceView.vue')
                     : page.name === 'performance-linkedin'
                         ? () => import('../views/LinkedInMetricsView.vue')
                         : page.name === 'integrations'
@@ -64,6 +66,13 @@ routes.unshift({
 })
 
 routes.push({
+  path: '/review/:token',
+  name: 'public-review',
+  component: () => import('../views/PublicReviewView.vue'),
+  meta: { title: 'Content Review', description: 'View shared content for review.', icon: 'check', breadcrumbs: [] },
+})
+
+routes.push({
   path: '/:pathMatch(.*)*',
   name: 'not-found',
   component: () => import('../views/NotFoundView.vue'),
@@ -82,6 +91,7 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  if (to.name === 'public-review') return true
   const auth = useAuthStore()
   await auth.bootstrap()
   if (to.name === 'login') return auth.isAuthenticated ? { path: '/' } : true

@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppBrand from '../components/app/AppBrand.vue'
+import PageHeaderHelp from '../components/app/PageHeaderHelp.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import FormField from '../components/ui/FormField.vue'
@@ -9,6 +10,10 @@ import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
+const pageHelp = {
+  purpose: 'Sign in to access your Shifd Marketing workspace.',
+  steps: ['Enter your workspace email address.', 'Enter your password; use Show if you need to check what you typed.', 'Select Sign In to open your workspace.'],
+}
 const form = reactive({ email: '', password: '' })
 const errors = reactive({ email: '', password: '' })
 const authError = ref('')
@@ -44,7 +49,7 @@ async function submit() {
   <main class="login-page">
     <section class="login-card" aria-labelledby="login-title">
       <div class="login-brand"><AppBrand /></div>
-      <div class="login-heading"><h1 id="login-title">Sign in to Shifd Marketing</h1><p>Sign in to manage your marketing execution.</p></div>
+      <div class="login-heading"><div class="login-title-row"><h1 id="login-title">Sign in to Shifd Marketing</h1><PageHeaderHelp :help="pageHelp" /></div><p>Sign in to manage your marketing execution.</p></div>
       <form class="login-form" novalidate @submit.prevent="submit">
         <BaseInput id="login-email" v-model="form.email" label="Email" type="email" placeholder="name@shifdlabs.com" autocomplete="email" required :error="errors.email" @input="clearFieldError('email')" />
         <FormField id="login-password" label="Password" :error="errors.password" required v-slot="{ describedBy }">
@@ -63,6 +68,7 @@ async function submit() {
 .login-card { width: min(100%, 420px); padding: 34px; border: 1px solid var(--color-border); border-radius: var(--radius-dialog); background: var(--color-surface); box-shadow: var(--shadow-popover); }
 .login-brand { display: flex; justify-content: center; margin-bottom: 34px; }
 .login-heading { text-align: center; }
+.login-title-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .login-heading h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.025em; }
 .login-heading p { margin-top: 8px; color: var(--color-muted); font-size: 14px; line-height: 20px; }
 .login-form { display: grid; gap: 18px; margin-top: 28px; }

@@ -94,7 +94,7 @@ npm run build
 - `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; they never call OpenAI
 - `npm run test:review` — required real PostgreSQL Phase 9 Human Review integration tests; it never calls an AI provider
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
-- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v1 prompt metadata/digests
+- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v3 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
@@ -212,8 +212,14 @@ an existing immutable version. `GET /api/ai-requests` and its detail route
 expose sanitized execution metadata without input snapshots, hashes, raw
 prompts, or secrets. `GET /api/ai-usage` is Company scoped, separates `real`
 and `demo`, uses a half-open period, sums only known token/cost values, and
-reports unknown coverage; no unverified OpenAI pricing is seeded, so runtime
-cost remains null until a verified rate is configured.
+reports unknown coverage. Migration `20261014100000_gpt56_luna_cost_estimates`
+records OpenAI's verified GPT-5.6 Luna standard and cached-input rates from the
+official model pricing page. New M2/M3/M4 and prospect email request logs use
+those versioned rates; the migration backfills successful historical requests
+with complete token counts using an uncached-input assumption when cached-token
+usage was not retained. Requests with incomplete usage remain unknown. These
+are estimates and may differ from provider billing, including cache-write
+pricing.
 
 ## Phase 7 M3 cross-platform adaptation
 
@@ -269,7 +275,7 @@ M4 is an advisory-only check for one enabled, current platform Variant. `POST
 /api/contents/:id/brand-check` accepts `{ "platform": "instagram" | "linkedin" }`
 and requires the authenticated session, Origin, CSRF token, the parent Content
 ETag, and an `Idempotency-Key`. The server resolves the current Company, Brand,
-Product, Brief, Master, Visual Direction, AI settings, and immutable M4 `v1`
+Product, Brief, Master, Visual Direction, AI settings, and immutable M4 `v3`
 prompt metadata. The browser cannot provide a score, checks, model, prompt,
 provider, context, or approval decision.
 
@@ -288,15 +294,19 @@ M4 increments only the parent Content `version` once to record the current
 assessment pointer. It does not change Variant copy/revision, Master,
 editorialRevision, Assets, creative reuse, design status, or editorial stage.
 It appends one `ai_brand_checked` event and never creates approval records.
-Aligned does not mean Approved. M4 checks textual copy and
-`visualRecommendation`; it never sends Asset bytes or URLs to OpenAI and does
-not inspect Canva artwork, use OCR, or perform vision analysis.
+Aligned does not mean Approved. M4 checks textual copy and context, and runs a
+quick visual review on up to three attached creative images. Images are resized
+before being sent as model inputs; private asset URLs and storage keys are never
+sent. The result remains advisory and requires human review before approval.
 
 The M4 prompt uses explicit server-instruction and DATA sections, has no tools,
 browsing, or URL fetching, and requires grounded evaluation across Tone / Brand
 Voice, Messaging Alignment, Audience Fit, Claim Grounding, CTA Alignment,
 Company/Product Context Alignment, and Platform Appropriateness. `npm run
-ai:seed` verifies immutable M2, M3, and M4 `v1` digests. M4 shares the Phase 6/7
+ai:seed` verifies immutable M2 `v1`, M3 `v1`, and M4 `v3` digests. Up to three
+attached creative images receive a brief visual review during M4; human review
+is still required before approval.
+M4 shares the Phase 6/7
 pending/success/failure/stale AI request log and paid-call-safe idempotency
 boundary; provider calls occur outside database locks, stale relevant inputs
 return `409 INPUT_CHANGED`, and retries require a new key after failure.

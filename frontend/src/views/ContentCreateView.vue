@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, toRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useUiStore } from "../stores/ui";
 import {
   audienceSuggestions,
@@ -8,6 +8,7 @@ import {
   pillarOptions,
 } from "../constants/contentOptions";
 import AppIcon from "../components/ui/AppIcon.vue";
+import PageHeaderHelp from "../components/app/PageHeaderHelp.vue";
 import BaseButton from "../components/ui/BaseButton.vue";
 import BaseCard from "../components/ui/BaseCard.vue";
 import BaseCheckbox from "../components/ui/BaseCheckbox.vue";
@@ -15,6 +16,7 @@ import BaseInput from "../components/ui/BaseInput.vue";
 import BaseModal from "../components/ui/BaseModal.vue";
 import BaseSelect from "../components/ui/BaseSelect.vue";
 import BaseTextarea from "../components/ui/BaseTextarea.vue";
+import InfoTooltip from "../components/ui/InfoTooltip.vue";
 import InlineAlert from "../components/ui/InlineAlert.vue";
 import StatusBadge from "../components/ui/StatusBadge.vue";
 import { useContentWorkflowStore } from "../stores/contentWorkflow";
@@ -24,16 +26,22 @@ import { useProductsStore } from "../stores/products";
 import type { ContentIdea } from "../types/contentIdea";
 import { useRouter } from "vue-router";
 import ContentWorkflowStepper from "../components/content/ContentWorkflowStepper.vue";
+import CanvaDesignLinkPanel from "../components/content/CanvaDesignLinkPanel.vue";
+import CanvaReadyComposer from "../components/content/CanvaReadyComposer.vue";
 import CreativeThumbnail from "../components/content/CreativeThumbnail.vue";
 import BrandAssessmentCard from "../components/content/BrandAssessmentCard.vue";
 import VisualDirectionCard from "../components/content/VisualDirectionCard.vue";
 import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
 import * as creativeReferenceApi from "../api/creativeReferences";
-import { createRequestKey, errorMessage } from "../api/client";
-import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
+import { createRequestKey, errorMessage, isApiError } from "../api/client";
+import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
 
 const ui = useUiStore();
 const router = useRouter();
+const pageHelp = {
+  purpose: 'Create platform-ready marketing content through a guided workflow, from brief to publication plan.',
+  steps: ['Complete the brief and choose the audience, objective, and platforms.', 'Generate and review copy and creative; make edits and complete the human review.', 'Approve the content, then set a publication schedule or return to the library.'],
+}
 const workflow = useContentWorkflowStore();
 const ideas = useContentIdeasStore();
 const companyContext = useCompanyContextStore();
@@ -59,6 +67,8 @@ const isApproved = toRef(workflow, "isApproved");
 const approvedBy = toRef(workflow, "approvedBy");
 const approvedAt = toRef(workflow, "approvedAt");
 const reviewValidation = ref("");
+const reviewRecheckLoading = ref(false);
+const contentBusy = computed(() => workflow.loading || reviewRecheckLoading.value);
 const reviewChecklist = workflow.reviewChecklist;
 const reviewEditing = workflow.reviewEditing;
 const reviewAssessments = workflow.reviewAssessments;
@@ -71,12 +81,19 @@ const isScheduled = toRef(workflow, "isScheduled");
 const scheduleValidation = ref("");
 const creativeReferenceBatches = ref<BackendCreativeReferenceBatch[]>([]);
 const creativeReferencePlatform = ref<CreativeReferencePlatform>("instagram");
+const creativeReferenceFormat = ref<CreativeReferenceFormat>("single_image");
+const creativeReferenceGenerationMode = ref<CreativeReferenceGenerationMode>("original_design");
+const creativeReferenceSlideCount = ref("5");
 const creativeReferenceStyle = ref<CreativeReferenceStyle>("modern_minimal");
 const creativeReferenceMood = ref<CreativeReferenceMood>("professional");
 const creativeReferenceAspectRatio = ref<CreativeReferenceAspectRatio>("portrait_4_5");
 const creativeReferenceInstruction = ref("");
 const creativeReferenceLoading = ref(false);
 const creativeReferenceError = ref("");
+const creativeReferenceAbortController = ref<AbortController | null>(null);
+// Stay safely disabled until the backend reports that its configured model
+// supports transparent image output.
+const canvaReadyUnavailable = ref(true);
 const selectedCreativeReferenceId = ref<string | null>(null);
 const useSameSchedule = toRef(workflow, "useSameSchedule");
 const instagramSchedule = workflow.instagramSchedule;
@@ -86,6 +103,30 @@ const instagramContent = workflow.instagramContent;
 const linkedInContent = workflow.linkedInContent;
 const ARTIFACT_TIMEZONE = "Asia/Jakarta";
 const productOptions = computed(() => productsStore.productOptions);
+let loadingLockActive = false;
+let previousBodyOverflow = "";
+let previousAppShellInert = false;
+
+function syncLoadingLock(loading: boolean) {
+  const appShell = document.querySelector<HTMLElement>(".app-shell");
+  if (loading && !loadingLockActive) {
+    previousBodyOverflow = document.body.style.overflow;
+    previousAppShellInert = appShell?.inert ?? false;
+    loadingLockActive = true;
+  }
+  if (loadingLockActive) {
+    document.body.style.overflow = loading ? "hidden" : previousBodyOverflow;
+    if (appShell) appShell.inert = loading ? true : previousAppShellInert;
+  }
+  if (!loading) loadingLockActive = false;
+}
+
+watch(contentBusy, syncLoadingLock);
+
+onBeforeUnmount(() => {
+  creativeReferenceAbortController.value?.abort();
+  if (loadingLockActive) syncLoadingLock(false);
+});
 
 const selectedProduct = computed(() =>
   productsStore.getProduct(brief.product),
@@ -96,15 +137,16 @@ const selectedProductName = computed(
 );
 const resolvedProductContext = computed(() => brief.context === "product" ? productsStore.resolveProductContext(brief.product) : undefined);
 const activeContextAudience = computed(() =>
-  resolvedProductContext.value?.profile.targetUsers.length
+  brief.context === "general"
+    ? brief.audience || "Not set"
+    : resolvedProductContext.value?.profile.targetUsers.length
     ? resolvedProductContext.value.profile.targetUsers.join(", ")
     : brief.context === "company" && companyContext.companyProfile.customerSegments.length
       ? companyContext.companyProfile.customerSegments.join(", ")
       : brief.audience || "Not set",
 );
-const activeContextName = computed(() => brief.context === "company" ? companyContext.companyProfile.name : selectedProductName.value);
-const activeContextValue = computed(() => resolvedProductContext.value?.profile.valueProposition || (brief.context === "company" ? companyContext.companyProfile.coreValueProposition : "Select a product to resolve its value proposition."));
-const activeBrandVoice = computed(() => resolvedProductContext.value?.resolvedBrandVoice || companyContext.brandProfile.brandVoice);
+const activeContextValue = computed(() => brief.context === "general" ? "" : resolvedProductContext.value?.profile.valueProposition || (brief.context === "company" ? companyContext.companyProfile.coreValueProposition : ""));
+const activeBrandVoice = computed(() => brief.context === "general" ? "Neutral, topic-led voice" : resolvedProductContext.value?.resolvedBrandVoice || companyContext.brandProfile.brandVoice);
 const selectedPillarLabel = computed(
   () =>
     pillarOptions.find((item) => item.value === brief.pillar)?.label ??
@@ -119,14 +161,15 @@ const briefReadinessItems = computed(() => [
   { label: "Context", complete: Boolean(brief.context) },
   {
     label: "Product",
-    complete: brief.context === "company" || Boolean(brief.product),
-    optional: brief.context === "company",
+    complete: brief.context !== "product" || Boolean(brief.product),
+    optional: brief.context !== "product",
   },
   { label: "Content Pillar", complete: Boolean(brief.pillar) },
   { label: "Objective", complete: Boolean(brief.objective) },
   { label: "Target Audience", complete: Boolean(brief.audience.trim()) },
   { label: "Topic", complete: Boolean(brief.topic.trim()) },
 ]);
+const incompleteBriefReadinessItems = computed(() => briefReadinessItems.value.filter((item) => !item.complete && !item.optional));
 const isBriefReady = computed(() => isBriefReadyValue(brief));
 const generatedVariant = computed(() => ({
   ...generatedContent,
@@ -139,7 +182,7 @@ const creativeStatusOptions = [
   { value: "not-started", label: "Not Started" },
   { value: "in-progress", label: "In Progress" },
   { value: "ready", label: "Ready" },
-];
+] as const;
 const creativeStatusLabel = computed(
   () =>
     creativeStatusOptions.find((option) => option.value === designStatus.value)
@@ -154,6 +197,11 @@ const creativeReferencePlatformOptions = [
   { value: "instagram", label: "Instagram" },
   { value: "linkedin", label: "LinkedIn" },
 ];
+const creativeReferenceFormatOptions = [
+  { value: "single_image", label: "Single image" },
+  { value: "carousel", label: "Carousel" },
+];
+const creativeReferenceSlideCountOptions = Array.from({ length: 9 }, (_, index) => ({ value: String(index + 2), label: `${index + 2} slides` }));
 const creativeReferenceStyleOptions = [
   { value: "modern_minimal", label: "Modern minimal" },
   { value: "corporate", label: "Corporate" },
@@ -175,7 +223,16 @@ const creativeReferenceAspectRatioOptions = [
   { value: "landscape", label: "Landscape reference" },
 ];
 const latestCreativeReferenceBatch = computed(() => creativeReferenceBatches.value.find((batch) => batch.platform === creativeReferencePlatform.value));
-const selectedCreativeReference = computed(() => creativeReferenceBatches.value.flatMap((batch) => batch.references).find((reference) => reference.selected));
+const selectedCreativeReferenceBatch = computed(() => creativeReferenceBatches.value.find((batch) => batch.platform === creativeReferencePlatform.value && batch.references.some((reference) => reference.selected)) ?? null);
+const selectedCreativeReference = computed(() => selectedCreativeReferenceBatch.value?.references.find((reference) => reference.selected) ?? null);
+const missingCreativeSlideNumbers = computed(() => {
+  const batch = latestCreativeReferenceBatch.value;
+  if (!batch || batch.creativeFormat !== "carousel") return [];
+  const generated = new Set(batch.references.map((reference) => reference.slideNumber ?? reference.conceptIndex + 1));
+  return Array.from({ length: batch.expectedReferenceCount }, (_, index) => index + 1).filter((slideNumber) => !generated.has(slideNumber));
+});
+const storyboardSelected = computed(() => Boolean(latestCreativeReferenceBatch.value?.references.length && latestCreativeReferenceBatch.value.references.every((reference) => reference.selected)));
+const creativeReferenceActionLabel = computed(() => creativeReferenceFormat.value === "carousel" ? `Generate ${creativeReferenceSlideCount.value} slides` : "Generate 3 options");
 const missingCreativePlatforms = computed(() => {
   const missing: string[] = [];
   if (enabledPlatforms.instagram && instagramAssets.value.length === 0) {
@@ -212,6 +269,12 @@ const enabledReviewPlatforms = computed(() =>
 const reviewChecklistComplete = computed(() =>
   Object.values(reviewChecklist).every(Boolean),
 );
+const reviewChecklistCount = computed(() =>
+  Object.values(reviewChecklist).filter(Boolean).length,
+);
+const reviewChecklistProgress = computed(() =>
+  Math.round((reviewChecklistCount.value / Object.keys(reviewChecklist).length) * 100),
+);
 const reviewNeedsRecheck = computed(() =>
   enabledReviewPlatforms.value.some(
     (platform) => reviewAssessments[platform].state === "needs-recheck" || reviewAssessments[platform].checks.length === 0,
@@ -233,6 +296,12 @@ const canApproveContent = computed(
     !reviewNeedsRecheck.value &&
     reviewOverridesComplete.value,
 );
+const approvalPendingItems = computed(() => [
+  ...(!reviewChecklistComplete.value ? [`Human review: ${reviewChecklistCount.value} of 5 checks complete`] : []),
+  ...(reviewNeedsRecheck.value ? ["Re-check edited platform content"] : []),
+  ...(!reviewOverridesComplete.value ? ["Resolve alignment warnings with a justification"] : []),
+  ...(!canContinueToReview.value ? ["Complete the required creative assets"] : []),
+]);
 const approvedTimestampLabel = computed(
   () => approvedAt.value ?? "Not approved",
 );
@@ -422,12 +491,38 @@ async function loadCreativeReferences() {
   if (!workflow.contentId) return;
   try {
     const result = await creativeReferenceApi.listCreativeReferences(workflow.contentId);
-    creativeReferenceBatches.value = result.data;
-    const selected = result.data.flatMap((batch) => batch.references).find((reference) => reference.selected);
+    creativeReferenceBatches.value = result.data.batches;
+    canvaReadyUnavailable.value = !result.data.canvaReadyAvailable;
+    if (result.data.batches[0]) applyCreativeReferenceBatchSettings(result.data.batches[0]);
+    else creativeReferenceGenerationMode.value = "original_design";
+    const selected = result.data.batches.flatMap((batch) => batch.references).find((reference) => reference.selected);
     selectedCreativeReferenceId.value = selected?.id ?? null;
   } catch (error) {
     creativeReferenceError.value = errorMessage(error, "Unable to load visual references.");
   }
+}
+
+function applyCreativeReferenceBatchSettings(batch: BackendCreativeReferenceBatch) {
+  creativeReferencePlatform.value = batch.platform;
+  creativeReferenceFormat.value = batch.creativeFormat;
+  creativeReferenceGenerationMode.value = canvaReadyUnavailable.value ? "original_design" : batch.generationMode ?? "original_design";
+  creativeReferenceSlideCount.value = String(batch.expectedReferenceCount);
+  creativeReferenceStyle.value = batch.style;
+  creativeReferenceMood.value = batch.mood;
+  creativeReferenceAspectRatio.value = batch.requestedAspectRatio;
+  creativeReferenceInstruction.value = batch.additionalInstruction ?? "";
+}
+
+async function retryCreativeReferenceBatch() {
+  const batch = latestCreativeReferenceBatch.value;
+  if (!batch || batch.creativeFormat !== "carousel") return;
+  applyCreativeReferenceBatchSettings(batch);
+  await generateCreativeReferences();
+}
+
+function updateCanvaDesignLink(link: NonNullable<typeof workflow.canonical>['canvaDesignLink'] | null) {
+  if (!workflow.canonical) return;
+  workflow.canonical = { ...workflow.canonical, canvaDesignLink: link };
 }
 
 async function generateCreativeReferences() {
@@ -436,24 +531,50 @@ async function generateCreativeReferences() {
     creativeReferenceError.value = "Additional visual instruction must be 500 characters or fewer.";
     return;
   }
+  const generationPlatform = creativeReferencePlatform.value;
+  // Replace the active result set immediately; previously generated batches
+  // remain persisted and can still be loaded again later.
+  creativeReferenceBatches.value = creativeReferenceBatches.value.filter((batch) => batch.platform !== generationPlatform);
+  selectedCreativeReferenceId.value = null;
   creativeReferenceLoading.value = true;
   creativeReferenceError.value = "";
+  const controller = new AbortController();
+  creativeReferenceAbortController.value = controller;
   try {
     const result = await creativeReferenceApi.createCreativeReferences(workflow.contentId, {
       platform: creativeReferencePlatform.value,
+      generationMode: creativeReferenceGenerationMode.value,
+      format: creativeReferenceFormat.value,
+      slideCount: Number(creativeReferenceSlideCount.value),
       style: creativeReferenceStyle.value,
       mood: creativeReferenceMood.value,
       aspectRatio: creativeReferenceAspectRatio.value,
       additionalInstruction: creativeReferenceInstruction.value.trim() || null,
-    }, createRequestKey("creative-references.create"));
+    }, createRequestKey("creative-references.create"), controller.signal);
     creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
+    applyCreativeReferenceBatchSettings(result.data.batch);
     selectedCreativeReferenceId.value = result.data.batch.references.find((reference) => reference.selected)?.id ?? selectedCreativeReferenceId.value;
-    ui.notify(result.data.batch.status === "partial" ? "Some visual references were generated." : "Three visual references are ready.", result.data.batch.status === "partial" ? "warning" : "success");
+    const expected = result.data.batch.expectedReferenceCount;
+    ui.notify(result.data.batch.status === "partial" ? `${result.data.batch.references.length} of ${expected} visual references were generated.` : result.data.batch.generationMode === "canva_ready" ? "Canva-ready illustration assets are ready." : result.data.batch.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", result.data.batch.status === "partial" ? "warning" : "success");
   } catch (error) {
+    if (controller.signal.aborted) {
+      await loadCreativeReferences();
+      ui.notify("Generation cancelled. Slides already completed have been kept.", "info");
+      return;
+    }
+    if (isApiError(error) && error.code === "CANVA_READY_UNSUPPORTED") {
+      canvaReadyUnavailable.value = true;
+      creativeReferenceGenerationMode.value = "original_design";
+    }
     creativeReferenceError.value = errorMessage(error, "Unable to generate visual references.");
   } finally {
+    if (creativeReferenceAbortController.value === controller) creativeReferenceAbortController.value = null;
     creativeReferenceLoading.value = false;
   }
+}
+
+function cancelCreativeReferenceGeneration() {
+  creativeReferenceAbortController.value?.abort();
 }
 
 async function selectCreativeReference(reference: BackendCreativeReference) {
@@ -469,13 +590,66 @@ async function selectCreativeReference(reference: BackendCreativeReference) {
   }
 }
 
+function getCanvaBrief(reference: BackendCreativeReference) {
+  const templateName = reference.templateType === "educational" ? "Educational content" : reference.templateType === "product_showcase" ? "Product showcase" : reference.templateType === "process_insight" ? "Process insight" : reference.templateType === "process_carousel" ? "Process carousel" : "Visual concept";
+  return [
+    `SHIFD LABS — CANVA DESIGN BRIEF`,
+    `Template: ${templateName} — ${reference.conceptName}`,
+    `Brand: Shifd Labs | Prepare for the next shift.`,
+    `Colors: Primary #1363DF · Secondary #3279E7 · Light #E2EDFF · White #FFFFFF · Navy #151B2D`,
+    `Typography: Inter for headlines, body and UI; optional DM Serif Text editorial accent.`,
+    `Core direction: Modern minimalist tech corporate, professional B2B SaaS, clear single message, mobile readable, generous whitespace, consistent margins and alignment. Keep supporting assets near 30% as a flexible guide.`,
+    `\nWHY THIS CONCEPT\n${reference.rationale}`,
+    `\nCANVA STEPS\n${reference.canvaBrief ?? reference.layoutNotes}`,
+    reference.slideNumber ? `\nSLIDE ${reference.slideNumber} MESSAGE\n${reference.slideCopy ?? ""}` : "",
+    `\nLAYOUT\n${reference.layoutNotes}`,
+    `\nFOCAL ASSET\n${reference.visualFocus}`,
+    `\nTYPE DIRECTION\n${reference.typographyDirection}`,
+    `\nCANVA SEARCH KEYWORDS\n${reference.assetSearchKeywords.join(", ") || "mesh gradient, dot grid, workflow diagram, dashboard mockup"}`,
+    reference.carouselOutline.length ? `\nCAROUSEL STORYBOARD (${reference.carouselOutline.length} SLIDES)\n${reference.carouselOutline.map((slide, index) => `Slide ${index + 1}: ${slide}`).join("\n")}` : "",
+    `\nQUALITY CHECK\nOne clear message; strong hierarchy; readable at mobile size; one relevant visual style; remove decorative clutter; use a real Shifd Approval screenshot for product UI and do not invent product features, metrics or testimonials.`,
+  ].filter(Boolean).join("\n");
+}
+
 function copyDesignNotes(reference: BackendCreativeReference) {
-  const notes = [`Concept: ${reference.conceptName}`, `Layout: ${reference.layoutNotes}`, `Visual focus: ${reference.visualFocus}`, `Typography direction: ${reference.typographyDirection}`].join("\n");
+  const notes = getCanvaBrief(reference);
   if (!navigator.clipboard) {
     ui.notify("Design notes are ready to copy manually.", "info");
     return;
   }
-  navigator.clipboard.writeText(notes).then(() => ui.notify("Design notes copied for Canva.", "success")).catch(() => ui.notify("Design notes are ready to copy manually.", "info"));
+  navigator.clipboard.writeText(notes).then(() => ui.notify("Canva brief copied to clipboard.", "success")).catch(() => ui.notify("Canva brief is ready to copy manually.", "info"));
+}
+
+async function getReferenceImageBlob(reference: BackendCreativeReference) {
+  const response = await fetch(reference.imageUrl, { credentials: "same-origin" });
+  if (!response.ok) throw new Error("Unable to download the visual reference.");
+  return response.blob();
+}
+
+async function copyReferenceImage(reference: BackendCreativeReference) {
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("Image clipboard is unavailable.");
+    const blob = await getReferenceImageBlob(reference);
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+    ui.notify("Image copied. Paste it into Canva with Ctrl/Cmd + V.", "success");
+  } catch {
+    ui.notify("Image copy is unavailable in this browser. Use Download PNG instead.", "info");
+  }
+}
+
+async function downloadReferenceImage(reference: BackendCreativeReference) {
+  try {
+    const blob = await getReferenceImageBlob(reference);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `shifd-${reference.templateType ?? "visual-reference"}-${reference.conceptName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || reference.id}.png`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ui.notify("PNG downloaded. Upload it to Canva or paste it into a design.", "success");
+  } catch (error) {
+    ui.notify(errorMessage(error, "Unable to download the visual reference."), "warning");
+  }
 }
 
 async function continueToReview() {
@@ -523,14 +697,26 @@ function editReviewPlatform(platform: "instagram" | "linkedin") {
   reviewEditing[platform] = true;
 }
 
+function openReviewSection(section: "copy" | "creative" | "brand") {
+  const platform = enabledReviewPlatforms.value[0];
+  if (!platform) return;
+  document.getElementById(`review-${section}-${platform}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 async function recheckAlignment(platform: "instagram" | "linkedin") {
+  if (reviewRecheckLoading.value) return;
   if (isApproved.value) {
     reviewValidation.value = "Approved Content is locked. Request a revision before editing it."
     return
   }
-  if (!(await workflow.saveVariant(platform))) return;
-  const assessment = await workflow.brandCheck(platform);
-  if (assessment) ui.notify(`${platform === "instagram" ? "Instagram" : "LinkedIn"} alignment checked by the backend.`, "success");
+  reviewRecheckLoading.value = true;
+  try {
+    if (!(await workflow.saveVariant(platform))) return;
+    const assessment = await workflow.brandCheck(platform);
+    if (assessment) ui.notify(`${platform === "instagram" ? "Instagram" : "LinkedIn"} alignment checked by the backend.`, "success");
+  } finally {
+    reviewRecheckLoading.value = false;
+  }
 }
 
 async function regenerateReviewPlatform(platform: "instagram" | "linkedin") {
@@ -753,6 +939,7 @@ async function continueToGenerate() {
 }
 
 onMounted(() => {
+  syncLoadingLock(workflow.loading);
   void Promise.all([ideas.load(), productsStore.load(), companyContext.load()]);
   if (workflow.contentId) void loadCreativeReferences();
 });
@@ -776,7 +963,7 @@ onMounted(() => {
         </div>
         <div class="create-content-title-row">
           <div>
-            <h1 class="page-header__title">Create Content</h1>
+            <div class="create-content-heading"><h1 class="page-header__title">Create Content</h1><PageHeaderHelp :help="pageHelp" /></div>
             <p class="page-header__description">
               Translate strategic brand foundations and verified product
               knowledge into precision AI prompts.
@@ -791,8 +978,7 @@ onMounted(() => {
     </header>
 
     <ContentWorkflowStepper :steps="briefSteps" :current="activeStep" />
-    <InlineAlert v-if="workflow.loading" title="Working">Saving the canonical Content state…</InlineAlert>
-    <InlineAlert v-else-if="workflow.error" title="Content action unavailable" tone="danger">{{ workflow.error }}</InlineAlert>
+    <InlineAlert v-if="workflow.error" title="Content action unavailable" tone="danger">{{ workflow.error }}</InlineAlert>
 
     <div v-if="activeStep === 'generate'" class="generate-workspace">
       <div class="generate-summary-bar">
@@ -821,11 +1007,11 @@ onMounted(() => {
               </BaseButton>
             </template>
             <div class="generated-fields" :class="{ 'is-editing': isEditingDraft }">
-              <BaseInput id="generated-title" v-model="generatedContent.title" label="Title" />
-              <BaseTextarea v-model="generatedContent.coreMessage" label="Core Message" :rows="2" />
-              <BaseTextarea v-model="generatedContent.hook" label="Hook" :rows="2" />
-              <BaseTextarea v-model="generatedContent.body" label="Body" :rows="7" />
-              <BaseTextarea v-model="generatedContent.cta" label="CTA" :rows="2" />
+              <BaseInput id="generated-title" v-model="generatedContent.title" label="Title" :number="1" />
+              <BaseTextarea v-model="generatedContent.coreMessage" label="Core Message" :rows="2" :number="2" />
+              <BaseTextarea v-model="generatedContent.hook" label="Hook" :rows="2" :number="3" />
+              <BaseTextarea v-model="generatedContent.body" label="Body" :rows="7" :number="4" />
+              <BaseTextarea v-model="generatedContent.cta" label="CTA" :rows="2" :number="5" />
             </div>
             <InlineAlert title="Backend generation" tone="info">
               This draft is generated from the selected Brief by the configured backend AI service.
@@ -883,10 +1069,10 @@ onMounted(() => {
               </BaseButton>
             </div>
             <div class="adapt-fields">
-              <BaseTextarea id="instagram-caption" v-model="instagramContent.caption" label="Caption" :rows="7" :disabled="!enabledPlatforms.instagram" />
-              <BaseInput v-model="instagramContent.cta" label="CTA" :disabled="!enabledPlatforms.instagram" />
-              <BaseTextarea v-model="instagramContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.instagram" />
-              <BaseTextarea v-model="instagramContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.instagram" />
+              <BaseTextarea id="instagram-caption" v-model="instagramContent.caption" label="Caption" :rows="7" :disabled="!enabledPlatforms.instagram" :number="1" />
+              <BaseInput v-model="instagramContent.cta" label="CTA" :disabled="!enabledPlatforms.instagram" :number="2" />
+              <BaseTextarea v-model="instagramContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.instagram" :number="3" />
+              <BaseTextarea v-model="instagramContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.instagram" :number="4" />
             </div>
             <BaseButton variant="secondary" :disabled="!enabledPlatforms.instagram" @click="regenerateInstagram">
               <AppIcon name="sparkles" :size="16" />Regenerate Instagram
@@ -912,10 +1098,10 @@ onMounted(() => {
               </BaseButton>
             </div>
             <div class="adapt-fields">
-              <BaseTextarea id="linkedin-post-copy" v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :disabled="!enabledPlatforms.linkedin" />
-              <BaseInput v-model="linkedInContent.cta" label="CTA" :disabled="!enabledPlatforms.linkedin" />
-              <BaseTextarea v-model="linkedInContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.linkedin" />
-              <BaseTextarea v-model="linkedInContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.linkedin" />
+              <BaseTextarea id="linkedin-post-copy" v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :disabled="!enabledPlatforms.linkedin" :number="1" />
+              <BaseInput v-model="linkedInContent.cta" label="CTA" :disabled="!enabledPlatforms.linkedin" :number="2" />
+              <BaseTextarea v-model="linkedInContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.linkedin" :number="3" />
+              <BaseTextarea v-model="linkedInContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.linkedin" :number="4" />
             </div>
             <BaseButton variant="secondary" :disabled="!enabledPlatforms.linkedin" @click="regenerateLinkedIn">
               <AppIcon name="sparkles" :size="16" />Regenerate LinkedIn
@@ -958,62 +1144,125 @@ onMounted(() => {
           @copy="copyVisualBrief"
         />
 
-        <BaseCard title="Design Status" description="Update this manually as the visual moves toward production.">
-          <BaseSelect v-model="designStatus" label="Design status" :options="creativeStatusOptions" :disabled="isApproved" />
-          <div class="creative-status-guide">
-            <div :class="{ 'is-active': designStatus === 'not-started' }"><span>Not Started</span><small>No creative uploaded yet</small></div>
-            <div :class="{ 'is-active': designStatus === 'in-progress' }"><span>In Progress</span><small>Assets are being prepared</small></div>
-            <div :class="{ 'is-active': designStatus === 'ready' }"><span>Ready</span><small>Assets are ready for review</small></div>
+        <BaseCard title="Visual production progress" description="Choose the stage that best describes the creative assets for this content.">
+          <div class="creative-status-guide" role="group" aria-label="Visual production stage">
+            <button
+              v-for="(option, index) in creativeStatusOptions"
+              :key="option.value"
+              type="button"
+              :class="{ 'is-active': designStatus === option.value }"
+              :aria-pressed="designStatus === option.value"
+              :disabled="isApproved"
+              @click="designStatus = option.value"
+            >
+              <span class="creative-status-step">{{ index + 1 }}</span>
+              <span class="creative-status-copy">
+                <strong>{{ option.label === 'Ready' ? 'Ready for review' : option.label }}</strong>
+                <small v-if="option.value === 'not-started'">No visual assets have been uploaded yet.</small>
+                <small v-else-if="option.value === 'in-progress'">Assets are being created or still need updates.</small>
+                <small v-else>All required assets are uploaded and ready to review.</small>
+              </span>
+            </button>
           </div>
         </BaseCard>
       </div>
 
       <BaseCard title="AI Visual Reference" description="Generate visual concepts as design references before creating the final creative in Canva.">
+        <fieldset class="creative-generation-mode">
+          <legend>Generation mode</legend>
+          <label><input v-model="creativeReferenceGenerationMode" type="radio" value="original_design" :disabled="creativeReferenceLoading || isApproved" /><span><strong>Original Design</strong><small>Keep generating complete visual references as before.</small></span></label>
+          <label><input v-model="creativeReferenceGenerationMode" type="radio" value="canva_ready" :disabled="creativeReferenceLoading || isApproved || canvaReadyUnavailable" /><span><strong>Canva-Ready Design <StatusBadge tone="info">Experimental</StatusBadge></strong><small>{{ canvaReadyUnavailable ? 'Unavailable: the configured image model does not support transparent backgrounds.' : 'Generate a transparent hero illustration, then compose editable layers locally.' }}</small></span></label>
+        </fieldset>
         <div class="creative-reference-form">
           <BaseSelect v-model="creativeReferencePlatform" label="Platform" :options="creativeReferencePlatformOptions" />
+          <BaseSelect v-model="creativeReferenceFormat" label="Content format" :options="creativeReferenceFormatOptions" />
+          <BaseSelect v-if="creativeReferenceFormat === 'carousel'" v-model="creativeReferenceSlideCount" label="Number of slides" :options="creativeReferenceSlideCountOptions" />
           <BaseSelect v-model="creativeReferenceStyle" label="Style" :options="creativeReferenceStyleOptions" />
           <BaseSelect v-model="creativeReferenceMood" label="Mood" :options="creativeReferenceMoodOptions" />
-          <BaseSelect v-model="creativeReferenceAspectRatio" label="Format" :options="creativeReferenceAspectRatioOptions" />
-          <BaseTextarea v-model="creativeReferenceInstruction" label="Additional visual instruction (optional)" :rows="2" maxlength="500" placeholder="Keep the visual hierarchy calm and suitable for a B2B audience." />
+          <BaseSelect v-model="creativeReferenceAspectRatio" label="Image ratio" :options="creativeReferenceAspectRatioOptions" />
+          <BaseTextarea v-model="creativeReferenceInstruction" label="Additional visual instruction (optional)" :rows="2" maxlength="500" placeholder="Keep the visual hierarchy calm and suitable for a B2B audience." :number="1" />
         </div>
         <div class="creative-reference-actions">
           <div>
-            <strong>References only</strong>
-            <p>Generate 3 concepts and images with one explicit AI action. Use the selected inspiration to recreate the final design manually.</p>
+            <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
+            <p v-if="creativeReferenceFormat === 'carousel'">{{ creativeReferenceGenerationMode === 'canva_ready' ? 'Generate one transparent hero illustration per slide; backgrounds and editable text are composed locally.' : 'Generate one image per slide using the content copy as the narrative source. All slides share the same grid, color palette, typography, and visual language.' }} This uses {{ creativeReferenceSlideCount }} image requests.</p>
+            <p v-else>{{ creativeReferenceGenerationMode === 'canva_ready' ? 'Generate three transparent hero illustrations, then build native editable background, decoration, and typography layers locally.' : 'Generate three single-image directions: educational, product showcase, and process insight. Each includes Shifd Labs brand guidance and Canva asset search terms.' }} This uses three image requests.</p>
           </div>
-          <BaseButton size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
-            <AppIcon name="sparkles" :size="17" />Generate 3 References
+          <BaseButton class="creative-reference-generate-button" size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
+            <AppIcon name="sparkles" :size="17" />{{ creativeReferenceActionLabel }}
           </BaseButton>
         </div>
-        <InlineAlert v-if="creativeReferenceLoading" title="Generating visual concepts">Generating visual concepts and references...</InlineAlert>
+        <section v-if="creativeReferenceLoading" class="creative-reference-generation-state" role="status" aria-live="polite" aria-label="Generating visual references">
+          <div class="creative-reference-generation-art" aria-hidden="true">
+            <span class="creative-reference-generation-orbit creative-reference-generation-orbit--outer" />
+            <span class="creative-reference-generation-orbit creative-reference-generation-orbit--inner" />
+            <span v-for="index in 5" :key="index" class="creative-reference-generation-card" :class="`creative-reference-generation-card--${index}`"><i /><i /><i /></span>
+            <span class="creative-reference-generation-spark">✦</span>
+          </div>
+          <div class="creative-reference-generation-copy">
+            <strong>{{ creativeReferenceFormat === 'carousel' ? `Building your ${creativeReferenceSlideCount}-slide storyboard` : 'Creating three visual directions' }}</strong>
+            <span>Generating the images and keeping each carousel slide in sequence.</span>
+            <small><AppIcon name="alert" :size="14" /> Keep this page open while it runs. Cancel stops the active request and skips remaining slides.</small>
+            <BaseButton class="creative-reference-cancel-button" variant="secondary" size="compact" :disabled="!creativeReferenceLoading" @click="cancelCreativeReferenceGeneration">Cancel generation</BaseButton>
+          </div>
+        </section>
         <InlineAlert v-if="creativeReferenceError" title="Visual reference" tone="warning">{{ creativeReferenceError }}</InlineAlert>
         <div v-if="latestCreativeReferenceBatch" class="creative-reference-results">
           <div class="creative-reference-batch-meta">
-            <span>{{ latestCreativeReferenceBatch.status === "partial" ? "Partial batch" : "Latest reference batch" }}</span>
-            <small>{{ latestCreativeReferenceBatch.actualGeneratedSize }} · {{ latestCreativeReferenceBatch.references.length }} of 3 available</small>
+            <div class="creative-reference-batch-summary">
+            <span>{{ latestCreativeReferenceBatch.status === "cancelled" ? "Generation cancelled" : latestCreativeReferenceBatch.status === "partial" ? (latestCreativeReferenceBatch.creativeFormat === 'carousel' ? "Incomplete storyboard" : "Partial batch") : "Latest reference batch" }}</span>
+              <small v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel'">{{ latestCreativeReferenceBatch.references.length }} of {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides generated<span v-if="missingCreativeSlideNumbers.length"> · Slide{{ missingCreativeSlideNumbers.length === 1 ? '' : 's' }} {{ missingCreativeSlideNumbers.join(', ') }} missing</span> · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
+              <small v-else>{{ latestCreativeReferenceBatch.references.length }} of 3 options · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
+            </div>
+            <div class="creative-reference-batch-actions">
+              <BaseButton v-if="['partial', 'cancelled'].includes(latestCreativeReferenceBatch.status) && latestCreativeReferenceBatch.creativeFormat === 'carousel'" variant="ghost" size="compact" :disabled="creativeReferenceLoading" @click="retryCreativeReferenceBatch">Retry all {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides</BaseButton>
+              <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel' && latestCreativeReferenceBatch.references.length" size="compact" :disabled="storyboardSelected || creativeReferenceLoading" @click="selectCreativeReference(latestCreativeReferenceBatch.references[0])">{{ storyboardSelected ? `Storyboard selected · ${latestCreativeReferenceBatch.references.length}/${latestCreativeReferenceBatch.expectedReferenceCount}` : `Select storyboard · ${latestCreativeReferenceBatch.references.length}/${latestCreativeReferenceBatch.expectedReferenceCount} slides` }}</BaseButton>
+            </div>
           </div>
-          <div class="creative-reference-grid">
+          <div class="creative-reference-grid" :class="{ 'is-carousel': latestCreativeReferenceBatch.creativeFormat === 'carousel' }">
             <article v-for="reference in latestCreativeReferenceBatch.references" :key="reference.id" class="creative-reference-card" :class="{ 'is-selected': reference.selected || selectedCreativeReferenceId === reference.id }">
-              <img :src="reference.imageUrl" :alt="`${reference.conceptName} visual reference`" class="creative-reference-image" />
+              <img v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" :src="reference.imageUrl" :alt="`${reference.conceptName} visual reference`" :style="{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : '4 / 5' }" class="creative-reference-image" />
               <div class="creative-reference-card-body">
-                <div class="creative-reference-card-heading"><strong>{{ reference.conceptName }}</strong><StatusBadge v-if="reference.selected || selectedCreativeReferenceId === reference.id" tone="success">Selected Reference</StatusBadge></div>
+                <div class="creative-reference-card-heading"><div><strong>{{ latestCreativeReferenceBatch.creativeFormat === 'carousel' ? `Slide ${reference.slideNumber ?? reference.conceptIndex + 1}: ${reference.conceptName}` : reference.conceptName }}</strong><small class="creative-reference-template-type">{{ latestCreativeReferenceBatch.creativeFormat === 'carousel' ? `${reference.slideNumber ?? reference.conceptIndex + 1} of ${latestCreativeReferenceBatch.expectedReferenceCount} · ${reference.templateType === 'process_carousel' ? 'Carousel sequence' : 'Slide'}` : reference.templateType === "educational" ? "Educational content" : reference.templateType === "product_showcase" ? "Product showcase" : reference.templateType === "process_insight" ? "Process insight" : "Design reference" }}</small></div><StatusBadge v-if="latestCreativeReferenceBatch.creativeFormat !== 'carousel' && (reference.selected || selectedCreativeReferenceId === reference.id)" tone="success">Selected Reference</StatusBadge></div>
+                <CanvaReadyComposer v-if="latestCreativeReferenceBatch.generationMode === 'canva_ready'" :reference="reference" :headline="workflow.generatedContent.title" :subtitle="reference.slideCopy || workflow.generatedContent.coreMessage" :cta="workflow.generatedContent.cta" :slide-number="latestCreativeReferenceBatch.creativeFormat === 'carousel' ? reference.slideNumber : null" :slide-count="latestCreativeReferenceBatch.expectedReferenceCount" />
                 <dl class="creative-reference-notes">
+                  <div v-if="reference.slideCopy"><dt>Slide message</dt><dd>{{ reference.slideCopy }}</dd></div>
                   <div><dt>Rationale</dt><dd>{{ reference.rationale }}</dd></div>
                   <div><dt>Layout</dt><dd>{{ reference.layoutNotes }}</dd></div>
                   <div><dt>Visual focus</dt><dd>{{ reference.visualFocus }}</dd></div>
                   <div><dt>Typography</dt><dd>{{ reference.typographyDirection }}</dd></div>
+                  <div v-if="reference.canvaBrief"><dt>Canva steps</dt><dd>{{ reference.canvaBrief }}</dd></div>
+                  <div v-if="reference.assetSearchKeywords.length"><dt>Canva search</dt><dd>{{ reference.assetSearchKeywords.join(" · ") }}</dd></div>
                 </dl>
+                <ol v-if="reference.carouselOutline.length && reference.conceptIndex === 0" class="creative-reference-carousel-outline"><li v-for="(slide, index) in reference.carouselOutline" :key="`${reference.id}-${index}`"><strong>Slide {{ index + 1 }}</strong>{{ slide }}</li></ol>
                 <div class="creative-reference-card-actions">
-                  <BaseButton size="compact" :disabled="reference.selected || selectedCreativeReferenceId === reference.id" @click="selectCreativeReference(reference)">{{ reference.selected || selectedCreativeReferenceId === reference.id ? "Selected" : "Select Reference" }}</BaseButton>
-                  <BaseButton variant="ghost" size="compact" @click="copyDesignNotes(reference)">Copy Design Notes</BaseButton>
+                  <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat !== 'carousel'" size="compact" :disabled="reference.selected || selectedCreativeReferenceId === reference.id" @click="selectCreativeReference(reference)">{{ reference.selected || selectedCreativeReferenceId === reference.id ? "Selected" : "Select reference" }}</BaseButton>
+                  <BaseButton variant="ghost" size="compact" @click="copyDesignNotes(reference)">Copy Canva Brief</BaseButton>
+                  <BaseButton v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" variant="ghost" size="compact" @click="copyReferenceImage(reference)">Copy Image</BaseButton>
+                  <BaseButton v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" variant="ghost" size="compact" @click="downloadReferenceImage(reference)">Download PNG</BaseButton>
                 </div>
+              </div>
+            </article>
+            <article v-for="slideNumber in missingCreativeSlideNumbers" :key="`missing-slide-${slideNumber}`" class="creative-reference-card creative-reference-card--missing">
+              <div class="creative-reference-missing-visual"><AppIcon name="sparkles" :size="28" /><span>Slide {{ slideNumber }}</span></div>
+              <div class="creative-reference-card-body">
+                <div class="creative-reference-card-heading"><div><strong>Slide {{ slideNumber }} was not generated</strong><small class="creative-reference-template-type">Missing from this storyboard</small></div></div>
+                <p class="creative-reference-missing-note">The image request for this slide did not finish, so it is not available in this batch. Retry all {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides to create a new complete storyboard.</p>
               </div>
             </article>
           </div>
           <InlineAlert title="Keep the final creative separate" tone="info">Use this as inspiration in Canva. Upload your finished PNG/JPG design below; selecting a reference does not satisfy the final creative requirement.</InlineAlert>
-          <p v-if="selectedCreativeReference" class="creative-reference-selected-note">Selected reference: <strong>{{ selectedCreativeReference.conceptName }}</strong>. The final uploaded creative remains the source used by Review.</p>
+          <p v-if="selectedCreativeReference && selectedCreativeReferenceBatch" class="creative-reference-selected-note">{{ selectedCreativeReferenceBatch.creativeFormat === 'carousel' ? `Selected storyboard: ${selectedCreativeReferenceBatch.references.length} of ${selectedCreativeReferenceBatch.expectedReferenceCount} ordered slides` : `Selected reference: ${selectedCreativeReference.conceptName}` }}. The final uploaded creative remains the source used by Review.</p>
         </div>
       </BaseCard>
+
+      <CanvaDesignLinkPanel
+        v-if="workflow.contentId"
+        :content-id="workflow.contentId"
+        :link="workflow.canonical?.canvaDesignLink ?? null"
+        :editable="true"
+        @updated="updateCanvaDesignLink"
+      />
 
       <div class="creative-platform-grid">
         <BaseCard title="Instagram Creative" description="Upload one or more PNG/JPG files for the carousel.">
@@ -1111,13 +1360,13 @@ onMounted(() => {
         <BaseCard v-if="enabledPlatforms.instagram" title="Instagram" description="Final carousel copy and authenticated creative preview.">
           <template #actions><StatusBadge tone="info">Instagram</StatusBadge></template>
           <div class="review-platform-body">
-            <div class="review-copy-fields">
+            <div id="review-copy-instagram" class="review-copy-fields">
               <div class="review-section-heading"><span class="brief-overline">Final Copy</span><BaseButton variant="ghost" size="compact" @click="editReviewPlatform('instagram')"><AppIcon name="settings" :size="15" />{{ reviewEditing.instagram ? "Editing" : "Edit Manually" }}</BaseButton></div>
-              <BaseTextarea v-model="instagramContent.caption" label="Caption" :rows="7" :readonly="!reviewEditing.instagram" @input="markAssessmentNeedsRecheck('instagram')" />
-              <BaseInput v-model="instagramContent.cta" label="CTA" :readonly="!reviewEditing.instagram" @input="markAssessmentNeedsRecheck('instagram')" />
-              <BaseTextarea v-model="instagramContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.instagram" @input="markAssessmentNeedsRecheck('instagram')" />
+              <BaseTextarea v-model="instagramContent.caption" label="Caption" :rows="7" :readonly="!reviewEditing.instagram" :number="1" @input="markAssessmentNeedsRecheck('instagram')" />
+              <BaseInput v-model="instagramContent.cta" label="CTA" :readonly="!reviewEditing.instagram" :number="2" @input="markAssessmentNeedsRecheck('instagram')" />
+              <BaseTextarea v-model="instagramContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.instagram" :number="3" @input="markAssessmentNeedsRecheck('instagram')" />
             </div>
-            <div class="review-asset-preview-panel">
+            <div id="review-creative-instagram" class="review-asset-preview-panel">
               <div class="review-section-heading"><span class="brief-overline">Uploaded Creative</span><span class="review-muted">{{ instagramAssets.length }} assets</span></div>
               <div v-if="instagramAssets.length" class="review-asset-strip">
                 <div v-for="(asset, index) in instagramAssets" :key="asset.id" class="review-asset-thumb"><img :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div>
@@ -1125,6 +1374,7 @@ onMounted(() => {
               <p v-else class="creative-empty-note">No Instagram creative uploaded.</p>
             </div>
             <BrandAssessmentCard
+              id="review-brand-instagram"
               :assessment="reviewAssessments.instagram"
               :override-justification="reviewOverrides.instagram"
               @regenerate="regenerateReviewPlatform('instagram')"
@@ -1137,18 +1387,19 @@ onMounted(() => {
         <BaseCard v-if="enabledPlatforms.linkedin" title="LinkedIn" description="Final B2B post copy and selected creative preview.">
           <template #actions><StatusBadge tone="neutral">LinkedIn</StatusBadge></template>
           <div class="review-platform-body">
-            <div class="review-copy-fields">
+            <div id="review-copy-linkedin" class="review-copy-fields">
               <div class="review-section-heading"><span class="brief-overline">Final Copy</span><BaseButton variant="ghost" size="compact" @click="editReviewPlatform('linkedin')"><AppIcon name="settings" :size="15" />{{ reviewEditing.linkedin ? "Editing" : "Edit Manually" }}</BaseButton></div>
-              <BaseTextarea v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :readonly="!reviewEditing.linkedin" @input="markAssessmentNeedsRecheck('linkedin')" />
-              <BaseInput v-model="linkedInContent.cta" label="CTA" :readonly="!reviewEditing.linkedin" @input="markAssessmentNeedsRecheck('linkedin')" />
-              <BaseTextarea v-model="linkedInContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.linkedin" @input="markAssessmentNeedsRecheck('linkedin')" />
+              <BaseTextarea v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :readonly="!reviewEditing.linkedin" :number="1" @input="markAssessmentNeedsRecheck('linkedin')" />
+              <BaseInput v-model="linkedInContent.cta" label="CTA" :readonly="!reviewEditing.linkedin" :number="2" @input="markAssessmentNeedsRecheck('linkedin')" />
+              <BaseTextarea v-model="linkedInContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.linkedin" :number="3" @input="markAssessmentNeedsRecheck('linkedin')" />
             </div>
-            <div class="review-asset-preview-panel">
+            <div id="review-creative-linkedin" class="review-asset-preview-panel">
               <div class="review-section-heading"><span class="brief-overline">Uploaded Creative</span><span class="review-muted">{{ reuseInstagramCreative ? "Inherited from Instagram" : `${linkedInAssets.length} assets` }}</span></div>
               <div v-if="inheritedLinkedInAssets.length" class="review-asset-strip"><div v-for="(asset, index) in inheritedLinkedInAssets" :key="asset.id" class="review-asset-thumb"><img :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div></div>
               <p v-else class="creative-empty-note">No LinkedIn creative uploaded.</p>
             </div>
             <BrandAssessmentCard
+              id="review-brand-linkedin"
               :assessment="reviewAssessments.linkedin"
               :override-justification="reviewOverrides.linkedin"
               @regenerate="regenerateReviewPlatform('linkedin')"
@@ -1159,23 +1410,52 @@ onMounted(() => {
         </BaseCard>
       </section>
 
-      <BaseCard title="Human Final Review" description="Complete every check before asking for approval.">
+      <BaseCard title="Human Final Review" description="Review the actual content, then record your final decision.">
         <div class="human-review-layout">
           <div class="human-review-checklist">
-            <BaseCheckbox v-model="reviewChecklist.copyReviewed" label="Copy reviewed" :disabled="isApproved" />
-            <BaseCheckbox v-model="reviewChecklist.creativeReviewed" label="Creative reviewed" :disabled="isApproved" />
-            <BaseCheckbox v-model="reviewChecklist.visualCopyConsistent" label="Visual and copy are consistent" :disabled="isApproved" />
-            <BaseCheckbox v-model="reviewChecklist.noErrors" label="No obvious typo or incorrect claim" :disabled="isApproved" />
-            <BaseCheckbox v-model="reviewChecklist.readyForPublication" label="Ready for publication" :disabled="isApproved" />
+            <div class="review-progress-card">
+              <div class="review-progress-heading"><div><span class="brief-overline">Review progress</span><strong>{{ reviewChecklistCount }} of 5 checks complete</strong></div><StatusBadge :tone="reviewChecklistComplete ? 'success' : 'neutral'">{{ reviewChecklistProgress }}%</StatusBadge></div>
+              <div class="review-progress-track" role="progressbar" aria-label="Human review progress" :aria-valuenow="reviewChecklistProgress" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${reviewChecklistProgress}%` }" /></div>
+            </div>
+            <div class="human-review-item">
+              <BaseCheckbox v-model="reviewChecklist.copyReviewed" label="I reviewed the final copy" :disabled="isApproved" />
+              <p>Read the caption or post copy, CTA, and hashtags for every enabled platform.</p>
+              <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('copy')">Open copy <AppIcon name="arrow-right" :size="14" /></BaseButton>
+            </div>
+            <div class="human-review-item">
+              <BaseCheckbox v-model="reviewChecklist.creativeReviewed" label="I reviewed the creative" :disabled="isApproved" />
+              <p>Check each image or carousel for legibility, quality, and correct framing.</p>
+              <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('creative')">Open creative <AppIcon name="arrow-right" :size="14" /></BaseButton>
+            </div>
+            <div class="human-review-item">
+              <BaseCheckbox v-model="reviewChecklist.visualCopyConsistent" label="Visuals match the message" :disabled="isApproved" />
+              <p>Confirm the creative supports the claim and tone in the copy.</p>
+              <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('creative')">Compare content <AppIcon name="arrow-right" :size="14" /></BaseButton>
+            </div>
+            <div class="human-review-item">
+              <BaseCheckbox v-model="reviewChecklist.noErrors" label="Claims and details are accurate" :disabled="isApproved" />
+              <p>Check names, numbers, spelling, links, and any factual or product claims.</p>
+              <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('copy')">Check copy <AppIcon name="arrow-right" :size="14" /></BaseButton>
+            </div>
+            <div class="human-review-item">
+              <BaseCheckbox v-model="reviewChecklist.readyForPublication" label="This is ready to publish" :disabled="isApproved" />
+              <p>Confirm the content is complete and appropriate for its intended audience.</p>
+              <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('brand')">Review alignment <AppIcon name="arrow-right" :size="14" /></BaseButton>
+            </div>
           </div>
           <div class="approval-panel">
-            <span class="brief-overline">Human Approval</span>
-            <p>AI assessment is advisory. A human must make the final approval decision.</p>
-            <ul class="approval-requirements">
-              <li :class="{ 'is-complete': reviewChecklistComplete }">Human checklist complete</li>
-              <li :class="{ 'is-complete': !reviewNeedsRecheck }">All assessments re-checked</li>
-              <li :class="{ 'is-complete': reviewOverridesComplete }">Warning justifications recorded</li>
-              <li :class="{ 'is-complete': canContinueToReview }">Creative requirements satisfied</li>
+            <span class="brief-overline">Approval decision</span>
+            <h3>{{ isApproved ? 'Content approved' : canApproveContent ? 'Ready for your approval' : 'A few things need attention' }}</h3>
+            <p>AI checks are guidance. You are responsible for the final decision and publication readiness.</p>
+            <div v-if="!isApproved && approvalPendingItems.length" class="approval-next-steps">
+              <strong>Still needed</strong>
+              <ul><li v-for="item in approvalPendingItems" :key="item">{{ item }}</li></ul>
+            </div>
+            <ul v-else class="approval-requirements">
+              <li :class="{ 'is-complete': reviewChecklistComplete }">Human review complete</li>
+              <li :class="{ 'is-complete': !reviewNeedsRecheck }">Platform checks are current</li>
+              <li :class="{ 'is-complete': reviewOverridesComplete }">Alignment warnings addressed</li>
+              <li :class="{ 'is-complete': canContinueToReview }">Creative requirements met</li>
             </ul>
             <div v-if="isApproved" class="approval-success"><StatusBadge tone="success" dot>Approved</StatusBadge><strong>Approved by: {{ approvedBy ?? 'Backend reviewer' }}</strong><span>{{ approvedTimestampLabel }}</span><BaseButton variant="secondary" size="compact" @click="router.push(`/content/${workflow.contentId}`)">Request Revision</BaseButton></div>
             <BaseButton v-else size="comfortable" :disabled="!canApproveContent" @click="approveContent">Approve Content <AppIcon name="check" :size="17" /></BaseButton>
@@ -1192,7 +1472,7 @@ onMounted(() => {
       </div>
 
       <BaseModal v-model="overrideModalOpen" title="Override Brand Check" description="This content has an alignment warning. Please explain why it should proceed." size="default">
-        <BaseTextarea v-model="overrideJustification" label="Justification" :rows="4" :error="overrideError" required />
+        <BaseTextarea v-model="overrideJustification" label="Justification" :rows="4" :error="overrideError" required :number="1" />
         <template #footer><BaseButton variant="ghost" @click="overrideModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmOverride">Confirm Override</BaseButton></template>
       </BaseModal>
     </div>
@@ -1202,7 +1482,7 @@ onMounted(() => {
         <BaseCard title="Approved Content" description="A compact handoff summary for the publication plan.">
           <div class="approved-summary-grid">
             <div><span class="brief-overline">Content Title</span><strong>{{ generatedContent.title }}</strong></div>
-            <div><span class="brief-overline">Product / Context</span><strong>{{ brief.context === 'company' ? companyContext.companyProfile.name : selectedProductName }}</strong></div>
+            <div><span class="brief-overline">Product / Context</span><strong>{{ brief.context === 'general' ? 'General topic' : brief.context === 'company' ? companyContext.companyProfile.name : selectedProductName }}</strong></div>
             <div><span class="brief-overline">Content Pillar</span><strong>{{ selectedPillarLabel }}</strong></div>
             <div><span class="brief-overline">Objective</span><strong>{{ selectedObjectiveLabel }}</strong></div>
             <div><span class="brief-overline">Approved By</span><strong>{{ approvedBy ?? 'Backend reviewer' }}</strong></div>
@@ -1221,6 +1501,7 @@ onMounted(() => {
                   <BaseInput
                     :model-value="row.schedule.date"
                     label="Publication date"
+                    :number="1"
                     type="date"
                     :min="scheduleDateMinimum"
                     :disabled="row.id === 'linkedin' && useSameSchedule"
@@ -1229,6 +1510,7 @@ onMounted(() => {
                   <BaseInput
                     :model-value="row.schedule.time"
                     label="Publication time"
+                    :number="2"
                     type="time"
                     :disabled="row.id === 'linkedin' && useSameSchedule"
                     @update:model-value="updateScheduleTime(row.id, $event)"
@@ -1270,11 +1552,7 @@ onMounted(() => {
               <div class="brief-field-group">
                 <div class="brief-field-heading">
                   <span class="brief-overline">Content Context</span
-                  ><span
-                    class="brief-help"
-                    title="Choose whether this brief is grounded in company or product context"
-                    ><AppIcon name="info" :size="14" /> Context scope</span
-                  >
+                  ><InfoTooltip align="end" label="Content context information" text="Choose which background the content should use. Company adds organization and brand context; Product adds a selected product's context; General uses the topic without either." />
                 </div>
                 <div
                   class="segmented-control"
@@ -1286,6 +1564,7 @@ onMounted(() => {
                     role="radio"
                     :aria-checked="brief.context === 'company'"
                     :class="{ 'is-selected': brief.context === 'company' }"
+                    title="Use the company's business, audience, and brand information as context."
                     @click="brief.context = 'company'"
                   >
                     Company
@@ -1293,24 +1572,36 @@ onMounted(() => {
                   <button
                     type="button"
                     role="radio"
+                    :aria-checked="brief.context === 'general'"
+                    :class="{ 'is-selected': brief.context === 'general' }"
+                    title="Create topic-led content without company or product background."
+                    @click="brief.context = 'general'; brief.product = ''"
+                  >
+                    General
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
                     :aria-checked="brief.context === 'product'"
                     :class="{ 'is-selected': brief.context === 'product' }"
+                    title="Use a selected product's audience, value proposition, and brand context."
                     @click="brief.context = 'product'"
                   >
                     Product
                   </button>
                 </div>
+                <p v-if="brief.context === 'general'" class="brief-context-hint">Create topic-led content without company or product context.</p>
               </div>
               <div class="brief-field-group">
                 <div class="brief-field-heading">
-                  <span class="brief-overline">Product Asset Link</span
-                  ><StatusBadge
-                    :tone="brief.context === 'product' ? 'success' : 'info'"
+                  <div class="brief-heading-label"><span class="brief-overline">Product Asset Link</span><InfoTooltip label="Product asset information" text="Choose the product whose profile should inform the brief and generated content." /></div>
+                  <StatusBadge
+                    :tone="brief.context === 'product' ? 'success' : brief.context === 'general' ? 'neutral' : 'info'"
                     dot
                     >{{
                       brief.context === 'product'
                         ? 'Context active'
-                        : 'Company context'
+                        : brief.context === 'general' ? 'No linked context' : 'Company context'
                     }}</StatusBadge
                   >
                 </div>
@@ -1319,7 +1610,7 @@ onMounted(() => {
                     v-model="brief.product"
                     label="Product asset"
                     :options="productOptions"
-                    :disabled="brief.context === 'company'"
+                    :disabled="brief.context !== 'product'"
                   />
                 </div>
               </div>
@@ -1328,7 +1619,7 @@ onMounted(() => {
             <fieldset class="brief-field-group brief-fieldset">
               <legend class="brief-field-heading">
                 <span class="brief-overline">Content Pillar</span
-                ><span class="brief-help">Select a core narrative angle</span>
+                ><InfoTooltip align="end" label="Content pillar information" text="The pillar sets the main kind of story this content tells, such as teaching, explaining a problem, or showing a use case." />
               </legend>
               <div
                 class="choice-chip-grid"
@@ -1343,6 +1634,7 @@ onMounted(() => {
                   :aria-checked="brief.pillar === item.value"
                   class="choice-chip"
                   :class="{ 'is-selected': brief.pillar === item.value }"
+                  :title="item.description"
                   @click="choosePillar(item.value)"
                 >
                   <AppIcon :name="item.icon" :size="16" /><span>{{
@@ -1359,7 +1651,7 @@ onMounted(() => {
             <fieldset class="brief-field-group brief-fieldset">
               <legend class="brief-field-heading">
                 <span class="brief-overline">Strategic Objective</span
-                ><span class="brief-help">Target conversion funnel tier</span>
+                ><InfoTooltip align="end" label="Strategic objective information" text="Choose the intended audience outcome. This guides the content's purpose, from first awareness through evaluation or discovery." />
               </legend>
               <div
                 class="objective-grid"
@@ -1374,6 +1666,7 @@ onMounted(() => {
                   :aria-checked="brief.objective === item.value"
                   class="objective-choice"
                   :class="{ 'is-selected': brief.objective === item.value }"
+                  :title="item.description"
                   @click="chooseObjective(item.value)"
                 >
                   <AppIcon :name="item.icon" :size="18" /><span>{{
@@ -1383,61 +1676,53 @@ onMounted(() => {
               </div>
             </fieldset>
 
-            <div class="brief-field-group">
-              <div class="brief-field-heading">
-                <span class="brief-overline">Target Audience</span
-                ><span class="brief-help">Enter an audience or use Quick Add</span>
+            <div class="brief-input-grid">
+              <div class="brief-field-group">
+                <BaseInput
+                  v-model="brief.audience"
+                  label="Target audience"
+                  :number="1"
+                  tooltip="Describe who should find this content relevant, such as a role, team, organization type, or customer group. A specific audience helps shape examples, language, and level of detail."
+                />
+                <div class="quick-add-row">
+                  <span class="brief-overline">Quick add</span>
+                  <button
+                    v-for="suggestion in audienceSuggestions"
+                    :key="suggestion"
+                    type="button"
+                    class="quick-add-chip"
+                    @click="addAudience(suggestion)"
+                  >
+                    + {{ suggestion }}
+                  </button>
+                </div>
               </div>
+
               <BaseInput
-                v-model="brief.audience"
-                label="Target audience"
-                aria-label="Target audience"
+                v-model="brief.topic"
+                label="Topic / Primary Narrative"
+                :number="2"
+                :hint="`${topicLength} characters`"
+                tooltip="State the subject and main message for this piece. Keep it focused: generation uses this as the central topic to develop."
+                class="brief-large-input"
               />
-              <div class="quick-add-row">
-                <span class="brief-overline">Quick Add:</span
-                ><button
-                  v-for="suggestion in audienceSuggestions"
-                  :key="suggestion"
-                  type="button"
-                  class="quick-add-chip"
-                  @click="addAudience(suggestion)"
-                >
-                  + {{ suggestion }}
-                </button>
-              </div>
             </div>
 
-            <BaseInput
-              v-model="brief.topic"
-              label="Topic / Primary Narrative"
-              :hint="`${topicLength} characters`"
-              class="brief-large-input"
+            <BaseTextarea
+              v-model="brief.thesis"
+              label="Content angle and thesis"
+              :rows="4"
+              :number="3"
+              tooltip="Describe the argument or perspective behind the topic, including the key takeaway you want the audience to remember."
             />
 
-            <div class="brief-field-group">
-              <div class="brief-field-heading">
-                <span class="brief-overline">Content Angle &amp; Thesis</span
-                ><span class="brief-help">Edit directly in the field</span>
-              </div>
-              <BaseTextarea
-                v-model="brief.thesis"
-                label="Content angle and thesis"
-                :rows="4"
-              />
-            </div>
-
-            <div class="brief-field-group">
-              <div class="brief-field-heading">
-                <span class="brief-overline"
-                  >Execution Constraints &amp; Style Tone</span
-                ><span class="brief-help">Negative prompt guardrails</span>
-              </div>
-              <BaseTextarea
-                v-model="brief.constraints"
-                label="Execution constraints and style tone"
-                :rows="3"
-              />
-            </div>
+            <BaseTextarea
+              v-model="brief.constraints"
+              label="Execution constraints and style tone"
+              :rows="3"
+              :number="4"
+              tooltip="Set writing and execution rules for generation: tone, length, required details, and claims or topics to avoid."
+            />
           </div>
         </BaseCard>
 
@@ -1465,42 +1750,23 @@ onMounted(() => {
       <aside class="brief-inspector" aria-label="Brief context inspector">
         <BaseCard title="Active Context">
           <template #actions
-            ><StatusBadge tone="success" dot>Active</StatusBadge></template
+            ><StatusBadge :tone="brief.context === 'general' ? 'info' : 'success'" dot>{{ brief.context === 'general' ? 'General' : 'Active' }}</StatusBadge></template
           >
-          <div class="context-visual">
-              <div><span>{{ activeContextName }}</span></div>
-          </div>
           <dl class="context-details">
             <div>
-              <dt>{{ brief.context === "company" ? "Context type" : "Product" }}</dt>
-              <dd>{{ brief.context === "company" ? "Company" : selectedProductName }}</dd>
+              <dt>Context</dt>
+              <dd>{{ brief.context === "general" ? "General topic" : brief.context === "company" ? companyContext.companyProfile.name : selectedProductName }}</dd>
             </div>
-            <div>
-              <dt>Company context</dt>
-              <dd>{{ companyContext.companyProfile.name }}</dd>
-            </div>
-            <div>
-              <dt>{{ brief.context === "company" ? "Target segments" : "Target audience" }}</dt>
+            <div v-if="activeContextAudience && activeContextAudience !== 'Not set'">
+              <dt>Audience</dt>
               <dd>{{ activeContextAudience }}</dd>
             </div>
-            <div>
-              <dt>Primary objective</dt>
-              <dd>{{ selectedObjectiveLabel }}</dd>
-            </div>
-            <div>
-              <dt>Value proposition</dt>
+            <div v-if="brief.context !== 'general' && activeContextValue">
+              <dt>Key value</dt>
               <dd>{{ activeContextValue }}</dd>
             </div>
-            <div v-if="brief.context === 'company'">
-              <dt>Brand voice</dt>
-              <dd>{{ companyContext.brandProfile.brandVoice }}</dd>
-            </div>
-            <div v-else>
-              <dt>Inherits from</dt>
-              <dd>{{ resolvedProductContext?.company.companyProfile.name }}</dd>
-            </div>
-            <div v-if="brief.context === 'product'">
-              <dt>Brand voice</dt>
+            <div v-if="activeBrandVoice">
+              <dt>{{ brief.context === 'general' ? 'Writing style' : 'Brand voice' }}</dt>
               <dd>{{ activeBrandVoice }}</dd>
             </div>
           </dl>
@@ -1512,9 +1778,9 @@ onMounted(() => {
               isBriefReady ? "Ready to generate" : "Needs details"
             }}</StatusBadge></template
           >
-          <div class="readiness-list">
+          <div v-if="!isBriefReady" class="readiness-list">
             <div
-              v-for="item in briefReadinessItems"
+              v-for="item in incompleteBriefReadinessItems"
               :key="item.label"
               class="readiness-item"
               :class="{ 'is-complete': item.complete }"
@@ -1527,10 +1793,10 @@ onMounted(() => {
               <small v-if="item.optional">Optional</small>
             </div>
           </div>
+          <p v-else class="readiness-complete-note">All required details are in place.</p>
         </BaseCard>
 
-        <BaseCard title="Recent Ideas">
-          <p v-if="!recentIdeas.length" class="text-sm text-muted">No Ready ideas yet. Add an idea in the Idea Bank.</p>
+        <BaseCard v-if="recentIdeas.length" title="Recent Ideas">
           <div class="recent-angle-list">
             <button
               v-for="idea in recentIdeas"
@@ -1538,7 +1804,7 @@ onMounted(() => {
               type="button"
               @click="applyRecentIdea(idea)"
             >
-              <strong>{{ idea.title }}</strong><span>{{ pillarOptions.find((option) => option.value === idea.pillar)?.label }} · {{ idea.contextType === 'company' ? companyContext.companyProfile.name : productsStore.nameFor(idea.productId) }}</span>
+              <strong>{{ idea.title }}</strong><span>{{ pillarOptions.find((option) => option.value === idea.pillar)?.label }} · {{ idea.contextType === 'company' ? companyContext.companyProfile.name : idea.contextType === 'general' ? 'General' : productsStore.nameFor(idea.productId) }}</span>
             </button>
           </div>
           <button
@@ -1552,4 +1818,44 @@ onMounted(() => {
       </aside>
     </div>
   </div>
+  <Teleport to="body">
+    <div
+      v-if="contentBusy"
+      class="content-loading-overlay"
+      role="status"
+      aria-live="polite"
+      :aria-label="reviewRecheckLoading ? 'Pemeriksaan ulang sedang berlangsung' : 'Konten sedang diproses'"
+    >
+      <div class="content-loading-overlay__content">
+        <template v-if="reviewRecheckLoading">
+          <div class="alignment-loader-art" aria-hidden="true">
+            <span class="alignment-loader-art__orbit" />
+            <span class="alignment-loader-art__scan" />
+            <span class="alignment-loader-art__target">✓</span>
+            <i class="alignment-loader-art__point alignment-loader-art__point--one" />
+            <i class="alignment-loader-art__point alignment-loader-art__point--two" />
+            <i class="alignment-loader-art__point alignment-loader-art__point--three" />
+          </div>
+          <strong>Memeriksa ulang keselarasan brand</strong>
+          <span>Sedang menyimpan perubahan dan mencocokkan caption, CTA, serta konteks brand. Hasil pemeriksaan akan segera diperbarui.</span>
+        </template>
+        <template v-else>
+          <div class="content-loader-art" aria-hidden="true">
+            <span class="content-loader-art__orbit content-loader-art__orbit--one" />
+            <span class="content-loader-art__orbit content-loader-art__orbit--two" />
+            <span class="content-loader-art__sheet content-loader-art__sheet--back" />
+            <span class="content-loader-art__sheet content-loader-art__sheet--middle" />
+            <span class="content-loader-art__sheet content-loader-art__sheet--front">
+              <i /><i /><i />
+            </span>
+            <span class="content-loader-art__spark">✦</span>
+            <span class="content-loader-art__dot content-loader-art__dot--one" />
+            <span class="content-loader-art__dot content-loader-art__dot--two" />
+          </div>
+          <strong>Konten sedang disiapkan</strong>
+          <span>Mohon tunggu, proses ini bisa memerlukan beberapa saat.</span>
+        </template>
+      </div>
+    </div>
+  </Teleport>
 </template>
