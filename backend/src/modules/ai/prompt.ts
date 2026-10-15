@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { requestHash } from '../context/normalize.js'
-import { M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, M4_PROMPT_VERSION, OUTPUT_SCHEMA_VERSION, PROMPT_VERSION } from './constants.js'
+import { M2_PROMPT_VERSION, M3_OUTPUT_SCHEMA_VERSION, M3_PROMPT_VERSION, M4_OUTPUT_SCHEMA_VERSION, M4_PROMPT_VERSION, OUTPUT_SCHEMA_VERSION } from './constants.js'
 
 /**
  * The prompt is a version-controlled server resource. Persisted values are
@@ -59,7 +59,7 @@ not create or imply an image or an approval.
 {{EXECUTION_JSON}}
 </EXECUTION_DATA>`
 
-export const M2_PROMPT_REFERENCE = 'm2-generate-v1'
+export const M2_PROMPT_REFERENCE = 'm2-generate-v2'
 
 export function promptDigest() {
   return createHash('sha256').update(M2_PROMPT_TEMPLATE, 'utf8').digest('hex')
@@ -111,7 +111,7 @@ export function canonicalInputHash(value: unknown) {
 export const M2_PROMPT_METADATA = {
   module: 'M2' as const,
   operation: 'generate' as const,
-  version: PROMPT_VERSION,
+  version: M2_PROMPT_VERSION,
   status: 'active' as const,
   templateReference: M2_PROMPT_REFERENCE,
   outputSchemaVersion: OUTPUT_SCHEMA_VERSION,
@@ -200,7 +200,7 @@ export function m3PromptDigest() {
 export const M3_PROMPT_METADATA = {
   module: 'M3' as const,
   operation: 'adapt' as const,
-  version: PROMPT_VERSION,
+  version: M3_PROMPT_VERSION,
   status: 'active' as const,
   templateReference: M3_PROMPT_REFERENCE,
   outputSchemaVersion: M3_OUTPUT_SCHEMA_VERSION,

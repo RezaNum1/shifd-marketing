@@ -94,7 +94,7 @@ npm run build
 - `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; they never call OpenAI
 - `npm run test:review` — required real PostgreSQL Phase 9 Human Review integration tests; it never calls an AI provider
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
-- `npm run ai:seed` — idempotently registers and verifies immutable M2 v1, M3 v1, and M4 v3 prompt metadata/digests
+- `npm run ai:seed` — idempotently registers and verifies immutable M2 v2, M3 v1, and M4 v3 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
@@ -206,9 +206,9 @@ platform copy, Assets, and adaptation history.
 `GET/PUT /api/settings/ai` exposes only the user-editable generation language;
 provider/model/mode are server/operator configuration. Read-only prompt
 metadata is available through `GET /api/prompt-versions` and its detail route;
-prompt text is never returned. `npm run ai:seed` registers M2 `v1` from the
-canonical server resource, verifies its SHA-256 digest, and refuses to mutate
-an existing immutable version. `GET /api/ai-requests` and its detail route
+prompt text is never returned. `npm run ai:seed` registers M2 `v2` from the
+canonical server resource, verifies its SHA-256 digest, and preserves existing
+immutable versions such as M2 `v1`. `GET /api/ai-requests` and its detail route
 expose sanitized execution metadata without input snapshots, hashes, raw
 prompts, or secrets. `GET /api/ai-usage` is Company scoped, separates `real`
 and `demo`, uses a half-open period, sums only known token/cost values, and
@@ -261,7 +261,7 @@ requests require a new key. The append-only `ai_adapted` event records concise
 request, prompt, platform, and Variant identifiers only; it never contains the
 prompt, snapshot, provider response, storage data, or secrets.
 
-`npm run ai:seed` verifies both immutable M2 `v1` and M3 `v1` prompt resources;
+`npm run ai:seed` verifies immutable M2 `v2` and M3 `v1` prompt resources;
 prompt APIs return metadata only. M3 usage appears in the existing Company-scoped
 AI request and usage APIs, with unknown token/cost values remaining unknown and
 no unverified rates invented. M3 does not create Master Content, Assets, Brand
@@ -303,7 +303,7 @@ The M4 prompt uses explicit server-instruction and DATA sections, has no tools,
 browsing, or URL fetching, and requires grounded evaluation across Tone / Brand
 Voice, Messaging Alignment, Audience Fit, Claim Grounding, CTA Alignment,
 Company/Product Context Alignment, and Platform Appropriateness. `npm run
-ai:seed` verifies immutable M2 `v1`, M3 `v1`, and M4 `v3` digests. Up to three
+ai:seed` verifies immutable M2 `v2`, M3 `v1`, and M4 `v3` digests. Up to three
 attached creative images receive a brief visual review during M4; human review
 is still required before approval.
 M4 shares the Phase 6/7

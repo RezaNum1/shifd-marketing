@@ -170,7 +170,7 @@ runIntegration('M2 guided content generation', () => {
     expect(prompts.statusCode).toBe(200)
     const generationPrompt = prompts.json().data.find((prompt: { operation: string }) => prompt.operation === 'generate')
     if (!generationPrompt) throw new Error('The M2 generate prompt version was not listed.')
-    expect(generationPrompt).toMatchObject({ module: 'M2', operation: 'generate', version: 'v1', status: 'active' })
+    expect(generationPrompt).toMatchObject({ module: 'M2', operation: 'generate', version: 'v2', status: 'active' })
     expect(generationPrompt).not.toHaveProperty('template')
     expect(generationPrompt.templateDigest).toMatch(/^[0-9a-f]{64}$/)
     expect(generationPrompt.templateDigest).toBe(promptDigest())

@@ -22,7 +22,8 @@ export const OUTPUT_SCHEMA_VERSION = 'm2.generate.v1' as const
 export const M3_OUTPUT_SCHEMA_VERSION = 'm3.adapt.v1' as const
 export const M4_OUTPUT_SCHEMA_VERSION = 'm4.brand_check.v3' as const
 export const CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION = 'm2.creative_reference_concepts.v3' as const
-export const PROMPT_VERSION = 'v1' as const
+export const M2_PROMPT_VERSION = 'v2' as const
+export const M3_PROMPT_VERSION = 'v1' as const
 export const M4_PROMPT_VERSION = 'v3' as const
 
 export const AI_SETTINGS_OPERATION = 'ai-settings.update'
