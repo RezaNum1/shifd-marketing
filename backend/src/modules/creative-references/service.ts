@@ -120,6 +120,7 @@ export async function createCreativeReferenceBatch(
   input: CreativeReferenceInput,
   idempotencyKey: string,
   onImageFailure?: (details: { batchId: string; slideNumber: number | null; stage: string; errorType: string; errorMessage: string; providerRequestId: string | null }) => void,
+  onBatchFailure?: (details: { batchId: string; errorType: string; errorCode: string; errorMessage: string }) => void,
 ) {
   const operation = `creative-references.create:${contentId}`
   const existing = await prisma.requestIdempotency.findUnique({ where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } } })
@@ -178,8 +179,25 @@ export async function createCreativeReferenceBatch(
   // open for several image generations.
   const initialBatch = await readBatch(prisma, companyId, contentId, batchId)
   const processing = runCreativeReferenceBatch(prisma, config, provider, imageProvider, storage, companyId, actorId, contentId, input, idempotencyKey, operation, batchId, plannerLogId, content, settings, textModel, imageModel, size, expectedReferenceCount, snapshot, promptVersion, onImageFailure)
-  void processing.catch(async () => {
-    await prisma.creativeReferenceBatch.updateMany({ where: { id: batchId, status: 'processing' }, data: { status: 'failed', completedAt: new Date() } }).catch(() => undefined)
+  void processing.catch(async (error) => {
+    const failure = mapProviderFailure(error)
+    const errorMessage = safeImageErrorMessage(error)
+    try {
+      onBatchFailure?.({ batchId, errorType: error instanceof Error ? error.name : typeof error, errorCode: failure.code, errorMessage })
+    } catch {
+      // Diagnostics must not prevent the worker state from being finalized.
+    }
+    const completedAt = new Date()
+    await Promise.all([
+      prisma.aiRequestLog.updateMany({
+        where: { id: plannerLogId, status: 'pending' },
+        data: { status: 'failed', errorCode: failure.code, errorMessage, completedAt },
+      }).catch(() => undefined),
+      prisma.creativeReferenceBatch.updateMany({
+        where: { id: batchId, status: { in: ['pending', 'processing'] } },
+        data: { status: 'failed', completedAt },
+      }).catch(() => undefined),
+    ])
   })
   return { status: 202, body: { data: { batch: initialBatch } } }
 }

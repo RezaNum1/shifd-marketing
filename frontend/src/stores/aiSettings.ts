@@ -54,5 +54,12 @@ function toPromptVersion(value: BackendPromptVersion): PromptVersion {
 }
 
 function toRequestLog(value: BackendAiRequest): AiRequestLog {
-  return { id: value.id, module: value.module as AiRequestLog['module'], operation: value.operation as AiRequestLog['operation'], contentId: value.contentId ?? undefined, provider: value.provider, model: value.model, promptVersion: value.promptVersion.version, inputTokens: value.inputTokens ?? 0, outputTokens: value.outputTokens ?? 0, estimatedCostUsd: value.estimatedCostUsd === null ? null : Number(value.estimatedCostUsd), latencyMs: value.latencyMs ?? undefined, status: value.status === 'success' ? 'Success' : 'Failed', createdAt: value.createdAt }
+  const status: AiRequestLog['status'] = value.status === 'success'
+    ? 'Success'
+    : value.status === 'pending'
+      ? 'Pending'
+      : value.status === 'stale'
+        ? 'Stale'
+        : 'Failed'
+  return { id: value.id, module: value.module as AiRequestLog['module'], operation: value.operation as AiRequestLog['operation'], contentId: value.contentId ?? undefined, provider: value.provider, model: value.model, promptVersion: value.promptVersion.version, inputTokens: value.inputTokens ?? 0, outputTokens: value.outputTokens ?? 0, estimatedCostUsd: value.estimatedCostUsd === null ? null : Number(value.estimatedCostUsd), latencyMs: value.latencyMs ?? undefined, status, createdAt: value.createdAt }
 }

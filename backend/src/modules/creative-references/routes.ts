@@ -17,7 +17,20 @@ export async function creativeReferenceRoutes(app: FastifyInstance, options: { c
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     const body = parseInput(request.body)
-    const result = await createCreativeReferenceBatch(app.prisma, options.config, options.aiProvider, options.imageProvider, options.storage, auth.user.companyId, auth.user.id, routeId(request), body, idempotencyKey(request), (details) => request.log.warn(details, 'Creative reference slide generation failed'))
+    const result = await createCreativeReferenceBatch(
+      app.prisma,
+      options.config,
+      options.aiProvider,
+      options.imageProvider,
+      options.storage,
+      auth.user.companyId,
+      auth.user.id,
+      routeId(request),
+      body,
+      idempotencyKey(request),
+      (details) => request.log.warn(details, 'Creative reference slide generation failed'),
+      (details) => request.log.error(details, 'Creative reference batch processing failed'),
+    )
     return reply.status(result.status).send(result.body)
   })
 

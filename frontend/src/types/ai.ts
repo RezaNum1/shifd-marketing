@@ -1,6 +1,6 @@
 export type AiModule = 'M2' | 'M3' | 'M4'
 export type AiOperation = 'Content Generation' | 'Platform Adaptation' | 'Brand Consistency Check'
-export type AiRequestStatus = 'Success' | 'Failed'
+export type AiRequestStatus = 'Pending' | 'Success' | 'Failed' | 'Stale'
 export type PromptVersionStatus = 'Active' | 'Retired'
 
 export interface AiSettings {
