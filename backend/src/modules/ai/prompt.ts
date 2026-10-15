@@ -191,7 +191,7 @@ nonblank so the Variant is complete.
 {{EXECUTION_JSON}}
 </EXECUTION_DATA>`
 
-export const M3_PROMPT_REFERENCE = 'm3-adapt-v1'
+export const M3_PROMPT_REFERENCE = 'm3-adapt-v2'
 
 export function m3PromptDigest() {
   return createHash('sha256').update(M3_PROMPT_TEMPLATE, 'utf8').digest('hex')

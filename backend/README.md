@@ -94,7 +94,7 @@ npm run build
 - `npm run test:brand` — required real PostgreSQL M4 integration tests using the same test-only injected provider; they never call OpenAI
 - `npm run test:review` — required real PostgreSQL Phase 9 Human Review integration tests; it never calls an AI provider
 - `npm run assets:cleanup [-- --dry-run]` — operator cleanup of expired unattached Asset files/metadata
-- `npm run ai:seed` — idempotently registers and verifies immutable M2 v2, M3 v1, and M4 v3 prompt metadata/digests
+- `npm run ai:seed` — idempotently registers and verifies immutable M2 v2, M3 v2, and M4 v4 prompt metadata/digests
 - `npm run ai:recover [minutes]` — restricted operator recovery of pending AI requests older than 15 minutes; it never retries the provider
 - `npm run auth:bootstrap` — restricted operator bootstrap from environment variables
 - `npm run db:generate`, `npm run db:migrate`, `npm run db:deploy`, `npm run db:studio` — Prisma workflows
@@ -231,7 +231,7 @@ overrides.
 
 M3 reads the current Master, Visual Direction, Brief, live Company/Product
 context, resolved Brand context, target enabled Variant, AI settings, and active
-M3 `v1` prompt. Its exact output is `{ copy, cta, hashtags,
+M3 `v2` prompt. Its exact output is `{ copy, cta, hashtags,
 visualRecommendation }`, all nonblank strings. Instagram uses concise,
 caption-oriented and engaging framing; LinkedIn uses professional,
 consultative, problem-led framing. Both remain grounded in the same canonical
@@ -261,7 +261,7 @@ requests require a new key. The append-only `ai_adapted` event records concise
 request, prompt, platform, and Variant identifiers only; it never contains the
 prompt, snapshot, provider response, storage data, or secrets.
 
-`npm run ai:seed` verifies immutable M2 `v2` and M3 `v1` prompt resources;
+`npm run ai:seed` verifies immutable M2 `v2` and M3 `v2` prompt resources;
 prompt APIs return metadata only. M3 usage appears in the existing Company-scoped
 AI request and usage APIs, with unknown token/cost values remaining unknown and
 no unverified rates invented. M3 does not create Master Content, Assets, Brand
@@ -275,7 +275,7 @@ M4 is an advisory-only check for one enabled, current platform Variant. `POST
 /api/contents/:id/brand-check` accepts `{ "platform": "instagram" | "linkedin" }`
 and requires the authenticated session, Origin, CSRF token, the parent Content
 ETag, and an `Idempotency-Key`. The server resolves the current Company, Brand,
-Product, Brief, Master, Visual Direction, AI settings, and immutable M4 `v3`
+Product, Brief, Master, Visual Direction, AI settings, and immutable M4 `v4`
 prompt metadata. The browser cannot provide a score, checks, model, prompt,
 provider, context, or approval decision.
 
@@ -303,7 +303,7 @@ The M4 prompt uses explicit server-instruction and DATA sections, has no tools,
 browsing, or URL fetching, and requires grounded evaluation across Tone / Brand
 Voice, Messaging Alignment, Audience Fit, Claim Grounding, CTA Alignment,
 Company/Product Context Alignment, and Platform Appropriateness. `npm run
-ai:seed` verifies immutable M2 `v2`, M3 `v1`, and M4 `v3` digests. Up to three
+ai:seed` verifies immutable M2 `v2`, M3 `v2`, and M4 `v4` digests. Up to three
 attached creative images receive a brief visual review during M4; human review
 is still required before approval.
 M4 shares the Phase 6/7

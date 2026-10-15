@@ -210,7 +210,7 @@ runIntegration('Phase 8 M4 Brand Consistency Checker', () => {
     await prisma.$disconnect()
   })
 
-  it('B401-B403: seeds immutable M4 v1 metadata without changing M2/M3', async () => {
+  it('B401-B403: seeds immutable M4 v4 metadata without changing M2/M3', async () => {
     const beforeM2 = await prisma.promptVersion.findUnique({ where: { module_version: { module: 'M2', version: 'v1' } } })
     const beforeM3 = await prisma.promptVersion.findUnique({ where: { module_version: { module: 'M3', version: 'v1' } } })
     const first = await seedM2Prompt(app.prisma)
@@ -224,7 +224,7 @@ runIntegration('Phase 8 M4 Brand Consistency Checker', () => {
     const auth = await session(email)
     const response = await app.inject({ method: 'GET', url: '/api/prompt-versions?module=M4', headers: { cookie: auth.cookie } })
     expect(response.statusCode).toBe(200)
-    expect(response.json().data).toMatchObject([{ module: 'M4', operation: 'brand_check', version: 'v1', status: 'active', templateDigest: m4PromptDigest() }])
+    expect(response.json().data).toMatchObject([{ module: 'M4', operation: 'brand_check', version: 'v4', status: 'active', templateDigest: m4PromptDigest() }])
     expect(response.json().data[0]).not.toHaveProperty('template')
   })
 

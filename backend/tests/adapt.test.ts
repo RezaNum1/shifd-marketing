@@ -167,7 +167,7 @@ runIntegration('Phase 7 M3 cross-platform adaptation', () => {
     await prisma.$disconnect()
   })
 
-  it('M301-M303: seeds M3 v1 idempotently without changing M2 metadata', async () => {
+  it('M301-M303: seeds M3 v2 idempotently without changing M2 metadata', async () => {
     const before = await prisma.promptVersion.findUnique({ where: { module_version: { module: 'M2', version: 'v1' } } })
     const first = await seedM2Prompt(app.prisma)
     const second = await seedM2Prompt(app.prisma)
@@ -179,7 +179,7 @@ runIntegration('Phase 7 M3 cross-platform adaptation', () => {
     const response = await app.inject({ method: 'GET', url: '/api/prompt-versions?module=M3', headers: { cookie: auth.cookie } })
     expect(response.statusCode).toBe(200)
     expect(response.json().data).toHaveLength(1)
-    expect(response.json().data[0]).toMatchObject({ module: 'M3', operation: 'adapt', version: 'v1', status: 'active', templateDigest: m3PromptDigest() })
+    expect(response.json().data[0]).toMatchObject({ module: 'M3', operation: 'adapt', version: 'v2', status: 'active', templateDigest: m3PromptDigest() })
     expect(response.json().data[0]).not.toHaveProperty('template')
   })
 
