@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import type { AppConfig } from '../../config/env.js'
-import { aiNotConfigured, aiOutputInvalid, aiProviderError, aiTimeout, notFound, rateLimited, requestInProgress, validationError, AppError } from '../../shared/errors/AppError.js'
+import { aiNotConfigured, aiOutputInvalid, aiProviderError, aiTimeout, notFound, rateLimited, validationError, AppError } from '../../shared/errors/AppError.js'
 import { requestHash, type UnknownRecord } from '../context/normalize.js'
 import type { AssetStorage } from '../assets/storage.js'
 import { CREATIVE_REFERENCE_CONCEPT_OPERATION, CREATIVE_REFERENCE_IMAGE_OPERATION, CREATIVE_REFERENCE_MODULE, CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, CREATIVE_REFERENCE_PROMPT_REFERENCE, CREATIVE_REFERENCE_PROMPT_VERSION } from '../ai/constants.js'
@@ -120,12 +120,14 @@ export async function createCreativeReferenceBatch(
   input: CreativeReferenceInput,
   idempotencyKey: string,
   onImageFailure?: (details: { batchId: string; slideNumber: number | null; stage: string; errorType: string; errorMessage: string; providerRequestId: string | null }) => void,
-  signal?: AbortSignal,
 ) {
   const operation = `creative-references.create:${contentId}`
   const existing = await prisma.requestIdempotency.findUnique({ where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } } })
   if (existing) {
-    if (existing.responseStatus === 202) throw requestInProgress(existing.resourceId)
+    if (existing.responseStatus === 202) {
+      const batch = await readBatch(prisma, companyId, contentId, existing.resourceId)
+      return { status: 202, body: { data: { batch } } }
+    }
     return { status: existing.responseStatus, body: existing.responseBody as unknown as { data: { batch: CreativeReferenceBatchDto } } }
   }
 
@@ -163,21 +165,58 @@ export async function createCreativeReferenceBatch(
   } catch (error) {
     if (isUnique(error)) {
       const raced = await prisma.requestIdempotency.findUnique({ where: { companyId_operation_key: { companyId, operation, key: idempotencyKey } } })
-      if (raced?.responseStatus === 202) throw requestInProgress(raced.resourceId)
+      if (raced?.responseStatus === 202) {
+        const batch = await readBatch(prisma, companyId, contentId, raced.resourceId)
+        return { status: 202, body: { data: { batch } } }
+      }
     }
     throw error
   }
 
-  if (signal?.aborted) return completeCancelledBatch(prisma, companyId, contentId, batchId, plannerLogId, operation, idempotencyKey)
+  // Accept the request once the durable batch row exists. AI generation runs
+  // after the HTTP response so reverse proxies do not have to hold a request
+  // open for several image generations.
+  const initialBatch = await readBatch(prisma, companyId, contentId, batchId)
+  const processing = runCreativeReferenceBatch(prisma, config, provider, imageProvider, storage, companyId, actorId, contentId, input, idempotencyKey, operation, batchId, plannerLogId, content, settings, textModel, imageModel, size, expectedReferenceCount, snapshot, promptVersion, onImageFailure)
+  void processing.catch(async () => {
+    await prisma.creativeReferenceBatch.updateMany({ where: { id: batchId, status: 'processing' }, data: { status: 'failed', completedAt: new Date() } }).catch(() => undefined)
+  })
+  return { status: 202, body: { data: { batch: initialBatch } } }
+}
+
+async function runCreativeReferenceBatch(
+  prisma: PrismaClient,
+  config: AppConfig,
+  provider: AiProvider,
+  imageProvider: AiImageProvider,
+  storage: AssetStorage,
+  companyId: string,
+  actorId: string,
+  contentId: string,
+  input: CreativeReferenceInput,
+  idempotencyKey: string,
+  operation: string,
+  batchId: string,
+  plannerLogId: string,
+  content: any,
+  settings: any,
+  textModel: string,
+  imageModel: string,
+  size: '1024x1024' | '1024x1536' | '1536x1024',
+  expectedReferenceCount: number,
+  snapshot: Record<string, unknown>,
+  promptVersion: any,
+  onImageFailure?: (details: { batchId: string; slideNumber: number | null; stage: string; errorType: string; errorMessage: string; providerRequestId: string | null }) => void,
+) {
+  await prisma.creativeReferenceBatch.update({ where: { id: batchId }, data: { status: 'processing' } })
 
   let concepts: Concept[]
   const plannerStarted = Date.now()
   try {
-    const result = await provider.generate({ model: textModel, outputSchemaVersion: CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, systemPrompt: CONCEPT_SYSTEM_PROMPT, userPrompt: renderPlannerPrompt(snapshot), maxOutputTokens: input.format === 'carousel' ? config.topicDiscoveryMaxOutputTokens : config.aiMaxOutputTokens, timeoutMs: config.aiRequestTimeoutMs, signal })
+    const result = await provider.generate({ model: textModel, outputSchemaVersion: CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, systemPrompt: CONCEPT_SYSTEM_PROMPT, userPrompt: renderPlannerPrompt(snapshot), maxOutputTokens: input.format === 'carousel' ? config.topicDiscoveryMaxOutputTokens : config.aiMaxOutputTokens, timeoutMs: config.aiRequestTimeoutMs })
     concepts = parseCreativeReferenceConcepts(result.text, input)
     await prisma.aiRequestLog.update({ where: { id: plannerLogId }, data: { inputTokens: result.inputTokens ?? null, outputTokens: result.outputTokens ?? null, latencyMs: Date.now() - plannerStarted, status: 'success', providerRequestId: result.providerRequestId, completedAt: new Date() } })
   } catch (error) {
-    if (signal?.aborted) return completeCancelledBatch(prisma, companyId, contentId, batchId, plannerLogId, operation, idempotencyKey)
     const failure = mapProviderFailure(error)
     await markFailed(prisma, batchId, plannerLogId, failure, Date.now() - plannerStarted)
     await prisma.requestIdempotency.deleteMany({ where: { companyId, operation, key: idempotencyKey } })
@@ -186,12 +225,7 @@ export async function createCreativeReferenceBatch(
 
   const references: CreativeReferenceDto[] = []
   let lastImageFailure: AppError | null = null
-  let cancelled = false
   for (const [conceptIndex, concept] of concepts.entries()) {
-    if (signal?.aborted) {
-      cancelled = true
-      break
-    }
     const imageLogId = randomUUID()
     const imageSnapshot = { batchId, contentId, platform: input.platform, format: input.format, slideNumber: concept.slideNumber || null, slideCopy: concept.slideCopy, style: input.style, mood: input.mood, aspectRatio: input.aspectRatio, size, conceptIndex, conceptName: concept.conceptName, imagePrompt: concept.imagePrompt }
     await prisma.aiRequestLog.create({ data: aiLogData({ id: imageLogId, companyId, contentId, actorId, promptVersionId: promptVersion.id, operation: CREATIVE_REFERENCE_IMAGE_OPERATION, model: imageModel, mode: settings.mode, language: settings.generationLanguage, inputHash: requestHash(imageSnapshot), snapshot: imageSnapshot }) })
@@ -200,8 +234,7 @@ export async function createCreativeReferenceBatch(
       let generatedRequestId: string | null = null
     try {
       stage = 'request and validate image'
-      const { result, buffer: rawBuffer } = await generateValidImageWithRetry(imageProvider, { model: imageModel, prompt: buildImagePrompt(concept, content, input), quality: config.openaiImageQuality ?? 'medium', size, outputFormat: 'png', ...(input.generationMode === 'canva_ready' ? { background: 'transparent' as const } : {}), timeoutMs: config.aiRequestTimeoutMs, signal })
-      throwIfCancelled(signal)
+      const { result, buffer: rawBuffer } = await generateValidImageWithRetry(imageProvider, { model: imageModel, prompt: buildImagePrompt(concept, content, input), quality: config.openaiImageQuality ?? 'medium', size, outputFormat: 'png', ...(input.generationMode === 'canva_ready' ? { background: 'transparent' as const } : {}), timeoutMs: config.aiRequestTimeoutMs })
       generatedRequestId = result.providerRequestId
       if (input.generationMode === 'canva_ready' && !(await sharp(rawBuffer).metadata()).hasAlpha) throw new Error('The image model returned a PNG without an alpha channel for the transparent Canva-ready illustration.')
       stage = 'resize image'
@@ -212,13 +245,11 @@ export async function createCreativeReferenceBatch(
       const temp = await storage.writeTemp(Readable.from(buffer), config.assetMaxBytes)
       let storageKey: string | null = null
       try {
-        throwIfCancelled(signal)
         stage = 'inspect generated image'
         const inspected = await storage.inspectImage(temp.key)
         if (inspected.mimeType !== 'image/png') throw new Error('Generated reference is not PNG.')
         stage = 'promote generated image to storage'
         storageKey = await storage.promote(temp.key)
-        throwIfCancelled(signal)
         stage = 'save generated image metadata'
         const row = await prisma.creativeReference.create({ data: { id: randomUUID(), batchId, conceptIndex, conceptName: concept.conceptName, templateType: concept.templateType, slideNumber: concept.slideNumber || null, slideCopy: concept.slideCopy || null, rationale: concept.rationale, layoutNotes: concept.layoutNotes, visualFocus: concept.visualFocus, typographyDirection: concept.typographyDirection, canvaBrief: concept.canvaBrief, assetSearchKeywords: concept.assetSearchKeywords, carouselOutline: concept.carouselOutline, imagePrompt: concept.imagePrompt, storageKey, mimeType: inspected.mimeType, fileSize: BigInt(buffer.byteLength), width: inspected.width, height: inspected.height, imageAiRequestLogId: imageLogId } })
         references.push(mapReference(row, contentId, input.platform))
@@ -229,11 +260,6 @@ export async function createCreativeReferenceBatch(
         if (storageKey) await storage.delete(storageKey).catch(() => undefined)
       }
     } catch (error) {
-      if (signal?.aborted) {
-        cancelled = true
-        await prisma.aiRequestLog.update({ where: { id: imageLogId }, data: { latencyMs: Date.now() - started, status: 'cancelled', errorMessage: 'Generation cancelled by user.', providerRequestId: generatedRequestId, completedAt: new Date() } }).catch(() => undefined)
-        break
-      }
       const transparencyUnsupported = input.generationMode === 'canva_ready' && isTransparentBackgroundUnsupported(error)
       if (transparencyUnsupported) transparentBackgroundUnsupportedModels.add(imageModel)
       const failure = transparencyUnsupported ? canvaReadyUnsupported() : mapProviderFailure(error)
@@ -252,8 +278,6 @@ export async function createCreativeReferenceBatch(
     }
   }
 
-  if (cancelled || signal?.aborted) return completeCancelledBatch(prisma, companyId, contentId, batchId, plannerLogId, operation, idempotencyKey)
-
   const status = references.length === expectedReferenceCount ? 'completed' : references.length > 0 ? 'partial' : 'failed'
   const completedAt = new Date()
   await prisma.creativeReferenceBatch.update({ where: { id: batchId }, data: { status, completedAt } })
@@ -271,6 +295,25 @@ export async function listCreativeReferenceBatches(prisma: PrismaClient, company
   await assertContent(prisma, companyId, contentId)
   const rows = await prisma.creativeReferenceBatch.findMany({ where: { companyId, contentId }, include: { references: { orderBy: { conceptIndex: 'asc' } } }, orderBy: { createdAt: 'desc' } })
   return rows.map((row) => mapBatch(row, contentId))
+}
+
+export async function recoverInterruptedCreativeReferenceBatches(prisma: PrismaClient) {
+  const interrupted = await prisma.creativeReferenceBatch.findMany({
+    where: { status: { in: ['pending', 'processing'] } },
+    select: { id: true, conceptPlannerAiRequestLogId: true },
+  })
+  if (!interrupted.length) return
+  const completedAt = new Date()
+  await prisma.$transaction([
+    prisma.creativeReferenceBatch.updateMany({
+      where: { id: { in: interrupted.map((batch) => batch.id) }, status: { in: ['pending', 'processing'] } },
+      data: { status: 'failed', completedAt },
+    }),
+    prisma.aiRequestLog.updateMany({
+      where: { id: { in: interrupted.flatMap((batch) => batch.conceptPlannerAiRequestLogId ? [batch.conceptPlannerAiRequestLogId] : []) }, status: 'pending' },
+      data: { status: 'failed', errorCode: 'WORKER_INTERRUPTED', errorMessage: 'Generation was interrupted by an application restart.', completedAt },
+    }),
+  ])
 }
 
 export async function selectCreativeReference(prisma: PrismaClient, companyId: string, contentId: string, referenceId: string) {
@@ -427,17 +470,6 @@ function aiLogData(input: { id: string; companyId: string; contentId: string; ac
 async function markFailed(prisma: PrismaClient, batchId: string, logId: string, failure: AppError, latencyMs: number) {
   await prisma.aiRequestLog.update({ where: { id: logId }, data: { latencyMs, status: 'failed', errorCode: failure.code, errorMessage: failure.message, completedAt: new Date() } }).catch(() => undefined)
   await prisma.creativeReferenceBatch.update({ where: { id: batchId }, data: { status: 'failed', completedAt: new Date() } }).catch(() => undefined)
-}
-
-async function completeCancelledBatch(prisma: PrismaClient, companyId: string, contentId: string, batchId: string, plannerLogId: string, operation: string, idempotencyKey: string) {
-  const completedAt = new Date()
-  await Promise.all([
-    prisma.aiRequestLog.updateMany({ where: { id: plannerLogId, status: 'pending' }, data: { status: 'cancelled', errorMessage: 'Generation cancelled by user.', completedAt } }),
-    prisma.creativeReferenceBatch.update({ where: { id: batchId }, data: { status: 'cancelled', completedAt } }),
-    prisma.requestIdempotency.deleteMany({ where: { companyId, operation, key: idempotencyKey } }),
-  ])
-  const batch = await readBatch(prisma, companyId, contentId, batchId)
-  return { status: 201, body: { data: { batch } } }
 }
 
 function decodeImage(base64: string) {

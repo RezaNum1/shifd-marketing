@@ -73,9 +73,9 @@ Codes map once from existing frontend options: educational, problem, product, us
 
 ## 9. content_ideas — pre-content backlog
 
-**PK:** `id`. `company_id uuid! FK companies`, `title text!`, `context_type text!` (company/product), `product_id uuid?`, `pillar_code text! FK content_pillars`, `objective text!`, `target_audience text?`, `notes text?`, `status text!` (ready/used/archived), `created_by uuid! FK users`, standard timestamps/version.
+**PK:** `id`. `company_id uuid! FK companies`, `title text!`, `context_type text!` (company/product/general), `product_id uuid?`, `pillar_code text! FK content_pillars`, `objective text!`, `target_audience text?`, `notes text?`, `status text!` (ready/used/archived), `created_by uuid! FK users`, standard timestamps/version.
 
-**Constraints/indexes:** product context iff product_id nonnull; composite FK(company_id,product_id)→products(company_id,id); unique(company_id,id); index(company_id,status,updated_at,id). Search via bounded case-insensitive text filters initially, no search service. **Deletion:** archive only. Related content is queried through contents.source_idea_id, no circular related_content_id copy. Restore→Ready matches frontend even if historical related content exists.
+**Constraints/indexes:** product context iff product_id nonnull; General and Company contexts require product_id null. Composite FK(company_id,product_id)→products(company_id,id); unique(company_id,id); index(company_id,status,updated_at,id). Search via bounded case-insensitive text filters initially, no search service. **Deletion:** archive only. Related content is queried through contents.source_idea_id, no circular related_content_id copy. Restore→Ready matches frontend even if historical related content exists.
 
 ## 10. contents — canonical saved campaign
 
@@ -83,7 +83,7 @@ Codes map once from existing frontend options: educational, problem, product, us
 
 Master JSON: title/coreMessage/hook/body/cta (required strings when present). Direction JSON: format/concept/structure:string[]/notes. These one-to-one documents do not warrant independent tables; validate their exact shape in application schemas. No master fixture label/id, rendered HTML, compatibility schedule/publication fields or browser workflow step.
 
-**Constraints/indexes:** positive editorial_revision; allowed stages draft/generated/adapted/creative_in_progress/ready_for_review/needs_revision; context/product CHECK plus composite product/company FK; composite company/sourceIdea FK→content_ideas(company_id,id). Index(company_id,archived_at,updated_at,id), source_idea_id index. current_approval_id FK→approval_actions; enforce same content/action=approve via transaction (composite content/id FK supported by approval table). Insert content with null pointer, then approval action, then pointer; no insert cycle.
+**Constraints/indexes:** positive editorial_revision; allowed stages draft/generated/adapted/creative_in_progress/ready_for_review/needs_revision; product context iff product_id nonnull, while Company and General contexts require product_id null; composite product/company FK; composite company/sourceIdea FK→content_ideas(company_id,id). Index(company_id,archived_at,updated_at,id), source_idea_id index. current_approval_id FK→approval_actions; enforce same content/action=approve via transaction (composite content/id FK supported by approval table). Insert content with null pointer, then approval action, then pointer; no insert cycle.
 
 **Derived:** title from master or brief topic; campaign status from archive/publications/schedules/current approval/stage. **Deletion:** archive; all business evidence retained. Aggregate `version` changes on any command; editorial_revision only on reviewed input changes. This avoids invalidating approval merely because publication was recorded. master_revision increments only when master content changes; variant adaptation freshness compares this dedicated counter, so a later adaptation of the other platform does not invalidate the first.
 

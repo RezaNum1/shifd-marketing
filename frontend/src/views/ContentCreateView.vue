@@ -497,6 +497,18 @@ async function loadCreativeReferences() {
     else creativeReferenceGenerationMode.value = "original_design";
     const selected = result.data.batches.flatMap((batch) => batch.references).find((reference) => reference.selected);
     selectedCreativeReferenceId.value = selected?.id ?? null;
+    const pending = result.data.batches.find((batch) => ['pending', 'processing'].includes(batch.status));
+    if (pending && !creativeReferenceLoading.value) {
+      const controller = new AbortController();
+      creativeReferenceAbortController.value = controller;
+      creativeReferenceLoading.value = true;
+      void monitorCreativeReferenceBatch(workflow.contentId, pending.id, controller.signal).catch((error) => {
+        creativeReferenceError.value = errorMessage(error, "Unable to refresh visual reference progress.");
+      }).finally(() => {
+        if (creativeReferenceAbortController.value === controller) creativeReferenceAbortController.value = null;
+        creativeReferenceLoading.value = false;
+      });
+    }
   } catch (error) {
     creativeReferenceError.value = errorMessage(error, "Unable to load visual references.");
   }
@@ -550,16 +562,24 @@ async function generateCreativeReferences() {
       mood: creativeReferenceMood.value,
       aspectRatio: creativeReferenceAspectRatio.value,
       additionalInstruction: creativeReferenceInstruction.value.trim() || null,
-    }, createRequestKey("creative-references.create"), controller.signal);
+    }, createRequestKey("creative-references.create"));
     creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
     applyCreativeReferenceBatchSettings(result.data.batch);
     selectedCreativeReferenceId.value = result.data.batch.references.find((reference) => reference.selected)?.id ?? selectedCreativeReferenceId.value;
-    const expected = result.data.batch.expectedReferenceCount;
-    ui.notify(result.data.batch.status === "partial" ? `${result.data.batch.references.length} of ${expected} visual references were generated.` : result.data.batch.generationMode === "canva_ready" ? "Canva-ready illustration assets are ready." : result.data.batch.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", result.data.batch.status === "partial" ? "warning" : "success");
+    const finished = await monitorCreativeReferenceBatch(workflow.contentId, result.data.batch.id, controller.signal);
+    if (!finished) {
+      if (controller.signal.aborted) ui.notify("Stopped monitoring. Generation continues in the background; reopen this page to check its status.", "info");
+      return;
+    }
+    const expected = finished.expectedReferenceCount;
+    if (finished.status === "failed") {
+      creativeReferenceError.value = "Generation failed. Retry the batch; completed slides remain saved.";
+      return;
+    }
+    ui.notify(finished.status === "partial" ? `${finished.references.length} of ${expected} visual references were generated.` : finished.generationMode === "canva_ready" ? "Canva-ready illustration assets are ready." : finished.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", finished.status === "partial" ? "warning" : "success");
   } catch (error) {
     if (controller.signal.aborted) {
-      await loadCreativeReferences();
-      ui.notify("Generation cancelled. Slides already completed have been kept.", "info");
+      ui.notify("Stopped monitoring. Generation continues in the background; reopen this page to check its status.", "info");
       return;
     }
     if (isApiError(error) && error.code === "CANVA_READY_UNSUPPORTED") {
@@ -575,6 +595,24 @@ async function generateCreativeReferences() {
 
 function cancelCreativeReferenceGeneration() {
   creativeReferenceAbortController.value?.abort();
+}
+
+async function monitorCreativeReferenceBatch(contentId: string, batchId: string, signal: AbortSignal) {
+  const terminalStatuses = new Set(["completed", "partial", "failed", "cancelled"]);
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (!signal.aborted && Date.now() < deadline) {
+    const current = creativeReferenceBatches.value.find((batch) => batch.id === batchId);
+    if (current && terminalStatuses.has(current.status)) return current;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
+    if (signal.aborted) return null;
+    const result = await creativeReferenceApi.listCreativeReferences(contentId);
+    creativeReferenceBatches.value = result.data.batches;
+    canvaReadyUnavailable.value = !result.data.canvaReadyAvailable;
+    const updated = result.data.batches.find((batch) => batch.id === batchId);
+    if (updated && terminalStatuses.has(updated.status)) return updated;
+  }
+  if (!signal.aborted) creativeReferenceError.value = "Generation is still running. You can leave this page and check again later.";
+  return null;
 }
 
 async function selectCreativeReference(reference: BackendCreativeReference) {
@@ -1202,20 +1240,20 @@ onMounted(() => {
           <div class="creative-reference-generation-copy">
             <strong>{{ creativeReferenceFormat === 'carousel' ? `Building your ${creativeReferenceSlideCount}-slide storyboard` : 'Creating three visual directions' }}</strong>
             <span>Generating the images and keeping each carousel slide in sequence.</span>
-            <small><AppIcon name="alert" :size="14" /> Keep this page open while it runs. Cancel stops the active request and skips remaining slides.</small>
-            <BaseButton class="creative-reference-cancel-button" variant="secondary" size="compact" :disabled="!creativeReferenceLoading" @click="cancelCreativeReferenceGeneration">Cancel generation</BaseButton>
+            <small><AppIcon name="alert" :size="14" /> Generation continues in the background. You can leave this page and check its progress when you return.</small>
+            <BaseButton class="creative-reference-cancel-button" variant="secondary" size="compact" :disabled="!creativeReferenceLoading" @click="cancelCreativeReferenceGeneration">Stop monitoring</BaseButton>
           </div>
         </section>
         <InlineAlert v-if="creativeReferenceError" title="Visual reference" tone="warning">{{ creativeReferenceError }}</InlineAlert>
         <div v-if="latestCreativeReferenceBatch" class="creative-reference-results">
           <div class="creative-reference-batch-meta">
             <div class="creative-reference-batch-summary">
-            <span>{{ latestCreativeReferenceBatch.status === "cancelled" ? "Generation cancelled" : latestCreativeReferenceBatch.status === "partial" ? (latestCreativeReferenceBatch.creativeFormat === 'carousel' ? "Incomplete storyboard" : "Partial batch") : "Latest reference batch" }}</span>
+            <span>{{ ['pending', 'processing'].includes(latestCreativeReferenceBatch.status) ? "Generating visual references" : latestCreativeReferenceBatch.status === "cancelled" ? "Generation cancelled" : latestCreativeReferenceBatch.status === "failed" ? "Generation failed" : latestCreativeReferenceBatch.status === "partial" ? (latestCreativeReferenceBatch.creativeFormat === 'carousel' ? "Incomplete storyboard" : "Partial batch") : "Latest reference batch" }}</span>
               <small v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel'">{{ latestCreativeReferenceBatch.references.length }} of {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides generated<span v-if="missingCreativeSlideNumbers.length"> · Slide{{ missingCreativeSlideNumbers.length === 1 ? '' : 's' }} {{ missingCreativeSlideNumbers.join(', ') }} missing</span> · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
               <small v-else>{{ latestCreativeReferenceBatch.references.length }} of 3 options · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
             </div>
             <div class="creative-reference-batch-actions">
-              <BaseButton v-if="['partial', 'cancelled'].includes(latestCreativeReferenceBatch.status) && latestCreativeReferenceBatch.creativeFormat === 'carousel'" variant="ghost" size="compact" :disabled="creativeReferenceLoading" @click="retryCreativeReferenceBatch">Retry all {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides</BaseButton>
+              <BaseButton v-if="['partial', 'cancelled', 'failed'].includes(latestCreativeReferenceBatch.status) && latestCreativeReferenceBatch.creativeFormat === 'carousel'" variant="ghost" size="compact" :disabled="creativeReferenceLoading" @click="retryCreativeReferenceBatch">Retry all {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides</BaseButton>
               <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel' && latestCreativeReferenceBatch.references.length" size="compact" :disabled="storyboardSelected || creativeReferenceLoading" @click="selectCreativeReference(latestCreativeReferenceBatch.references[0])">{{ storyboardSelected ? `Storyboard selected · ${latestCreativeReferenceBatch.references.length}/${latestCreativeReferenceBatch.expectedReferenceCount}` : `Select storyboard · ${latestCreativeReferenceBatch.references.length}/${latestCreativeReferenceBatch.expectedReferenceCount} slides` }}</BaseButton>
             </div>
           </div>

@@ -16,8 +16,8 @@ export function listCreativeReferences(contentId: string) {
   return request<{ batches: BackendCreativeReferenceBatch[]; canvaReadyAvailable: boolean }>(`/contents/${contentId}/creative-references`)
 }
 
-export function createCreativeReferences(contentId: string, input: CreativeReferenceInput, idempotencyKey = createRequestKey('creative-references.create'), signal?: AbortSignal) {
-  return request<{ batch: BackendCreativeReferenceBatch }>(`/contents/${contentId}/creative-references`, { method: 'POST', json: input, idempotencyKey, signal })
+export function createCreativeReferences(contentId: string, input: CreativeReferenceInput, idempotencyKey = createRequestKey('creative-references.create')) {
+  return request<{ batch: BackendCreativeReferenceBatch }>(`/contents/${contentId}/creative-references`, { method: 'POST', json: input, idempotencyKey })
 }
 
 export function selectCreativeReference(contentId: string, referenceId: string) {

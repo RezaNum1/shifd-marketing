@@ -224,7 +224,7 @@ export interface BackendCreativeReferenceBatch {
   generationMode: CreativeReferenceGenerationMode
   expectedReferenceCount: number
   additionalInstruction: string | null
-  status: 'pending' | 'completed' | 'partial' | 'failed' | 'cancelled'
+  status: 'pending' | 'processing' | 'completed' | 'partial' | 'failed' | 'cancelled'
   createdAt: string
   completedAt: string | null
   references: BackendCreativeReference[]

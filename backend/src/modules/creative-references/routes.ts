@@ -5,32 +5,19 @@ import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import { allowedKeys, enumValue, object, optionalText } from '../context/normalize.js'
 import type { AiImageProvider, AiProvider } from '../ai/provider.js'
 import type { AssetStorage } from '../assets/storage.js'
-import { createCreativeReferenceBatch, CREATIVE_REFERENCE_ASPECT_RATIOS, CREATIVE_REFERENCE_FORMATS, CREATIVE_REFERENCE_GENERATION_MODES, CREATIVE_REFERENCE_MOODS, CREATIVE_REFERENCE_PLATFORMS, CREATIVE_REFERENCE_SLIDE_COUNT_RANGE, CREATIVE_REFERENCE_STYLES, isCanvaReadyAvailableForImageModel, listCreativeReferenceBatches, openCreativeReference, selectCreativeReference, type CreativeReferenceInput } from './service.js'
+import { createCreativeReferenceBatch, CREATIVE_REFERENCE_ASPECT_RATIOS, CREATIVE_REFERENCE_FORMATS, CREATIVE_REFERENCE_GENERATION_MODES, CREATIVE_REFERENCE_MOODS, CREATIVE_REFERENCE_PLATFORMS, CREATIVE_REFERENCE_SLIDE_COUNT_RANGE, CREATIVE_REFERENCE_STYLES, isCanvaReadyAvailableForImageModel, listCreativeReferenceBatches, openCreativeReference, recoverInterruptedCreativeReferenceBatches, selectCreativeReference, type CreativeReferenceInput } from './service.js'
 
 export async function creativeReferenceRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider; imageProvider: AiImageProvider; storage: AssetStorage }) {
+  app.addHook('onReady', async () => {
+    await recoverInterruptedCreativeReferenceBatches(app.prisma)
+  })
+
   app.post('/contents/:id/creative-references', async (request, reply) => {
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
     await requireCsrf(request)
     const body = parseInput(request.body)
-    const cancellation = new AbortController()
-    const abortOnRequest = () => cancellation.abort()
-    const abortOnResponseClose = () => {
-      if (!reply.raw.writableEnded) cancellation.abort()
-    }
-    request.raw.once('aborted', abortOnRequest)
-    reply.raw.once('close', abortOnResponseClose)
-    let result
-    try {
-      result = await createCreativeReferenceBatch(app.prisma, options.config, options.aiProvider, options.imageProvider, options.storage, auth.user.companyId, auth.user.id, routeId(request), body, idempotencyKey(request), (details) => request.log.warn(details, 'Creative reference slide generation failed'), cancellation.signal)
-    } catch (error) {
-      if (cancellation.signal.aborted) return
-      throw error
-    } finally {
-      request.raw.removeListener('aborted', abortOnRequest)
-      reply.raw.removeListener('close', abortOnResponseClose)
-    }
-    if (cancellation.signal.aborted || reply.raw.destroyed) return
+    const result = await createCreativeReferenceBatch(app.prisma, options.config, options.aiProvider, options.imageProvider, options.storage, auth.user.companyId, auth.user.id, routeId(request), body, idempotencyKey(request), (details) => request.log.warn(details, 'Creative reference slide generation failed'))
     return reply.status(result.status).send(result.body)
   })
 
