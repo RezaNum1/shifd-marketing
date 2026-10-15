@@ -7,6 +7,8 @@ export type NavigationKey =
   | 'content'
   | 'calendar'
   | 'performance'
+  | 'performance-evaluation'
+  | 'performance-linkedin'
   | 'company'
   | 'products'
   | 'integrations'
