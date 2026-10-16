@@ -166,8 +166,14 @@ function parseStructure(value: unknown) {
 }
 
 function requiredField(value: unknown, maxLength: number): string {
-  if (typeof value !== 'string' || !value.trim() || value.length > maxLength) throw aiOutputInvalid('The AI output contains blank or oversized fields.')
-  return value
+  if (typeof value !== 'string') throw aiOutputInvalid('The AI output contains blank or oversized fields.')
+  const normalized = normalizeAiText(value)
+  if (!normalized || normalized.length > maxLength) throw aiOutputInvalid('The AI output contains blank or oversized fields.')
+  return normalized
+}
+
+export function normalizeAiText(value: string) {
+  return value.replace(/\s*—\s*/g, ' - ').trim()
 }
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]) {

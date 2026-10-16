@@ -33,8 +33,9 @@ import BrandAssessmentCard from "../components/content/BrandAssessmentCard.vue";
 import VisualDirectionCard from "../components/content/VisualDirectionCard.vue";
 import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
 import * as creativeReferenceApi from "../api/creativeReferences";
+import * as schedulingApi from "../api/scheduling";
 import { createRequestKey, errorMessage, isApiError } from "../api/client";
-import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
+import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFact, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
 
 const ui = useUiStore();
 const router = useRouter();
@@ -79,6 +80,9 @@ const overrideJustification = ref("");
 const overrideError = ref("");
 const isScheduled = toRef(workflow, "isScheduled");
 const scheduleValidation = ref("");
+const publicationTimeRecommendations = ref<schedulingApi.PublicationTimeRecommendation[]>([]);
+const publicationRecommendationsLoading = ref(false);
+const publicationRecommendationsError = ref("");
 const creativeReferenceBatches = ref<BackendCreativeReferenceBatch[]>([]);
 const creativeReferencePlatform = ref<CreativeReferencePlatform>("instagram");
 const creativeReferenceFormat = ref<CreativeReferenceFormat>("single_image");
@@ -88,6 +92,11 @@ const creativeReferenceStyle = ref<CreativeReferenceStyle>("modern_minimal");
 const creativeReferenceMood = ref<CreativeReferenceMood>("professional");
 const creativeReferenceAspectRatio = ref<CreativeReferenceAspectRatio>("portrait_4_5");
 const creativeReferenceInstruction = ref("");
+const creativeReferenceFacts = ref<CreativeReferenceFact[]>([]);
+const creativeReferenceFactConcern = ref("");
+const selectedCreativeReferenceFactIds = ref<string[]>([]);
+const creativeReferenceFactsLoading = ref(false);
+const creativeReferenceFactsError = ref("");
 const creativeReferenceLoading = ref(false);
 const creativeReferenceError = ref("");
 const creativeReferenceAbortController = ref<AbortController | null>(null);
@@ -122,6 +131,10 @@ function syncLoadingLock(loading: boolean) {
 }
 
 watch(contentBusy, syncLoadingLock);
+watch(() => workflow.contentId, () => {
+  publicationTimeRecommendations.value = [];
+  publicationRecommendationsError.value = "";
+});
 
 onBeforeUnmount(() => {
   creativeReferenceAbortController.value?.abort();
@@ -532,6 +545,22 @@ async function retryCreativeReferenceBatch() {
   await generateCreativeReferences();
 }
 
+async function researchCreativeReferenceFacts() {
+  if (creativeReferenceFactsLoading.value || !workflow.contentId) return;
+  creativeReferenceFactsLoading.value = true;
+  creativeReferenceFactsError.value = "";
+  try {
+    const result = await creativeReferenceApi.discoverCreativeReferenceFacts(workflow.contentId, creativeReferenceFactConcern.value.trim());
+    creativeReferenceFacts.value = result.data.facts;
+    selectedCreativeReferenceFactIds.value = [];
+    if (!result.data.facts.length) creativeReferenceFactsError.value = "No source-backed unique facts were found for this topic. Try refining the content topic.";
+  } catch (error) {
+    creativeReferenceFactsError.value = errorMessage(error, "Unable to research facts for this topic.");
+  } finally {
+    creativeReferenceFactsLoading.value = false;
+  }
+}
+
 function updateCanvaDesignLink(link: NonNullable<typeof workflow.canonical>['canvaDesignLink'] | null) {
   if (!workflow.canonical) return;
   workflow.canonical = { ...workflow.canonical, canvaDesignLink: link };
@@ -539,8 +568,8 @@ function updateCanvaDesignLink(link: NonNullable<typeof workflow.canonical>['can
 
 async function generateCreativeReferences() {
   if (creativeReferenceLoading.value || !workflow.contentId || isApproved.value) return;
-  if (creativeReferenceInstruction.value.trim().length > 500) {
-    creativeReferenceError.value = "Additional visual instruction must be 500 characters or fewer.";
+  if (creativeReferenceInstruction.value.trim().length > 1500) {
+    creativeReferenceError.value = "Custom visual direction must be 1,500 characters or fewer.";
     return;
   }
   const generationPlatform = creativeReferencePlatform.value;
@@ -562,6 +591,7 @@ async function generateCreativeReferences() {
       mood: creativeReferenceMood.value,
       aspectRatio: creativeReferenceAspectRatio.value,
       additionalInstruction: creativeReferenceInstruction.value.trim() || null,
+      selectedFacts: creativeReferenceFacts.value.filter((fact) => selectedCreativeReferenceFactIds.value.includes(fact.id)),
     }, createRequestKey("creative-references.create"));
     creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
     applyCreativeReferenceBatchSettings(result.data.batch);
@@ -866,6 +896,30 @@ function formatScheduleDate(date: string, time: string) {
     timeStyle: "short",
     timeZone: ARTIFACT_TIMEZONE,
   }).format(scheduleDateTime({ date, time }));
+}
+
+async function getPublicationTimeRecommendations() {
+  if (publicationRecommendationsLoading.value || !workflow.contentId || !enabledReviewPlatforms.value.length) return;
+  publicationRecommendationsLoading.value = true;
+  publicationRecommendationsError.value = "";
+  try {
+    const result = await schedulingApi.recommendPublicationTimes(workflow.contentId, enabledReviewPlatforms.value);
+    publicationTimeRecommendations.value = result.data.recommendations;
+  } catch (error) {
+    publicationRecommendationsError.value = errorMessage(error, "Unable to research publication times.");
+  } finally {
+    publicationRecommendationsLoading.value = false;
+  }
+}
+
+function applyPublicationTimeRecommendation(recommendation: schedulingApi.PublicationTimeRecommendation) {
+  if (useSameSchedule.value) {
+    updatePrimaryScheduleDate(recommendation.date);
+    updatePrimaryScheduleTime(recommendation.time);
+    return;
+  }
+  updateScheduleDate(recommendation.platform, recommendation.date);
+  updateScheduleTime(recommendation.platform, recommendation.time);
 }
 
 async function scheduleContent() {
@@ -1218,8 +1272,33 @@ onMounted(() => {
           <BaseSelect v-model="creativeReferenceStyle" label="Style" :options="creativeReferenceStyleOptions" />
           <BaseSelect v-model="creativeReferenceMood" label="Mood" :options="creativeReferenceMoodOptions" />
           <BaseSelect v-model="creativeReferenceAspectRatio" label="Image ratio" :options="creativeReferenceAspectRatioOptions" />
-          <BaseTextarea v-model="creativeReferenceInstruction" label="Additional visual instruction (optional)" :rows="2" maxlength="500" placeholder="Keep the visual hierarchy calm and suitable for a B2B audience." :number="1" />
+          <BaseTextarea v-model="creativeReferenceInstruction" label="Custom design concerns and visual direction (optional)" hint="Add any specific visual concerns, elements to include or avoid, layout preferences, or brand details." :rows="5" maxlength="1500" placeholder="Example: Use a clean white background, vary the visual metaphor across slides, keep numbering consistent, and reserve space for the Shifd Labs logo on the final slide." />
         </div>
+        <section class="creative-reference-facts" aria-labelledby="creative-reference-facts-title">
+          <div class="creative-reference-facts-heading">
+            <div>
+              <h3 id="creative-reference-facts-title">Unique facts for this content</h3>
+              <p>Research source-backed facts related to “{{ brief.topic || 'your content topic' }}”. Add a concern to guide the search, then select facts for the visual concepts. If none are selected, they will not be used.</p>
+            </div>
+            <BaseButton variant="secondary" size="compact" :loading="creativeReferenceFactsLoading" :disabled="creativeReferenceFactsLoading || !workflow.contentId || !brief.topic.trim() || isApproved" @click="researchCreativeReferenceFacts">
+              <AppIcon name="search" :size="15" />{{ creativeReferenceFacts.length ? 'Research again' : 'Find unique facts' }}
+            </BaseButton>
+          </div>
+          <BaseTextarea v-model="creativeReferenceFactConcern" label="Research concern (optional)" hint="Tell AI which angle, question, audience concern, or kind of evidence to prioritize alongside the content context." :rows="2" maxlength="1500" placeholder="Example: Find recent evidence about how context affects AI answer quality, especially for small business teams." :disabled="creativeReferenceFactsLoading || isApproved" />
+          <InlineAlert v-if="creativeReferenceFactsError" tone="warning">{{ creativeReferenceFactsError }}</InlineAlert>
+          <div v-if="creativeReferenceFactsLoading" class="creative-reference-facts-empty" role="status">Searching reliable sources and checking facts…</div>
+          <div v-else-if="creativeReferenceFacts.length" class="creative-reference-facts-list">
+            <label v-for="fact in creativeReferenceFacts" :key="fact.id" class="creative-reference-fact" :class="{ 'is-selected': selectedCreativeReferenceFactIds.includes(fact.id) }">
+              <input v-model="selectedCreativeReferenceFactIds" type="checkbox" :value="fact.id" :disabled="isApproved" />
+              <span class="creative-reference-fact-copy">
+                <strong>{{ fact.title }}</strong>
+                <span>{{ fact.fact }}</span>
+                <span class="creative-reference-fact-sources">Sources: <a v-for="(source, index) in fact.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}<span v-if="index < fact.sources.length - 1"> · </span></a></span>
+              </span>
+            </label>
+          </div>
+          <div v-else class="creative-reference-facts-empty">Fact research is optional. Find facts to explore source-backed details, then select only the ones you want included.</div>
+        </section>
         <div class="creative-reference-actions">
           <div>
             <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
@@ -1245,7 +1324,7 @@ onMounted(() => {
           </div>
         </section>
         <InlineAlert v-if="creativeReferenceError" title="Visual reference" tone="warning">{{ creativeReferenceError }}</InlineAlert>
-        <div v-if="latestCreativeReferenceBatch" class="creative-reference-results">
+        <div v-if="latestCreativeReferenceBatch && !creativeReferenceLoading && !['pending', 'processing'].includes(latestCreativeReferenceBatch.status)" class="creative-reference-results">
           <div class="creative-reference-batch-meta">
             <div class="creative-reference-batch-summary">
             <span>{{ ['pending', 'processing'].includes(latestCreativeReferenceBatch.status) ? "Generating visual references" : latestCreativeReferenceBatch.status === "cancelled" ? "Generation cancelled" : latestCreativeReferenceBatch.status === "failed" ? "Generation failed" : latestCreativeReferenceBatch.status === "partial" ? (latestCreativeReferenceBatch.creativeFormat === 'carousel' ? "Incomplete storyboard" : "Partial batch") : "Latest reference batch" }}</span>
@@ -1531,6 +1610,30 @@ onMounted(() => {
 
         <BaseCard title="Publication Schedule" description="Choose when each approved platform variant should be ready for manual publication.">
           <template #actions><BaseCheckbox v-model="useSameSchedule" label="Use same schedule for all platforms" @update:model-value="syncScheduleMode" /></template>
+          <section class="publication-recommendations" aria-labelledby="publication-recommendations-title">
+            <div class="publication-recommendations-heading">
+              <div>
+                <h3 id="publication-recommendations-title">AI posting time recommendations</h3>
+                <p>Research suggested dates and times for each enabled platform, based on your content and current public research.</p>
+              </div>
+              <BaseButton variant="secondary" size="compact" :loading="publicationRecommendationsLoading" :disabled="publicationRecommendationsLoading || !workflow.contentId || !schedulePlatformCount" @click="getPublicationTimeRecommendations">
+                <AppIcon name="sparkles" :size="15" />{{ publicationTimeRecommendations.length ? 'Research again' : 'Get recommendations' }}
+              </BaseButton>
+            </div>
+            <InlineAlert v-if="publicationRecommendationsError" tone="warning">{{ publicationRecommendationsError }}</InlineAlert>
+            <div v-if="publicationRecommendationsLoading" class="publication-recommendations-empty" role="status">Checking recent platform guidance and research…</div>
+            <div v-else-if="publicationTimeRecommendations.length" class="publication-recommendation-list">
+              <article v-for="recommendation in publicationTimeRecommendations" :key="recommendation.platform" class="publication-recommendation">
+                <div class="publication-recommendation-title">
+                  <div><strong>{{ recommendation.platform === 'instagram' ? 'Instagram' : 'LinkedIn' }}</strong><span>{{ formatScheduleDate(recommendation.date, recommendation.time) }} · {{ recommendation.timezone }}</span></div>
+                  <BaseButton size="compact" @click="applyPublicationTimeRecommendation(recommendation)">{{ useSameSchedule ? 'Use for all platforms' : 'Use this time' }}</BaseButton>
+                </div>
+                <p>{{ recommendation.rationale }}</p>
+                <div class="publication-recommendation-sources">Sources: <a v-for="(source, index) in recommendation.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}<span v-if="index < recommendation.sources.length - 1"> · </span></a></div>
+              </article>
+            </div>
+            <p v-else class="publication-recommendations-note">Recommendations use public research and your content context, not private account analytics. Treat the suggested time as a starting point and compare results with your own audience insights.</p>
+          </section>
           <div class="schedule-platform-grid">
             <template v-for="row in schedulePlatformRows" :key="row.id">
               <section v-if="enabledPlatforms[row.id]" class="schedule-platform-card">

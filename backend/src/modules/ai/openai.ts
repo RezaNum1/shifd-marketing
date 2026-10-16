@@ -1,7 +1,7 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
-import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION } from './constants.js'
+import { CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION, CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION } from './constants.js'
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
@@ -22,6 +22,35 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
           }, required: ['claim', 'sources'] } },
         }, required: ['title', 'angle', 'hook', 'targetAudience', 'talkingPoints', 'industryRelevance', 'capability', 'format', 'platform', 'softCta', 'evidence'],
       } } }, required: ['ideas'],
+    },
+  },
+  [CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION]: {
+    name: 'm2_creative_reference_facts_v1',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: { facts: { type: 'array', maxItems: 6, items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          title: { type: 'string' }, fact: { type: 'string' },
+          sources: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] } },
+        }, required: ['title', 'fact', 'sources'],
+      } } }, required: ['facts'],
+    },
+  },
+  [PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION]: {
+    name: 'm2_publication_time_recommendation_v1',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: { recommendations: { type: 'array', minItems: 1, maxItems: 2, items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          platform: { type: 'string', enum: ['instagram', 'linkedin'] },
+          date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          time: { type: 'string', pattern: '^(?:[01]\\d|2[0-3]):[0-5]\\d$' },
+          rationale: { type: 'string' },
+          sources: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] } },
+        }, required: ['platform', 'date', 'time', 'rationale', 'sources'],
+      } } }, required: ['recommendations'],
     },
   },
   [OUTPUT_SCHEMA_VERSION]: {
@@ -362,6 +391,14 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
       const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
       throw new AiProviderFailure('provider', 'The OpenAI provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : null)
     }
+  }
+
+  async discoverCreativeReferenceFacts(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult> {
+    return this.runWebSearch(request, CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION, 'creative reference facts')
+  }
+
+  async recommendPublicationTimes(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult> {
+    return this.runWebSearch(request, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION, 'publication time recommendations')
   }
 
   async researchProspect(request: ProspectResearchProviderRequest): Promise<ProspectResearchProviderResult> {

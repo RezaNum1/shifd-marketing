@@ -188,6 +188,13 @@ export type CreativeReferenceAspectRatio = 'portrait_4_5' | 'square_1_1' | 'land
 export type CreativeReferenceFormat = 'single_image' | 'carousel'
 export type CreativeReferenceGenerationMode = 'original_design' | 'canva_ready'
 
+export interface CreativeReferenceFact {
+  id: string
+  title: string
+  fact: string
+  sources: Array<{ title: string; url: string }>
+}
+
 export interface BackendCreativeReference {
   id: string
   conceptIndex: number

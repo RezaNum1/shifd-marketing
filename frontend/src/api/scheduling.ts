@@ -12,6 +12,17 @@ function apiTimestamp(value: string) {
 }
 
 export interface PlanningTarget { targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null }
+export interface PublicationTimeRecommendation {
+  platform: BackendPlatform
+  date: string
+  time: string
+  timezone: 'Asia/Jakarta'
+  rationale: string
+  sources: Array<{ title: string; url: string }>
+}
+export function recommendPublicationTimes(contentId: string, platforms: BackendPlatform[]) {
+  return request<{ recommendations: PublicationTimeRecommendation[]; researchedAt: string }>(`/contents/${contentId}/publication-time-recommendations`, { method: 'POST', json: { platforms } })
+}
 export function createSchedules(contentId: string, schedules: Array<{ platform: BackendPlatform; scheduledAt: string; timezone: string }>, etag: string | number, idempotencyKey = createRequestKey('schedule.create'), target: PlanningTarget = {}) {
   return request<BackendContent>(`/contents/${contentId}/schedules`, { method: 'POST', json: { schedules, ...target }, ifMatch: etag, idempotencyKey })
 }

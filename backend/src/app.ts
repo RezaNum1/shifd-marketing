@@ -82,12 +82,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(prospectResearchRoutes, { config: options.config, provider: prospectResearchProvider, prefix: '/api' })
   await app.register(prospectOutreachRoutes, { config: options.config, provider: aiProvider, prefix: '/api' })
   await app.register(prospectActivityRoutes, { config: options.config, prefix: '/api' })
-  await app.register(schedulingRoutes, { config: options.config, clock, prefix: '/api' })
+  await app.register(schedulingRoutes, { config: options.config, clock, provider: discoveryProvider, prefix: '/api' })
   await app.register(performanceRoutes, { config: options.config, clock, instagramProvider, prefix: '/api' })
   await app.register(telegramRoutes, { config: options.config, aiProvider, prefix: '/api' })
   await app.register(aiRoutes, { config: options.config, prefix: '/api' })
   await app.register(assetRoutes, { config: options.config, storage: assetStorage, prefix: '/api' })
-  await app.register(creativeReferenceRoutes, { config: options.config, aiProvider, imageProvider, storage: assetStorage, prefix: '/api' })
+  await app.register(creativeReferenceRoutes, { config: options.config, aiProvider, factsProvider: discoveryProvider, imageProvider, storage: assetStorage, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })
   return app
 }

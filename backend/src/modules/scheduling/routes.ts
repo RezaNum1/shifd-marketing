@@ -5,6 +5,7 @@ import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import { allowedKeys, enumValue, object, optionalText, requiredText } from '../context/normalize.js'
 import { PLATFORM_CODES, type PlatformCode } from '../content/constants.js'
 import type { Clock } from '../../shared/time/clock.js'
+import type { TopicDiscoveryProvider } from '../ai/provider.js'
 import {
   assertPostUrl,
   cancelSchedule,
@@ -17,6 +18,7 @@ import {
   type PlanningTargetInput,
   type ScheduleInput,
 } from './service.js'
+import { recommendPublicationTimes } from './recommendations.js'
 
 const scheduleKeys = ['platform', 'scheduledAt', 'timezone'] as const
 const targetKeys = ['targetIndustry', 'targetProspectId', 'planningNotes'] as const
@@ -25,7 +27,17 @@ const scheduleUpdateKeys = ['scheduledAt', 'timezone', ...targetKeys] as const
 const publicationKeys = ['publishedAt', 'postUrl', 'notes'] as const
 const calendarKeys = ['start', 'end', 'platform', 'status', 'productId', 'contextType', 'targetIndustry', 'prospectId', 'targeting', 'limit', 'cursor'] as const
 
-export async function schedulingRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock }) {
+export async function schedulingRoutes(app: FastifyInstance, options: { config: AppConfig; clock: Clock; provider: TopicDiscoveryProvider }) {
+  app.post('/contents/:id/publication-time-recommendations', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const contentId = routeId(request)
+    const platforms = parseRecommendationPlatforms(request.body)
+    const data = await recommendPublicationTimes(app.prisma, options.config, options.provider, auth.user.companyId, contentId, platforms, options.clock.now())
+    return reply.send({ data })
+  })
+
   app.post('/contents/:id/schedules', async (request, reply) => {
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply)
@@ -116,6 +128,15 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
     const calendar = await readCalendar(app.prisma, auth.user.companyId, query, options.clock)
     return reply.send({ data: calendar })
   })
+}
+
+function parseRecommendationPlatforms(value: unknown): PlatformCode[] {
+  const body = object(value, 'Publication recommendation request')
+  allowedKeys(body, ['platforms'], 'body')
+  if (!Array.isArray(body.platforms) || body.platforms.length < 1 || body.platforms.length > 2) throw validationError('Choose at least one platform for the publication recommendation.', { platforms: 'Choose Instagram, LinkedIn, or both.' })
+  const platforms = body.platforms.map((platform, index) => parsePlatform(platform, `platforms[${index}]`))
+  if (new Set(platforms).size !== platforms.length) throw validationError('Platforms must be unique.', { platforms: 'Do not include a platform more than once.' })
+  return platforms
 }
 
 function parseScheduleBatch(value: unknown): { schedules: ScheduleInput[]; target: PlanningTargetInput } {

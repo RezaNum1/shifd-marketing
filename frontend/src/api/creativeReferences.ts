@@ -1,5 +1,5 @@
 import { createRequestKey, request } from './client'
-import type { BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from '../types/backend'
+import type { BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFact, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from '../types/backend'
 
 export interface CreativeReferenceInput {
   generationMode?: CreativeReferenceGenerationMode
@@ -10,6 +10,11 @@ export interface CreativeReferenceInput {
   mood: CreativeReferenceMood
   aspectRatio: CreativeReferenceAspectRatio
   additionalInstruction: string | null
+  selectedFacts?: CreativeReferenceFact[]
+}
+
+export function discoverCreativeReferenceFacts(contentId: string, concern = '') {
+  return request<{ facts: CreativeReferenceFact[]; researchedAt: string }>(`/contents/${contentId}/creative-reference-facts`, { method: 'POST', json: { concern } })
 }
 
 export function listCreativeReferences(contentId: string) {

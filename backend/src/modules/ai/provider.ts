@@ -56,6 +56,8 @@ export interface TopicDiscoveryProviderResult {
 
 export interface TopicDiscoveryProvider {
   discoverTopics(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
+  discoverCreativeReferenceFacts?(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
+  recommendPublicationTimes?(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
   isConfigured?(model?: string): boolean
 }
 
