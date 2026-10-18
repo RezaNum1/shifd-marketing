@@ -338,7 +338,7 @@ status must be needs_attention. Do not include additional fields.
 {{EXECUTION_JSON}}
 </EXECUTION_DATA>`
 
-export const M4_PROMPT_REFERENCE = 'm4-brand-check-v5'
+export const M4_PROMPT_REFERENCE = 'm4-brand-check-v6'
 
 export function m4PromptDigest() {
   return createHash('sha256').update(M4_PROMPT_TEMPLATE, 'utf8').digest('hex')
