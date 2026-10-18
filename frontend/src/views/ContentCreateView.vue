@@ -295,7 +295,7 @@ const reviewNeedsRecheck = computed(() =>
 );
 const platformsRequiringOverride = computed(() =>
   enabledReviewPlatforms.value.filter((platform) =>
-    reviewAssessments[platform].status === "Needs Attention" || reviewAssessments[platform].checks.some((check) => check.status === "warning"),
+    reviewAssessments[platform].status === "Needs Attention",
   ),
 );
 const reviewOverridesComplete = computed(() =>

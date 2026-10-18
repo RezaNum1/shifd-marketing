@@ -284,8 +284,10 @@ warning and briefly name the most important issue.
 Flag unsupported customer or client claims, certifications, government
 relationships, security guarantees, performance statistics, ROI, revenue,
 market share, and measured outcomes unless the supplied canonical context
-explicitly supports them. Do not use a numeric score threshold as an approval
-decision. A score is advisory information only.
+explicitly supports them. Reserve warnings for clear, material mismatches or
+risks. Treat minor stylistic differences and subjective preferences as passes,
+and mention them in the recommendation only when useful. Do not use a numeric
+score threshold as an approval decision. A score is advisory information only.
 
 Return JSON only with exactly this shape:
 {

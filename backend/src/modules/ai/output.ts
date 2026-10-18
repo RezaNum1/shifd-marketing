@@ -135,7 +135,11 @@ export function scoreM4Output(output: M4Output, hasCreativeAssets: boolean, hasV
   } else {
     checks.splice(0, checks.length, ...checks.filter((check) => check.label !== 'Visual Creative Review'))
   }
-  const warnings = checks.filter((check) => check.status === 'warning').length
+  const warningLabels = checks.filter((check) => check.status === 'warning').map((check) => check.label)
+  const warnings = warningLabels.length
+  // Keep small advisory mismatches visible without making every one an
+  // approval blocker. Unsupported claims remain blocking on their own.
+  const needsAttention = warningLabels.includes('Claim Grounding') || warnings >= 2
   const score = Math.max(0, 100 - warnings * 12)
   const visualNote = hasCreativeAssets && !hasVisualEvidence
     ? ' Uploaded creative could not be analyzed; complete the human visual review before approval.'
@@ -143,7 +147,7 @@ export function scoreM4Output(output: M4Output, hasCreativeAssets: boolean, hasV
   const recommendation = `${output.recommendation.slice(0, 4_000 - visualNote.length)}${visualNote}`
   return {
     score,
-    status: warnings > 0 ? 'needs_attention' : 'aligned',
+    status: needsAttention ? 'needs_attention' : 'aligned',
     recommendation,
     checks,
   }
