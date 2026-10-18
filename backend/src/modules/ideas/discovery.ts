@@ -11,6 +11,7 @@ import { AI_MODEL_ID, AI_PROVIDER, M2_DISCOVERY_OPERATION, M2_DISCOVERY_OUTPUT_S
 import { M2_DISCOVERY_SYSTEM_PROMPT, renderM2DiscoveryPrompt } from '../ai/discovery-prompt.js'
 import { mapProviderFailure } from '../ai/service.js'
 import type { TopicDiscoveryProvider, TopicDiscoveryProviderResult, TopicDiscoverySource } from '../ai/provider.js'
+import { aiExecution } from '../ai/provider.js'
 
 type Db = PrismaClient | Prisma.TransactionClient
 export type DiscoveryTimeframe = 'last_7_days' | 'last_30_days'
@@ -85,7 +86,8 @@ export async function discoverTopics(
     const prompt = await tx.promptVersion.findFirst({ where: { module: 'M2', operation: M2_DISCOVERY_OPERATION, status: 'active' } })
     if (!prompt) throw discoveryPromptUnavailable()
     const settings = await tx.aiSettings.findUnique({ where: { companyId }, select: { modelId: true, generationLanguage: true } })
-    const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
+    const runtime = aiExecution(provider, settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID)
+    const model = runtime.model
     if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
     const searchedAt = new Date()
     const snapshot = buildSnapshot(input, resolved, searchedAt, prompt.id, model, settings?.generationLanguage ?? resolved.company.brand.preferredLanguage)
@@ -101,9 +103,9 @@ export async function discoverTopics(
         promptVersionId: prompt.id,
         module: 'M2',
         operation: M2_DISCOVERY_OPERATION,
-        provider: AI_PROVIDER,
+        provider: runtime.provider,
         model,
-        mode: 'real',
+        mode: runtime.mode,
         language: settings?.generationLanguage ?? resolved.company.brand.preferredLanguage,
         editorialRevision: null,
         variantRevision: null,

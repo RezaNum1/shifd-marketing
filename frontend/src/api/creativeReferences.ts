@@ -1,8 +1,7 @@
 import { createRequestKey, request } from './client'
-import type { BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFact, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from '../types/backend'
+import type { BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from '../types/backend'
 
 export interface CreativeReferenceInput {
-  generationMode?: CreativeReferenceGenerationMode
   platform: CreativeReferencePlatform
   format: CreativeReferenceFormat
   slideCount: number
@@ -10,15 +9,10 @@ export interface CreativeReferenceInput {
   mood: CreativeReferenceMood
   aspectRatio: CreativeReferenceAspectRatio
   additionalInstruction: string | null
-  selectedFacts?: CreativeReferenceFact[]
-}
-
-export function discoverCreativeReferenceFacts(contentId: string, concern = '') {
-  return request<{ facts: CreativeReferenceFact[]; researchedAt: string }>(`/contents/${contentId}/creative-reference-facts`, { method: 'POST', json: { concern } })
 }
 
 export function listCreativeReferences(contentId: string) {
-  return request<{ batches: BackendCreativeReferenceBatch[]; canvaReadyAvailable: boolean }>(`/contents/${contentId}/creative-references`)
+  return request<{ batches: BackendCreativeReferenceBatch[] }>(`/contents/${contentId}/creative-references`)
 }
 
 export function createCreativeReferences(contentId: string, input: CreativeReferenceInput, idempotencyKey = createRequestKey('creative-references.create')) {

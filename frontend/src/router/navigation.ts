@@ -10,12 +10,6 @@ export const navigationGroups: NavigationGroup[] = [
     items: [
       { key: 'ideas', label: 'Ideas', to: '/content/ideas', icon: 'idea' },
       {
-        key: 'create',
-        label: 'Create Content',
-        to: '/content/create',
-        icon: 'sparkles',
-      },
-      {
         key: 'content',
         label: 'Content Library',
         to: '/content',

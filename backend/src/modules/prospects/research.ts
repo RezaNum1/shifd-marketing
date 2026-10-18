@@ -8,6 +8,7 @@ import { PROSPECT_RESEARCH_SYSTEM_PROMPT, renderProspectResearchPrompt } from '.
 import { ensureProspectResearchPrompt } from '../ai/seed.js'
 import { mapProviderFailure } from '../ai/service.js'
 import type { ProspectResearchProvider, ProspectResearchProviderResult, TopicDiscoverySource } from '../ai/provider.js'
+import { aiExecution } from '../ai/provider.js'
 
 const categories = ['overview', 'industry', 'products_services', 'operations', 'market_segments', 'development', 'opportunity'] as const
 export type ResearchCategory = typeof categories[number]
@@ -60,7 +61,8 @@ export async function researchProspect(prisma: PrismaClient, config: AppConfig, 
   if (pending) throw conflict('Research is already running for this prospect.')
   const prompt = await ensureProspectResearchPrompt(prisma)
   const settings = await prisma.aiSettings.findUnique({ where: { companyId }, select: { modelId: true } })
-  const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
+  const runtime = aiExecution(provider, settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID)
+  const model = runtime.model
   if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
   const researchedAt = new Date()
   const identityContext = { name: prospect.name, website: prospect.website, industry: prospect.industry, location: prospect.address }
@@ -70,7 +72,7 @@ export async function researchProspect(prisma: PrismaClient, config: AppConfig, 
     await tx.$queryRaw`SELECT "id" FROM "prospects" WHERE "id" = CAST(${prospectId} AS UUID) AND "company_id" = CAST(${companyId} AS UUID) FOR UPDATE`
     const concurrent = await tx.prospectResearchRun.findFirst({ where: { companyId, prospectId, status: 'pending' }, select: { id: true } })
     if (concurrent) throw conflict('Research is already running for this prospect.')
-    await tx.aiRequestLog.create({ data: { id: logId, companyId, requestedBy: actorId, promptVersionId: prompt.id, module: 'M2', operation: PROSPECT_RESEARCH_OPERATION, provider: AI_PROVIDER, model, mode: 'real', language: 'English', inputHash: requestHash(snapshot), inputSnapshot: toJson(snapshot), status: 'pending' } })
+    await tx.aiRequestLog.create({ data: { id: logId, companyId, requestedBy: actorId, promptVersionId: prompt.id, module: 'M2', operation: PROSPECT_RESEARCH_OPERATION, provider: runtime.provider, model, mode: runtime.mode, language: 'English', inputHash: requestHash(snapshot), inputSnapshot: toJson(snapshot), status: 'pending' } })
     await tx.prospectResearchRun.create({ data: { id: runId, companyId, prospectId, createdBy: actorId, aiRequestLogId: logId, promptVersionId: prompt.id, status: 'pending', identityStatus: 'needs_confirmation', identityExplanation: 'Research is in progress.', summary: '', limitations: [], researchedAt } })
   })
   const startedAt = Date.now()

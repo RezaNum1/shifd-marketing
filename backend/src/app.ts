@@ -16,6 +16,7 @@ import multipart from '@fastify/multipart'
 import { assetRoutes } from './modules/assets/routes.js'
 import { LocalAssetStorage } from './modules/assets/storage.js'
 import { OpenAiAiProvider } from './modules/ai/openai.js'
+import { MockAiProvider } from './modules/ai/mock.js'
 import { aiRoutes } from './modules/ai/routes.js'
 import type { AiProvider } from './modules/ai/provider.js'
 import type { AiImageProvider } from './modules/ai/provider.js'
@@ -70,10 +71,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(authRoutes, { config: options.config, prefix: '/api' })
   await app.register(contextRoutes, { config: options.config, prefix: '/api' })
   await app.register(prospectRoutes, { config: options.config, prefix: '/api' })
-  const aiProvider = options.aiProvider ?? new OpenAiAiProvider(options.config)
-  const discoveryProvider = options.discoveryProvider ?? new OpenAiAiProvider(options.config)
-  const prospectResearchProvider = options.prospectResearchProvider ?? new OpenAiAiProvider(options.config)
-  const imageProvider = options.imageProvider ?? new OpenAiAiProvider(options.config)
+  const defaultAiProvider = options.config.aiProviderMode === 'mock' ? new MockAiProvider() : new OpenAiAiProvider(options.config)
+  const aiProvider = options.aiProvider ?? defaultAiProvider
+  const discoveryProvider = options.discoveryProvider ?? defaultAiProvider
+  const prospectResearchProvider = options.prospectResearchProvider ?? defaultAiProvider
+  const imageProvider = options.imageProvider ?? defaultAiProvider
   const clock = options.clock ?? systemClock
   const instagramProvider = options.instagramProvider ?? new MetaInstagramInsightsProvider(options.config)
   await app.register(contentRoutes, { config: options.config, aiProvider, storage: assetStorage, clock, prefix: '/api' })
@@ -87,7 +89,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(telegramRoutes, { config: options.config, aiProvider, prefix: '/api' })
   await app.register(aiRoutes, { config: options.config, prefix: '/api' })
   await app.register(assetRoutes, { config: options.config, storage: assetStorage, prefix: '/api' })
-  await app.register(creativeReferenceRoutes, { config: options.config, aiProvider, factsProvider: discoveryProvider, imageProvider, storage: assetStorage, prefix: '/api' })
+  await app.register(creativeReferenceRoutes, { config: options.config, aiProvider, imageProvider, storage: assetStorage, prefix: '/api' })
   await app.register(healthRoutes, { prefix: '/api' })
   return app
 }

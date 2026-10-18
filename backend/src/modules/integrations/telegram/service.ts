@@ -8,6 +8,7 @@ import { AI_MODEL_ID, AI_PROVIDER, M2_TELEGRAM_CHAT_OPERATION, M2_TELEGRAM_CHAT_
 import { mapProviderFailure } from '../../ai/service.js'
 import { M2_TELEGRAM_CHAT_SYSTEM_PROMPT, M2_TELEGRAM_STRUCTURE_SYSTEM_PROMPT, renderTelegramChatPrompt, renderTelegramStructurePrompt } from '../../ai/telegram-ideation-prompt.js'
 import type { AiProvider } from '../../ai/provider.js'
+import { aiExecution } from '../../ai/provider.js'
 import { TelegramApiClient, type TelegramClient, type TelegramInlineKeyboardButton } from './client.js'
 
 const MAX_TELEGRAM_TEXT = 4_000
@@ -159,10 +160,11 @@ async function chat(prisma: PrismaClient, config: AppConfig, provider: AiProvide
   const model = await modelFor(prisma, config, integration.companyId, provider)
   const aiRequestId = randomUUID()
   const startedAt = Date.now()
-  await prisma.aiRequestLog.create({ data: aiLogData({ id: aiRequestId, companyId: integration.companyId, userId: integration.userId, promptVersionId: prompt.id, operation: M2_TELEGRAM_CHAT_OPERATION, model, snapshot: { context, history: thread.history, message: text } }) })
+  const runtime = aiExecution(provider, model)
+  await prisma.aiRequestLog.create({ data: aiLogData({ id: aiRequestId, companyId: integration.companyId, userId: integration.userId, promptVersionId: prompt.id, operation: M2_TELEGRAM_CHAT_OPERATION, model: runtime.model, provider: runtime.provider, mode: runtime.mode, snapshot: { context, history: thread.history, message: text } }) })
   let result
   try {
-    result = await provider.generate({ model, outputSchemaVersion: M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, systemPrompt: M2_TELEGRAM_CHAT_SYSTEM_PROMPT, userPrompt: renderTelegramChatPrompt({ ...context, history: thread.history, message: text }), maxOutputTokens: config.telegramIdeationMaxOutputTokens ?? 800, timeoutMs: config.aiRequestTimeoutMs })
+    result = await provider.generate({ model: runtime.model, outputSchemaVersion: M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, systemPrompt: M2_TELEGRAM_CHAT_SYSTEM_PROMPT, userPrompt: renderTelegramChatPrompt({ ...context, history: thread.history, message: text }), maxOutputTokens: config.telegramIdeationMaxOutputTokens ?? 800, timeoutMs: config.aiRequestTimeoutMs })
   } catch (error) {
     const failure = mapProviderFailure(error)
     await failAi(prisma, aiRequestId, failure, Date.now() - startedAt, error)
@@ -201,11 +203,12 @@ async function structureIdea(prisma: PrismaClient, config: AppConfig, provider: 
   const messages = await recentMessages(prisma, thread.id)
   const prompt = await activePrompt(prisma, M2_TELEGRAM_STRUCTURE_OPERATION)
   const model = await modelFor(prisma, config, integration.companyId, provider)
+  const runtime = aiExecution(provider, model)
   const aiRequestId = randomUUID(); const startedAt = Date.now()
-  await prisma.aiRequestLog.create({ data: aiLogData({ id: aiRequestId, companyId: integration.companyId, userId: integration.userId, promptVersionId: prompt.id, operation: M2_TELEGRAM_STRUCTURE_OPERATION, model, snapshot: { context, thread: messages } }) })
+  await prisma.aiRequestLog.create({ data: aiLogData({ id: aiRequestId, companyId: integration.companyId, userId: integration.userId, promptVersionId: prompt.id, operation: M2_TELEGRAM_STRUCTURE_OPERATION, model: runtime.model, provider: runtime.provider, mode: runtime.mode, snapshot: { context, thread: messages } }) })
   let result
   try {
-    result = await provider.generate({ model, outputSchemaVersion: M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, systemPrompt: M2_TELEGRAM_STRUCTURE_SYSTEM_PROMPT, userPrompt: renderTelegramStructurePrompt({ ...context, thread: messages }), maxOutputTokens: config.telegramIdeationMaxOutputTokens ?? 800, timeoutMs: config.aiRequestTimeoutMs })
+    result = await provider.generate({ model: runtime.model, outputSchemaVersion: M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, systemPrompt: M2_TELEGRAM_STRUCTURE_SYSTEM_PROMPT, userPrompt: renderTelegramStructurePrompt({ ...context, thread: messages }), maxOutputTokens: config.telegramIdeationMaxOutputTokens ?? 800, timeoutMs: config.aiRequestTimeoutMs })
   } catch (error) {
     const failure = mapProviderFailure(error)
     await failAi(prisma, aiRequestId, failure, Date.now() - startedAt, error)
@@ -326,7 +329,7 @@ async function activePrompt(prisma: PrismaClient, operation: string) {
 
 async function modelFor(prisma: PrismaClient, config: AppConfig, companyId: string, provider: AiProvider) {
   const settings = await prisma.aiSettings.findUnique({ where: { companyId }, select: { modelId: true } })
-  const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
+  const model = aiExecution(provider, settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID).model
   if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
   return model
 }
@@ -364,7 +367,7 @@ export function parseUpdate(value: unknown): TelegramUpdate & { update_id: numbe
 function parseChatResult(text: string) { try { const value = JSON.parse(text) as { reply?: unknown }; if (typeof value.reply !== 'string' || !value.reply.trim()) throw new Error(); return { reply: value.reply.trim() } } catch { throw aiOutputInvalid() } }
 function parseStructureResult(text: string, pillars: Array<{ code: string; label: string }>) { try { const value = JSON.parse(text) as Record<string, unknown>; const strings = ['title', 'summary', 'targetAudience', 'contentAngle', 'contentPillarCode', 'objective', 'conversationSummary']; if (strings.some((key) => typeof value[key] !== 'string' || !(value[key] as string).trim())) throw new Error(); if (!pillars.some((pillar) => pillar.code === value.contentPillarCode)) throw new Error(); if (!['awareness', 'education', 'engagement', 'credibility', 'consideration', 'discovery'].includes(value.objective as string)) throw new Error(); return { title: value.title as string, summary: value.summary as string, targetAudience: value.targetAudience as string, contentAngle: value.contentAngle as string, contentPillarCode: value.contentPillarCode as string, objective: value.objective as string, conversationSummary: value.conversationSummary as string } } catch { throw aiOutputInvalid() } }
 async function failAi(prisma: PrismaClient, aiRequestId: string, failure: { code: string; message: string }, latencyMs: number, providerError: unknown, providerRequestId?: string | null) { await prisma.aiRequestLog.update({ where: { id: aiRequestId }, data: { status: 'failed', errorCode: failure.code, errorMessage: failure.message, latencyMs, providerRequestId: providerRequestId ?? (providerError instanceof Error && 'providerRequestId' in providerError ? String(providerError.providerRequestId) : null), completedAt: new Date() } }) }
-function aiLogData(input: { id: string; companyId: string; userId: string; promptVersionId: string; operation: string; model: string; snapshot: unknown }): Prisma.AiRequestLogCreateInput { return { id: input.id, company: { connect: { id: input.companyId } }, requester: { connect: { id: input.userId } }, promptVersion: { connect: { id: input.promptVersionId } }, module: 'M2', operation: input.operation, provider: AI_PROVIDER, model: input.model, mode: 'real', language: 'English', inputHash: createHash('sha256').update(JSON.stringify(input.snapshot)).digest('hex'), inputSnapshot: input.snapshot as Prisma.InputJsonValue, status: 'pending' } }
+function aiLogData(input: { id: string; companyId: string; userId: string; promptVersionId: string; operation: string; model: string; provider: string; mode: 'real' | 'demo'; snapshot: unknown }): Prisma.AiRequestLogCreateInput { return { id: input.id, company: { connect: { id: input.companyId } }, requester: { connect: { id: input.userId } }, promptVersion: { connect: { id: input.promptVersionId } }, module: 'M2', operation: input.operation, provider: input.provider, model: input.model, mode: input.mode, language: 'English', inputHash: createHash('sha256').update(JSON.stringify(input.snapshot)).digest('hex'), inputSnapshot: input.snapshot as Prisma.InputJsonValue, status: 'pending' } }
 async function safeSend(client: TelegramClient, chatId: string, text: string, log: (message: string, details?: unknown) => void, replyMarkup?: { inline_keyboard: TelegramInlineKeyboardButton[][] }) { try { await client.sendMessage(chatId, text, replyMarkup) } catch (error) { log('Telegram message delivery failed.', error) } }
 function isUnique(error: unknown) { return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' }
 type Integration = Awaited<ReturnType<typeof activeIntegration>> & { companyName: string }

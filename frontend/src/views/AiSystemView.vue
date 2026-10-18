@@ -40,6 +40,16 @@ const operations = [
   { module: 'M3', name: 'Platform Adaptation', description: 'Adapts approved master content for Instagram and LinkedIn.' },
   { module: 'M4', name: 'Brand Consistency Check', description: 'Assesses platform content against the selected business and brand context before human approval.' },
 ]
+const brandCheckDimensions = [
+  { label: 'Tone / Brand Voice', criterion: 'Copy mengikuti karakter dan gaya komunikasi pada profil Brand.' },
+  { label: 'Messaging Alignment', criterion: 'Pesan platform tetap sesuai dengan Master Content dan Visual Direction.' },
+  { label: 'Audience Fit', criterion: 'Bahasa dan manfaat relevan dengan audiens yang dipilih dalam brief.' },
+  { label: 'Claim Grounding', criterion: 'Klaim faktual didukung konteks yang tersedia. Klaim pelanggan, sertifikasi, relasi pemerintah, jaminan keamanan, statistik performa, ROI, pendapatan, pangsa pasar, atau hasil terukur diberi peringatan bila tidak didukung.' },
+  { label: 'CTA Alignment', criterion: 'Ajakan bertindak sesuai dengan tujuan konten dan pesan yang disampaikan.' },
+  { label: 'Company/Product Context Alignment', criterion: 'Penyebutan perusahaan dan produk akurat serta konsisten dengan konteks terpilih. Untuk konteks umum, referensi perusahaan atau produk tidak diwajibkan.' },
+  { label: 'Platform Appropriateness', criterion: 'Format dan gaya copy sesuai dengan platform tujuan, Instagram atau LinkedIn.' },
+  { label: 'Visual Creative Review', criterion: 'Jika aset visual tersedia dan dapat dianalisis, AI menilai relevansi dengan pesan, hierarki dan keterbacaan, serta masalah brand atau layout yang terlihat.' },
+]
 const dirty = computed(() => draft.generationLanguage !== ai.settings.generationLanguage)
 const activeProduct = computed(() => products.products.find((product) => product.status === 'Active'))
 const totalRequests = computed(() => ai.usage?.requests ?? ai.requestLogs.length)
@@ -94,14 +104,28 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
     <InlineAlert v-else-if="ai.error" title="AI system status unavailable" tone="danger">{{ ai.error }}</InlineAlert>
 
     <template v-if="ai.loaded">
-    <section class="ai-notice"><AppIcon name="info" :size="17" /><span>AI-generated content and brand assessments require human review before final approval.</span></section>
+    <section class="ai-notice"><AppIcon name="info" :size="17" /><span v-if="ai.settings.mode === 'demo'">Development mock is active. Responses are deterministic fixtures; live web search, image generation, and model evaluation are not performed. No OpenAI API tokens are used.</span><span v-else>AI-generated content and brand assessments require human review before final approval.</span></section>
 
     <section class="ai-top-grid">
-      <BaseCard title="AI Configuration" description="Safe provider metadata returned by the backend."><dl class="ai-details"><div><dt>Provider</dt><dd>{{ ai.settings.provider || '—' }}</dd></div><div><dt>Model</dt><dd>{{ ai.settings.model || '—' }}</dd></div><div><dt>Status</dt><dd><StatusBadge :tone="ai.settings.status === 'configured' ? 'success' : 'warning'" dot>{{ ai.settings.status === 'configured' ? 'Configured' : 'Not configured' }}</StatusBadge></dd></div></dl><BaseSelect v-model="draft.generationLanguage" label="Generation Language" :options="languageOptions" hint="Applied to future backend generation requests." /></BaseCard>
+      <BaseCard title="AI Configuration" description="The provider and model currently selected by the backend environment."><dl class="ai-details"><div><dt>Provider</dt><dd>{{ ai.settings.provider || '—' }}</dd></div><div><dt>Model</dt><dd>{{ ai.settings.model || '—' }}</dd></div><div><dt>Mode</dt><dd>{{ ai.settings.mode === 'demo' ? 'Development mock (no external API calls)' : 'Live API' }}</dd></div><div><dt>Status</dt><dd><StatusBadge :tone="ai.settings.status === 'configured' ? 'success' : 'warning'" dot>{{ ai.settings.status === 'configured' ? 'Configured' : 'Not configured' }}</StatusBadge></dd></div></dl><BaseSelect v-model="draft.generationLanguage" label="Generation Language" :options="languageOptions" hint="Applied to future backend generation requests." /></BaseCard>
       <BaseCard title="System Status" description="Readiness indicators supplied by the backend."><div class="system-status-list"><div><span>AI Configuration</span><StatusBadge :tone="ai.settings.systemStatus?.aiConfiguration === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.aiConfiguration ?? 'Unknown' }}</StatusBadge></div><div><span>Context Engine</span><StatusBadge :tone="ai.settings.systemStatus?.contextEngine === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.contextEngine ?? 'Unknown' }}</StatusBadge></div><div><span>Prompt Configuration</span><StatusBadge :tone="ai.settings.systemStatus?.promptConfiguration === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.promptConfiguration ?? 'Unknown' }}</StatusBadge></div></div></BaseCard>
     </section>
 
     <BaseCard title="Supported AI Operations" description="Only the approved thesis workflow modules use AI assistance."><div class="operation-list"><article v-for="operation in operations" :key="operation.module" class="operation-row"><div class="operation-row__icon"><AppIcon name="sparkles" :size="18" /></div><div class="operation-row__copy"><div><strong>{{ operation.name }}</strong><span>Module {{ operation.module }}</span></div><p>{{ operation.description }}</p><small v-if="operation.module === 'M4'">Assessment is advisory; final approval remains a human decision.</small></div><StatusBadge tone="success" dot>Enabled</StatusBadge></article></div></BaseCard>
+
+    <BaseCard title="Brand Consistency Check: What M4 Evaluates" description="M4 membandingkan setiap varian platform dengan konteks perusahaan atau produk jika dipilih, profil Brand, brief, Master Content, Visual Direction, dan data platform.">
+      <div class="brand-check-list">
+        <article v-for="dimension in brandCheckDimensions" :key="dimension.label" class="brand-check-row">
+          <strong>{{ dimension.label }}</strong>
+          <p>{{ dimension.criterion }}</p>
+        </article>
+      </div>
+      <div class="brand-check-rules">
+        <div><strong>Pass / Warning</strong><p>Pass berarti tidak ditemukan ketidaksesuaian material pada dimensi tersebut. Warning menandai risiko atau ketidaksesuaian yang jelas; preferensi gaya yang ringan tidak otomatis menjadi warning.</p></div>
+        <div><strong>Status dan skor</strong><p>Skor dihitung sebagai 100 dikurangi 12 untuk setiap warning, dengan nilai minimum 0. Status menjadi Needs Attention jika Claim Grounding mendapat warning atau terdapat setidaknya dua warning; selain itu status Aligned. Skor hanya informasi pendukung, bukan ambang persetujuan.</p></div>
+        <div><strong>Pemeriksaan visual dan persetujuan</strong><p>Visual Creative Review hanya berlaku ketika aset visual tersedia. Jika aset tidak dapat dianalisis, hasilnya ditandai belum dinilai. M4 bersifat advisory; pemeriksaan dan persetujuan akhir tetap dilakukan manusia.</p></div>
+      </div>
+    </BaseCard>
 
     <BaseCard title="AI Context" description="Operations resolve context through the Multi-Context Profile Engine selected in the content brief."><div class="context-summary"><div><span>Company Context</span><strong>{{ company.companyProfile.name }}</strong><small>Organization-level business and brand context</small></div><div><span>Product Context</span><strong>{{ activeProduct?.name ?? 'Selected product when applicable' }}</strong><small>{{ activeProduct ? 'Product-specific context is added when a product brief is selected.' : 'Choose a product in the Brief to add product context.' }}</small></div></div><div class="context-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/context/company')">Manage Company Context <AppIcon name="arrow-right" :size="14" /></BaseButton><BaseButton variant="ghost" size="compact" @click="router.push('/context/products')">Manage Products <AppIcon name="arrow-right" :size="14" /></BaseButton></div></BaseCard>
 
@@ -135,6 +159,12 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
 .operation-row__copy span, .operation-row__copy small { color: var(--color-subtle); font-size: 11px; }
 .operation-row__copy p { margin: 5px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.45; }
 .operation-row__copy small { display: block; margin-top: 5px; color: var(--color-primary); }
+.brand-check-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.brand-check-row { padding: 13px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.brand-check-row strong, .brand-check-rules strong { color: var(--color-ink); font-size: 13px; }
+.brand-check-row p, .brand-check-rules p { margin: 5px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.brand-check-rules { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+@media (max-width: 760px) { .brand-check-list { grid-template-columns: 1fr; } }
 .context-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-border); }
 .context-summary > div { display: grid; gap: 5px; padding: 14px; background: var(--color-surface); }
 .context-summary span { color: var(--color-subtle); font-size: 11px; }

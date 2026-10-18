@@ -54,7 +54,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       parsed.target,
       idempotencyKey(request),
       request.id,
-      { openaiModel: options.config.openaiModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, clock: options.clock },
     )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)
@@ -74,7 +74,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       parsed.schedule,
       parsed.target,
       request.id,
-      { openaiModel: options.config.openaiModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, clock: options.clock },
     )
     reply.header('ETag', result.etag)
     return reply.send({ data: result.content })
@@ -82,7 +82,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
 
   app.get('/schedules/:id', async (request, reply) => {
     const auth = await requireAuth(request, reply)
-    const detail = await readSchedule(app.prisma, auth.user.companyId, scheduleId(request), options.clock, { openaiModel: options.config.openaiModel })
+    const detail = await readSchedule(app.prisma, auth.user.companyId, scheduleId(request), options.clock, { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode })
     return reply.send({ data: detail })
   })
 
@@ -97,7 +97,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       scheduleId(request),
       ifMatch(request),
       request.id,
-      { openaiModel: options.config.openaiModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, clock: options.clock },
     )
     reply.header('ETag', result.etag)
     return reply.send({ data: result.content })
@@ -116,7 +116,7 @@ export async function schedulingRoutes(app: FastifyInstance, options: { config: 
       parsePublication(request.body),
       idempotencyKey(request),
       request.id,
-      { openaiModel: options.config.openaiModel, clock: options.clock },
+      { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, clock: options.clock },
     )
     if (result.etag) reply.header('ETag', result.etag)
     return reply.status(result.status).send(result.body)

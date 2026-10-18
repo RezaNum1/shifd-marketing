@@ -24,7 +24,7 @@ import {
   calculateCost, mapAiRequest, mapPromptVersion, mapProviderFailure, usageForDb,
   type AiRequestDto, type PromptVersionDto, type RateSelection,
 } from './service.js'
-import { AiProviderFailure, type AiProvider, type AiProviderResult } from './provider.js'
+import { AiProviderFailure, aiExecution, type AiProvider, type AiProviderResult } from './provider.js'
 import { AssetStorageMissingError, type AssetStorage } from '../assets/storage.js'
 
 interface PreparedBrandCheck {
@@ -124,7 +124,7 @@ export async function brandCheckContent(
           promptVersionId: input.promptVersionId,
           module: M4_MODULE,
           operation: M4_OPERATION,
-          provider: AI_PROVIDER,
+          provider: input.provider,
           model: input.model,
           mode: input.mode,
           language: input.language,
@@ -173,7 +173,7 @@ export async function brandCheckContent(
   let images: Awaited<ReturnType<typeof loadVisualReviewImages>> = []
   const startedAt = Date.now()
   try {
-    images = await loadVisualReviewImages(storage, prepared.creativeAssetStorageKeys)
+    images = provider.executionMode === 'demo' ? [] : await loadVisualReviewImages(storage, prepared.creativeAssetStorageKeys)
     providerResult = await provider.generate({
       model: prepared.model,
       outputSchemaVersion: M4_OUTPUT_SCHEMA_VERSION,
@@ -274,8 +274,9 @@ async function buildBrandCheckInput(
   const prompt = await tx.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
   const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
-  const model = configuredModel ?? settings.modelDisplayName
-  const mode = settings.mode as AiMode
+  const runtime = aiExecution(provider, configuredModel ?? settings.modelDisplayName)
+  const model = runtime.model
+  const mode = runtime.mode as AiMode
   const language = settings.generationLanguage
   if (!comparisonOnly && provider.isConfigured && !provider.isConfigured(configuredModel)) throw aiNotConfigured()
 
@@ -303,7 +304,7 @@ async function buildBrandCheckInput(
     assets: effectiveAssets.map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
   }
   const execution = {
-    provider: AI_PROVIDER,
+    provider: runtime.provider,
     model,
     mode,
     generationLanguage: language,
@@ -383,7 +384,7 @@ async function buildBrandCheckInput(
     settingsVersion: settings.version,
     promptVersionId: prompt.id,
     promptVersion: mapPromptVersion(prompt),
-    provider: AI_PROVIDER,
+    provider: runtime.provider,
     model,
     mode,
     language,

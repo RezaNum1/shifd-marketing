@@ -627,6 +627,10 @@
     min-height: 96px;
     padding-block: 10px;
   }
+  .ui-textarea--auto-resize {
+    resize: none;
+    overflow-y: hidden;
+  }
   .ui-select {
     padding-right: 8px;
   }
@@ -1096,47 +1100,6 @@
   .creative-reference-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
   .creative-reference-form > .ui-field:last-child { grid-column: 1 / -1; width: 100%; }
   .creative-reference-form .ui-textarea { width: 100%; min-height: 148px; resize: vertical; }
-  .creative-reference-facts { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-well); }
-  .creative-reference-facts-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .creative-reference-facts-heading > div { min-width: 0; }
-  .creative-reference-facts-heading h3 { margin: 0; color: var(--color-ink); font-size: 15px; line-height: 21px; font-weight: 700; }
-  .creative-reference-facts-heading p { max-width: 720px; margin: 4px 0 0; color: var(--color-subtle); font-size: 12px; line-height: 18px; }
-  .creative-reference-facts-heading .base-button { flex: 0 0 auto; }
-  .creative-reference-facts-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .creative-reference-fact { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 13px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
-  .creative-reference-fact.is-selected { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgb(37 89 214 / .10); }
-  .creative-reference-fact > input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--color-primary); }
-  .creative-reference-fact-copy { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-  .creative-reference-fact-copy > strong { color: var(--color-ink); font-size: 12px; line-height: 17px; }
-  .creative-reference-fact-copy > span { color: var(--color-muted); font-size: 12px; line-height: 18px; }
-  .creative-reference-fact-copy .creative-reference-fact-sources { color: var(--color-subtle); font-size: 10px; line-height: 15px; }
-  .creative-reference-fact-sources a { color: var(--color-link); text-decoration: underline; text-underline-offset: 2px; }
-  .creative-reference-facts-empty { padding: 12px; border: 1px dashed var(--color-border); border-radius: var(--radius-control); color: var(--color-subtle); font-size: 12px; line-height: 18px; }
-  .creative-generation-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; border: 0; }
-  .creative-generation-mode legend { margin-bottom: 8px; color: var(--color-subtle); font-size: 12px; font-weight: 600; }
-  .creative-generation-mode label { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
-  .creative-generation-mode label:has(input:checked) { border-color: var(--color-primary); background: #f3f7ff; }
-  .creative-generation-mode input { margin-top: 3px; accent-color: var(--color-primary); }
-  .creative-generation-mode label span { display: flex; flex-direction: column; gap: 4px; }
-  .creative-generation-mode label strong { color: var(--color-ink); font-size: 13px; }
-  .creative-generation-mode label small { color: var(--color-subtle); font-size: 11px; line-height: 16px; }
-  .canva-ready-composer { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 12px 0; }
-  .canva-ready-preview { position: relative; width: min(100%, 380px); overflow: hidden; border: 1px solid var(--color-border); border-radius: 12px; background: linear-gradient(155deg, #fff 0%, #fff 44%, #edf3ff 100%); }
-  .canva-ready-decor { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #1363df; stroke-opacity: .2; stroke-width: .5; }
-  .canva-ready-decor .canva-ready-halo { fill: #eaf1ff; fill-opacity: .44; stroke: #1363df; stroke-opacity: .16; stroke-width: .55; }
-  .canva-ready-decor .canva-ready-dot { fill: #1363df; stroke: none; }
-  .canva-ready-decor .canva-ready-dot--soft { fill: #7ca7f5; }
-  .canva-ready-hero { position: absolute; z-index: 1; width: auto; max-width: 58%; object-fit: contain; }
-  .canva-ready-copy { position: absolute; z-index: 2; display: flex; width: 84%; flex-direction: column; align-items: flex-start; gap: clamp(5px, 1.4vw, 10px); color: #151b2d; }
-  .canva-ready-copy strong { max-width: 90%; font-size: clamp(16px, 5vw, 30px); line-height: 1.04; letter-spacing: -.035em; }
-  .canva-ready-copy .canva-ready-eyebrow { color: #1363df; font-size: clamp(7px, 1.65vw, 10px); font-weight: 700; letter-spacing: .12em; }
-  .canva-ready-copy .canva-ready-subtitle { max-width: 82%; color: #4b5568; font-size: clamp(9px, 2vw, 13px); line-height: 1.4; }
-  .canva-ready-copy em { max-width: 70%; margin-top: 2px; color: #1363df; font-size: clamp(8px, 1.8vw, 11px); font-style: normal; font-weight: 700; line-height: 1.35; }
-  .canva-ready-controls { width: min(100%, 360px); color: var(--color-subtle); font-size: 12px; }
-  .canva-ready-controls summary { margin: 3px 0 8px; color: var(--color-ink); cursor: pointer; font-weight: 600; }
-  .canva-ready-controls label { display: grid; grid-template-columns: 1fr; gap: 3px; margin: 7px 0; }
-  .canva-ready-controls input { width: 100%; accent-color: var(--color-primary); }
-  .canva-ready-layer-note { max-width: 360px; margin: 0; color: var(--color-muted); font-size: 11px; line-height: 16px; }
   .creative-reference-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px 24px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--color-border); }
   .creative-reference-actions > div { min-width: 0; max-width: 760px; }
   .creative-reference-actions strong { color: var(--color-ink); font-size: 13px; line-height: 18px; }
@@ -1227,6 +1190,7 @@
   .creative-empty-note { margin: 0; color: var(--color-subtle); font-size: 12px; line-height: 18px; text-align: center; }
   .inherited-creative-panel { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
   .creative-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .creative-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
   .review-workspace { display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; }
   .review-header-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
   .review-header-bar > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -1462,13 +1426,10 @@
   .generate-workbench { grid-template-columns: 1fr; gap: 20px; }
   .platform-grid { grid-template-columns: 1fr; gap: 20px; }
   .creative-brief-grid, .creative-platform-grid { grid-template-columns: 1fr; gap: 20px; }
-  .creative-reference-form, .creative-reference-grid, .creative-reference-facts-list { grid-template-columns: 1fr; }
+  .creative-reference-form, .creative-reference-grid { grid-template-columns: 1fr; }
   .publication-recommendation-list { grid-template-columns: 1fr; }
   .publication-recommendations-heading { flex-direction: column; }
   .publication-recommendations-heading .ui-button { width: 100%; }
-  .creative-reference-facts-heading { flex-direction: column; }
-  .creative-reference-facts-heading .ui-button { width: 100%; }
-  .creative-generation-mode { grid-template-columns: 1fr; }
   .creative-reference-batch-meta { align-items: flex-start; flex-direction: column; }
   .creative-reference-batch-actions { justify-content: flex-start; }
   .creative-reference-generation-state { align-items: flex-start; gap: 12px; padding: 14px; }

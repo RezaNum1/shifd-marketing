@@ -1,7 +1,7 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
-import { CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION, CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION } from './constants.js'
+import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION } from './constants.js'
 import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
@@ -22,19 +22,6 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
           }, required: ['claim', 'sources'] } },
         }, required: ['title', 'angle', 'hook', 'targetAudience', 'talkingPoints', 'industryRelevance', 'capability', 'format', 'platform', 'softCta', 'evidence'],
       } } }, required: ['ideas'],
-    },
-  },
-  [CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION]: {
-    name: 'm2_creative_reference_facts_v1',
-    schema: {
-      type: 'object', additionalProperties: false,
-      properties: { facts: { type: 'array', maxItems: 6, items: {
-        type: 'object', additionalProperties: false,
-        properties: {
-          title: { type: 'string' }, fact: { type: 'string' },
-          sources: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] } },
-        }, required: ['title', 'fact', 'sources'],
-      } } }, required: ['facts'],
     },
   },
   [PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION]: {
@@ -253,6 +240,8 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
 }
 
 export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDiscoveryProvider, ProspectResearchProvider {
+  readonly providerId = 'openai'
+  readonly executionMode = 'real' as const
   private readonly client: OpenAI | null
 
   constructor(private readonly config: Pick<AppConfig, 'openaiApiKey' | 'openaiModel' | 'aiRequestTimeoutMs'>) {
@@ -393,10 +382,6 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
     }
   }
 
-  async discoverCreativeReferenceFacts(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult> {
-    return this.runWebSearch(request, CREATIVE_REFERENCE_FACTS_SCHEMA_VERSION, 'creative reference facts')
-  }
-
   async recommendPublicationTimes(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult> {
     return this.runWebSearch(request, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION, 'publication time recommendations')
   }
@@ -445,7 +430,6 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
         quality: request.quality,
         size: request.size,
         output_format: request.outputFormat,
-        ...(request.background ? { background: request.background } : {}),
         n: 1,
       }, { timeout: request.timeoutMs, maxRetries: 0, signal: request.signal }).withResponse()
       const providerRequestId = nonBlankString(sdkRequestId)

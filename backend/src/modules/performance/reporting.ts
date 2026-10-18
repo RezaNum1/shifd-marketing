@@ -4,6 +4,7 @@ import { mapInquiry, dateOnly, addDays, type PerformancePlatform } from './metri
 
 export interface ReportingOptions {
   openaiModel: string | null
+  aiProviderMode?: 'mock' | 'openai' | undefined
   asOf: Date
 }
 
@@ -202,7 +203,7 @@ export async function loadReportingSnapshot(prisma: PrismaClient, companyId: str
       orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
     }) as unknown as ScheduleRow[]
     const contentIds = await tx.content.findMany({ where: { companyId }, select: { id: true }, orderBy: { id: 'asc' } })
-    const contents = await Promise.all(contentIds.map((row) => readContentFromDb(tx, companyId, row.id, { openaiModel: options.openaiModel }, options.asOf)))
+    const contents = await Promise.all(contentIds.map((row) => readContentFromDb(tx, companyId, row.id, { openaiModel: options.openaiModel, aiProviderMode: options.aiProviderMode }, options.asOf)))
     const ideas = await tx.contentIdea.findMany({ where: { companyId, status: 'ready' }, include: { sourceContents: { select: { id: true } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: 3 })
     const readyIdeaCount = await tx.contentIdea.count({ where: { companyId, status: 'ready' } })
     const activeProducts = await tx.product.count({ where: { companyId, status: 'active' } })

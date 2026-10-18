@@ -19,6 +19,7 @@ export interface AppConfig {
   assetUnattachedGraceHours: number
   openaiApiKey: string | null
   openaiModel: string | null
+  aiProviderMode?: 'mock' | 'openai'
   openaiImageModel?: string
   openaiImageQuality?: 'low' | 'medium' | 'high'
   openaiImageFormat?: 'png'
@@ -102,6 +103,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const assetUnattachedGraceHours = parsePositiveInteger('ASSET_UNATTACHED_GRACE_HOURS', env.ASSET_UNATTACHED_GRACE_HOURS, 168, fields)
   const openaiApiKey = optionalConfigText('OPENAI_API_KEY', env.OPENAI_API_KEY, fields)
   const openaiModel = optionalConfigText('OPENAI_MODEL', env.OPENAI_MODEL, fields)
+  const aiProviderMode = (env.AI_PROVIDER_MODE?.trim() || (nodeEnv === 'development' ? 'mock' : 'openai')) as 'mock' | 'openai'
+  if (!['mock', 'openai'].includes(aiProviderMode)) fields.AI_PROVIDER_MODE = 'Must be mock or openai.'
+  if (nodeEnv === 'production' && aiProviderMode !== 'openai') fields.AI_PROVIDER_MODE = 'Production must use the OpenAI provider.'
   const openaiImageModel = optionalConfigText('OPENAI_IMAGE_MODEL', env.OPENAI_IMAGE_MODEL, fields) || 'gpt-image-2.5-sunburst'
   const openaiImageQuality = (env.OPENAI_IMAGE_QUALITY?.trim() || 'medium') as 'low' | 'medium' | 'high'
   if (!['low', 'medium', 'high'].includes(openaiImageQuality)) fields.OPENAI_IMAGE_QUALITY = 'Must be low, medium, or high.'
@@ -127,5 +131,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const telegramLinkTokenTtlMinutes = parseBoundedPositiveInteger('TELEGRAM_LINK_TOKEN_TTL_MINUTES', env.TELEGRAM_LINK_TOKEN_TTL_MINUTES, 10, 60, fields)
   const telegramIdeationMaxOutputTokens = parseBoundedPositiveInteger('TELEGRAM_IDEATION_MAX_OUTPUT_TOKENS', env.TELEGRAM_IDEATION_MAX_OUTPUT_TOKENS, 800, 8_192, fields)
   if (Object.keys(fields).length) throw new ConfigError(fields)
-  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, openaiImageModel, openaiImageQuality, openaiImageFormat, instagramAccessToken, instagramAppSecret, instagramAppId, instagramUserId, aiRequestTimeoutMs, aiMaxOutputTokens, topicDiscoveryMaxOutputTokens, telegramBotToken, telegramBotUsername, telegramWebhookSecret, telegramPublicWebhookUrl, telegramLinkTokenTtlMinutes, telegramIdeationMaxOutputTokens }
+  return { nodeEnv, port, host, databaseUrl, allowedOrigin, sessionIdleMinutes, sessionAbsoluteHours, loginRateLimitMax, loginRateLimitWindowMinutes, assetStorageRoot, assetMaxBytes, assetMaxWidth, assetMaxHeight, assetUnattachedGraceHours, openaiApiKey, openaiModel, aiProviderMode, openaiImageModel, openaiImageQuality, openaiImageFormat, instagramAccessToken, instagramAppSecret, instagramAppId, instagramUserId, aiRequestTimeoutMs, aiMaxOutputTokens, topicDiscoveryMaxOutputTokens, telegramBotToken, telegramBotUsername, telegramWebhookSecret, telegramPublicWebhookUrl, telegramLinkTokenTtlMinutes, telegramIdeationMaxOutputTokens }
 }

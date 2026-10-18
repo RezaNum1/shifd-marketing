@@ -15,7 +15,7 @@ import type { AiMode, AiRequestStatus } from './constants.js'
 import { AI_GENERATE_OPERATION, AI_LANGUAGES, AI_MODULE, AI_OPERATION, AI_PROVIDER, AI_PROVIDER_DISPLAY_NAME, OUTPUT_SCHEMA_VERSION } from './constants.js'
 import { M2_PROMPT_REFERENCE, M2_SYSTEM_PROMPT, canonicalInputHash, renderM2DataPrompt } from './prompt.js'
 import { parseM2Output, type M2Output } from './output.js'
-import { AiProviderFailure, type AiProvider, type AiProviderResult } from './provider.js'
+import { AiProviderFailure, aiExecution, type AiProvider, type AiProviderResult } from './provider.js'
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -151,7 +151,7 @@ export async function generateContent(
           promptVersionId: input.promptVersionId,
           module: AI_MODULE,
           operation: AI_OPERATION,
-          provider: AI_PROVIDER,
+          provider: input.provider,
           model: input.model,
           mode: input.mode,
           language: input.language,
@@ -286,8 +286,9 @@ async function buildGenerationInput(
   const prompt = await tx.promptVersion.findFirst({ where: { module: AI_MODULE, operation: AI_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
   const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
-  const model = configuredModel ?? settings.modelDisplayName
-  const mode = settings.mode as AiMode
+  const runtime = aiExecution(provider, configuredModel ?? settings.modelDisplayName)
+  const model = runtime.model
+  const mode = runtime.mode as AiMode
   const language = settings.generationLanguage
   if (provider.isConfigured && !provider.isConfigured(configuredModel)) throw aiNotConfigured()
   const rate = await selectRate(tx, model)
@@ -317,7 +318,7 @@ async function buildGenerationInput(
     resolvedBrand: content.contextType === 'general' ? null : resolved.resolvedBrand,
     contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
     ai: {
-      provider: AI_PROVIDER,
+      provider: runtime.provider,
       model,
       mode,
       generationLanguage: language,
@@ -352,7 +353,7 @@ async function buildGenerationInput(
     settingsVersion: settings.version,
     promptVersionId: prompt.id,
     promptVersion: mapPromptVersion(prompt),
-    provider: AI_PROVIDER,
+    provider: runtime.provider,
     model,
     mode,
     language,
@@ -425,7 +426,7 @@ async function finalizeSuccessfulRequest(
       estimatedCostUsd: estimatedCost,
       providerRequestId: providerResult.providerRequestId,
     } })
-    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel })
+    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel, aiProviderMode: config.aiProviderMode })
     const log = await tx.aiRequestLog.findUnique({ where: { id: prepared.aiRequestId }, include: { promptVersion: true } })
     if (!log) throw conflict('AI request evidence could not be finalized.')
     const request = mapAiRequest(log)
@@ -571,12 +572,13 @@ async function hasActivePrompt(prisma: PrismaClient) {
 }
 
 function mapAiSettings(settings: { provider: string; modelId: string | null; modelDisplayName: string; generationLanguage: string; mode: string; version: number }, config: AppConfig, promptConfigured: boolean) {
-  const hasProvider = Boolean(config.openaiApiKey && (settings.modelId || config.openaiModel))
+  const usingMock = config.aiProviderMode === 'mock'
+  const hasProvider = usingMock || Boolean(config.openaiApiKey && (settings.modelId || config.openaiModel))
   return {
-    provider: AI_PROVIDER_DISPLAY_NAME,
-    model: settings.modelDisplayName,
+    provider: usingMock ? 'Development mock' : AI_PROVIDER_DISPLAY_NAME,
+    model: usingMock ? 'deterministic-fixtures' : settings.modelDisplayName,
     generationLanguage: settings.generationLanguage,
-    mode: settings.mode,
+    mode: usingMock ? 'demo' : settings.mode,
     status: hasProvider && promptConfigured ? 'configured' : 'not_configured',
     systemStatus: {
       contextEngine: 'configured',

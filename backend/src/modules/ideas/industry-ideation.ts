@@ -3,6 +3,7 @@ import type { AppConfig } from '../../config/env.js'
 import { aiNotConfigured, aiOutputInvalid, notFound, validationError } from '../../shared/errors/AppError.js'
 import { readResolvedContextFromDb } from '../context/service.js'
 import type { AiProvider } from '../ai/provider.js'
+import { aiExecution } from '../ai/provider.js'
 import { AI_MODEL_ID, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION } from '../ai/constants.js'
 import { mapProviderFailure } from '../ai/service.js'
 
@@ -20,7 +21,7 @@ export async function generateIndustryIdeas(prisma: PrismaClient, config: AppCon
       prospect = { ...row, approvedClaims: claims.map((claim) => ({ id: claim.id, text: claim.text, sources: claim.sources.map((link) => link.source) })) }
     }
     const settings = await tx.aiSettings.findUnique({ where: { companyId }, select: { modelId: true, generationLanguage: true } })
-    const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
+    const model = aiExecution(provider, settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID).model
     if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
     return { resolved, prospect, model, language: settings?.generationLanguage ?? resolved.company.brand.preferredLanguage }
   })

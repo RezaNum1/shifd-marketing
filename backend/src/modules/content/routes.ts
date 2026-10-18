@@ -117,7 +117,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
       pillarCode: query.pillarCode === undefined ? undefined : parsePillarCode(query.pillarCode, 'pillarCode'),
       lifecycleStatus: query.lifecycleStatus === undefined ? undefined : parseLifecycleStatus(query.lifecycleStatus),
       cursor: query.cursor === undefined ? undefined : decodeCursor(query.cursor),
-    })
+    }, options.config)
     return reply.send({ data: result.data, page: { limit, nextCursor: result.nextCursor } })
   })
 

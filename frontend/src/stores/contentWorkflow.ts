@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import * as assetApi from '../api/assets'
 import * as contentApi from '../api/content'
 import * as schedulingApi from '../api/scheduling'
@@ -21,6 +21,29 @@ const blankInstagram = (): InstagramVariant => ({ caption: '', cta: '', hashtags
 const blankLinkedIn = (): LinkedInVariant => ({ postCopy: '', cta: '', hashtags: '', visualRecommendation: '' })
 const blankAssessment = (): BrandAssessment => ({ score: 0, status: 'Needs Attention', recommendation: 'Run a backend brand check after the platform copy and creative are ready.', checks: [], state: 'needs-recheck' })
 const blankSchedule = (): ContentSchedule => ({ date: '', time: '', status: 'Scheduled' })
+const WORKFLOW_RESUME_KEY = 'shifd.contentWorkflow.resume'
+
+function persistWorkflowResume(contentId: string, step: WorkflowStep) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    if (contentId) localStorage.setItem(WORKFLOW_RESUME_KEY, JSON.stringify({ contentId, step }))
+    else localStorage.removeItem(WORKFLOW_RESUME_KEY)
+  } catch {
+    // The backend remains the source of truth if browser storage is unavailable.
+  }
+}
+
+export function readWorkflowResume() {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const value = JSON.parse(localStorage.getItem(WORKFLOW_RESUME_KEY) ?? 'null') as { contentId?: unknown; step?: unknown } | null
+    if (typeof value?.contentId !== 'string' || !value.contentId) return null
+    const steps: WorkflowStep[] = ['brief', 'generate', 'adapt', 'creative', 'review', 'schedule']
+    return { contentId: value.contentId, step: steps.includes(value.step as WorkflowStep) ? value.step as WorkflowStep : null }
+  } catch {
+    return null
+  }
+}
 
 export function workflowStepForStatus(status: ContentLifecycleStatus): WorkflowStep | null {
   switch (status) {
@@ -79,6 +102,8 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   const loading = ref(false)
   const error = ref('')
   const loaded = computed(() => Boolean(canonical.value))
+
+  watch([contentId, activeStep], ([id, step]) => persistWorkflowResume(id, step), { flush: 'sync' })
 
   function applyCanonical(value: BackendContent, responseEtag?: string | null, preserveStep = false) {
     canonical.value = value
@@ -151,6 +176,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(linkedInSchedule, { date: '', time: '' })
     Object.assign(scheduledRecords, { instagram: blankSchedule(), linkedin: blankSchedule() })
     error.value = ''
+    persistWorkflowResume('', 'brief')
   }
 
   function startNewWorkflow() { reset() }

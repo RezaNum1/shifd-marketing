@@ -186,15 +186,6 @@ export type CreativeReferenceStyle = 'modern_minimal' | 'corporate' | 'editorial
 export type CreativeReferenceMood = 'professional' | 'confident' | 'approachable' | 'innovative' | 'clean'
 export type CreativeReferenceAspectRatio = 'portrait_4_5' | 'square_1_1' | 'landscape'
 export type CreativeReferenceFormat = 'single_image' | 'carousel'
-export type CreativeReferenceGenerationMode = 'original_design' | 'canva_ready'
-
-export interface CreativeReferenceFact {
-  id: string
-  title: string
-  fact: string
-  sources: Array<{ title: string; url: string }>
-}
-
 export interface BackendCreativeReference {
   id: string
   conceptIndex: number
@@ -228,7 +219,6 @@ export interface BackendCreativeReferenceBatch {
   requestedAspectRatio: CreativeReferenceAspectRatio
   actualGeneratedSize: string
   creativeFormat: CreativeReferenceFormat
-  generationMode: CreativeReferenceGenerationMode
   expectedReferenceCount: number
   additionalInstruction: string | null
   status: 'pending' | 'processing' | 'completed' | 'partial' | 'failed' | 'cancelled'

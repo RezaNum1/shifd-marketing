@@ -26,7 +26,7 @@ export async function recommendPublicationTimes(
   now = new Date(),
 ) {
   if (!provider.recommendPublicationTimes) throw aiNotConfigured()
-  const content = await readContent(prisma, companyId, contentId, { openaiModel: config.openaiModel }, now)
+  const content = await readContent(prisma, companyId, contentId, { openaiModel: config.openaiModel, aiProviderMode: config.aiProviderMode }, now)
   if (content.approval?.action !== 'approve') throw conflict('Approve the content before requesting publication recommendations.')
   if (!platforms.length || platforms.some((platform) => !content.variants.some((variant) => variant.platform === platform && variant.enabled))) {
     throw validationError('Choose enabled platforms for the publication recommendation.')

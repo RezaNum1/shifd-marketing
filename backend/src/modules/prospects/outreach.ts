@@ -8,6 +8,7 @@ import { PROSPECT_EMAIL_DRAFT_SYSTEM_PROMPT, renderProspectEmailDraftPrompt } fr
 import { ensureProspectEmailDraftPrompt } from '../ai/seed.js'
 import { calculateCost, mapProviderFailure, usageForDb, type RateSelection } from '../ai/service.js'
 import { AiProviderFailure, type AiProvider, type AiProviderResult } from '../ai/provider.js'
+import { aiExecution } from '../ai/provider.js'
 
 export const DRAFT_OBJECTIVES = ['introduce_shifd_labs', 'introduce_service', 'introduce_shifd_approval', 'explore_partnership', 'follow_up'] as const
 export const DRAFT_OFFERINGS = ['custom_web_application', 'mobile_application', 'workflow_digitalization', 'it_consultation', 'shifd_approval'] as const
@@ -57,7 +58,8 @@ export async function generateProspectEmailDraft(prisma: PrismaClient, config: A
   const claims = await getEligibleClaims(prisma, companyId, prospectId, input.claimIds)
   const promptVersion = await ensureProspectEmailDraftPrompt(prisma)
   const settings = await prisma.aiSettings.findUnique({ where: { companyId }, select: { modelId: true } })
-  const model = settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID
+  const runtime = aiExecution(provider, settings?.modelId ?? config.openaiModel ?? AI_MODEL_ID)
+  const model = runtime.model
   if (provider.isConfigured && !provider.isConfigured(model)) throw aiNotConfigured()
   const context = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true, description: true, industry: true, website: true, mission: true, vision: true, positioning: true, coreValueProposition: true, differentiators: true, customerSegments: true } })
   const product = input.offering === 'shifd_approval' ? await prisma.product.findFirst({ where: { companyId, name: { contains: 'Shifd Approval', mode: 'insensitive' }, status: 'active' }, include: { profile: true } }) : null
@@ -76,7 +78,7 @@ export async function generateProspectEmailDraft(prisma: PrismaClient, config: A
   const inputHash = requestHash(snapshot)
   const rate = await selectRate(prisma, model)
   const requestId = randomUUID()
-  await prisma.aiRequestLog.create({ data: { id: requestId, companyId, requestedBy: actorId, promptVersionId: promptVersion.id, module: 'M2', operation: PROSPECT_EMAIL_DRAFT_OPERATION, provider: AI_PROVIDER, model, mode: 'real', language: input.language, inputHash, inputSnapshot: snapshot as Prisma.InputJsonValue, status: 'pending', costBasis: rate ? rate as unknown as Prisma.InputJsonValue : Prisma.DbNull } })
+  await prisma.aiRequestLog.create({ data: { id: requestId, companyId, requestedBy: actorId, promptVersionId: promptVersion.id, module: 'M2', operation: PROSPECT_EMAIL_DRAFT_OPERATION, provider: runtime.provider, model, mode: runtime.mode, language: input.language, inputHash, inputSnapshot: snapshot as Prisma.InputJsonValue, status: 'pending', costBasis: rate ? rate as unknown as Prisma.InputJsonValue : Prisma.DbNull } })
   const startedAt = Date.now()
   let result: AiProviderResult | null = null
   try {

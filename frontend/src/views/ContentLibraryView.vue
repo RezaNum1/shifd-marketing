@@ -33,10 +33,6 @@ const status = ref('all')
 const openMenu = ref<string | null>(null)
 const archiveTarget = ref<ContentLibraryRecord | null>(null)
 const archiveModalOpen = ref(false)
-const deleteTarget = ref<ContentLibraryRecord | null>(null)
-const deleteModalOpen = ref(false)
-const deleteLoading = ref(false)
-const deleteError = ref('')
 
 const contextOptions: SelectOption[] = [
   { value: 'all', label: 'All Contexts' },
@@ -144,21 +140,6 @@ async function archiveRecord() {
   openMenu.value = null
 }
 
-async function deleteRecord() {
-  if (!deleteTarget.value || deleteLoading.value) return
-  deleteLoading.value = true
-  deleteError.value = ''
-  const deleted = await library.remove(deleteTarget.value.id)
-  deleteLoading.value = false
-  if (!deleted) {
-    deleteError.value = library.error || 'Content could not be deleted. Please try again.'
-    return
-  }
-  deleteTarget.value = null
-  deleteModalOpen.value = false
-  openMenu.value = null
-}
-
 function formatSchedule(record: ContentLibraryRecord) {
   const lifecycle = contentLifecycle(record)
   const publication = Object.values(lifecycle.publications)[0]
@@ -201,22 +182,23 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
     </BaseCard>
 
     <template v-if="library.loaded && hasRecords && filteredRecords.length">
-      <BaseTable :columns="columns" :rows="filteredRecords" caption="Content library records">
-        <template #cell-content="{ row }"><button class="library-title-cell" type="button" @click="openRecord(row)"><strong>{{ row.title }}</strong><span>{{ row.topic }}</span></button></template>
-        <template #cell-context="{ row }"><div class="library-context-cell"><strong>{{ contextName(row) }}</strong><span>{{ row.context === 'company' ? 'Company' : 'Product' }}</span></div></template>
-        <template #cell-pillar="{ row }"><span class="library-muted-cell">{{ row.pillar }}</span></template>
-        <template #cell-platforms="{ row }"><div class="platform-indicators" :aria-label="row.platforms.map((item) => item === 'instagram' ? 'Instagram' : 'LinkedIn').join(' and ')"><span v-for="item in row.platforms" :key="item" class="platform-indicator">{{ item === 'instagram' ? 'IG' : 'IN' }}</span></div></template>
-        <template #cell-status="{ row }"><StatusBadge :tone="statusTone(contentStatus(row))" dot>{{ contentStatus(row) }}</StatusBadge></template>
-        <template #cell-schedule="{ row }"><div class="library-context-cell"><strong>{{ formatSchedule(row) }}</strong><span v-if="!['Draft', 'Generated', 'Adapted'].includes(contentStatus(row))">{{ contentStatus(row) }}</span></div></template>
-        <template #cell-updated="{ row }"><span class="library-muted-cell">{{ row.updatedAt }}</span></template>
-        <template #cell-actions="{ row }"><div class="library-row-actions"><button type="button" class="library-action-trigger" :aria-label="`Actions for ${row.title}`" aria-haspopup="menu" :aria-expanded="openMenu === row.id" @click.stop="openMenu = openMenu === row.id ? null : row.id"><AppIcon name="settings" :size="17" /></button><div v-if="openMenu === row.id" class="library-action-menu" role="menu" :aria-label="`Actions for ${row.title}`"><button type="button" role="menuitem" @click="openRecord(row)"><AppIcon name="arrow-right" :size="15" /><span>Open</span></button><button v-if="canContinueEditing(row)" type="button" role="menuitem" @click="continueEditing(row)"><AppIcon name="edit" :size="15" /><span>Continue Editing</span></button><button type="button" role="menuitem" @click="duplicateRecord(row)"><AppIcon name="copy" :size="15" /><span>Duplicate</span></button><button v-if="contentStatus(row) !== 'Archived'" type="button" class="library-action-menu__archive" role="menuitem" @click="archiveTarget = row; archiveModalOpen = true; openMenu = null"><AppIcon name="archive" :size="15" /><span>Archive</span></button><button type="button" class="library-action-menu__delete" role="menuitem" @click="deleteTarget = row; deleteError = ''; deleteModalOpen = true; openMenu = null"><AppIcon name="trash" :size="15" /><span>Delete</span></button></div></div></template>
-      </BaseTable>
+      <div class="library-table-viewport">
+        <BaseTable :columns="columns" :rows="filteredRecords" caption="Content library records">
+          <template #cell-content="{ row }"><button class="library-title-cell" type="button" @click="openRecord(row)"><strong>{{ row.title }}</strong><span>{{ row.topic }}</span></button></template>
+          <template #cell-context="{ row }"><div class="library-context-cell"><strong>{{ contextName(row) }}</strong><span>{{ row.context === 'company' ? 'Company' : 'Product' }}</span></div></template>
+          <template #cell-pillar="{ row }"><span class="library-muted-cell">{{ row.pillar }}</span></template>
+          <template #cell-platforms="{ row }"><div class="platform-indicators" :aria-label="row.platforms.map((item) => item === 'instagram' ? 'Instagram' : 'LinkedIn').join(' and ')"><span v-for="item in row.platforms" :key="item" class="platform-indicator">{{ item === 'instagram' ? 'IG' : 'IN' }}</span></div></template>
+          <template #cell-status="{ row }"><StatusBadge :tone="statusTone(contentStatus(row))" dot>{{ contentStatus(row) }}</StatusBadge></template>
+          <template #cell-schedule="{ row }"><div class="library-context-cell"><strong>{{ formatSchedule(row) }}</strong><span v-if="!['Draft', 'Generated', 'Adapted'].includes(contentStatus(row))">{{ contentStatus(row) }}</span></div></template>
+          <template #cell-updated="{ row }"><span class="library-muted-cell">{{ row.updatedAt }}</span></template>
+          <template #cell-actions="{ row }"><div class="library-row-actions"><button type="button" class="library-action-trigger" :aria-label="`Actions for ${row.title}`" aria-haspopup="menu" :aria-expanded="openMenu === row.id" @click.stop="openMenu = openMenu === row.id ? null : row.id"><AppIcon name="settings" :size="17" /></button><div v-if="openMenu === row.id" class="library-action-menu" role="menu" :aria-label="`Actions for ${row.title}`"><button type="button" role="menuitem" @click="openRecord(row)"><AppIcon name="arrow-right" :size="15" /><span>Open</span></button><button v-if="canContinueEditing(row)" type="button" role="menuitem" @click="continueEditing(row)"><AppIcon name="edit" :size="15" /><span>Continue Editing</span></button><button type="button" role="menuitem" @click="duplicateRecord(row)"><AppIcon name="copy" :size="15" /><span>Duplicate</span></button><button v-if="contentStatus(row) !== 'Archived'" type="button" class="library-action-menu__archive" role="menuitem" @click="archiveTarget = row; archiveModalOpen = true; openMenu = null"><AppIcon name="archive" :size="15" /><span>Archive</span></button></div></div></template>
+        </BaseTable>
+      </div>
     </template>
     <BaseCard v-else-if="library.loaded && !hasRecords"><EmptyState icon="library" title="No content yet" description="Create your first marketing content and manage its journey from idea to publication."><BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton></EmptyState></BaseCard>
     <BaseCard v-else-if="library.loaded"><EmptyState icon="search" title="No content matches these filters." description="Try adjusting your search or filters to find a content record."><BaseButton variant="secondary" @click="clearFilters">Clear Filters</BaseButton></EmptyState></BaseCard>
 
     <BaseModal v-model="archiveModalOpen" title="Archive content" description="Archived content remains available through the Archived status filter."><p v-if="archiveTarget">Archive “{{ archiveTarget.title }}”?</p><template #footer><div class="modal-actions"><BaseButton variant="ghost" @click="archiveModalOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="archiveRecord">Archive</BaseButton></div></template></BaseModal>
-    <BaseModal v-model="deleteModalOpen" title="Delete content" description="This permanently deletes the content and its related history. This action cannot be undone."><p v-if="deleteTarget">Delete “{{ deleteTarget.title }}”?</p><InlineAlert v-if="deleteError" title="Could not delete content" tone="danger">{{ deleteError }}</InlineAlert><template #footer><div class="modal-actions"><BaseButton variant="ghost" :disabled="deleteLoading" @click="deleteModalOpen = false">Cancel</BaseButton><BaseButton variant="danger" :loading="deleteLoading" @click="deleteRecord">Delete</BaseButton></div></template></BaseModal>
   </div>
 </template>
 
@@ -226,6 +208,7 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 .library-summary__item span { color: var(--color-muted); font-size: 12px; }
 .library-summary__item strong { font-size: 20px; font-weight: 600; color: var(--color-text); }
 .library-controls :deep(.ui-card__body) { padding: 16px; }
+.library-table-viewport { max-height: 1000px; overflow-y: auto; }
 .library-controls__top { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .library-search { display: flex; align-items: center; gap: 8px; flex: 1 1 250px; min-height: 32px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-well); color: var(--color-muted); }
 .library-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; }
@@ -253,8 +236,6 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 .library-action-menu button:hover, .library-action-menu button:focus-visible { background: var(--color-well); outline: 0; }
 .library-action-menu .library-action-menu__archive { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--color-border); border-radius: 0 0 7px 7px; color: var(--color-danger); }
 .library-action-menu .library-action-menu__archive .app-icon { color: inherit; }
-.library-action-menu .library-action-menu__delete { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--color-border); border-radius: 0 0 7px 7px; color: var(--color-danger); }
-.library-action-menu .library-action-menu__delete .app-icon { color: inherit; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 1100px) { .library-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .library-filters { grid-template-columns: repeat(3, minmax(125px, 1fr)); } }
 @media (max-width: 700px) { .library-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .library-filters { grid-template-columns: repeat(2, minmax(125px, 1fr)); } }

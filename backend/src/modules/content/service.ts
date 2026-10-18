@@ -98,6 +98,7 @@ interface ContentListOptions {
 
 export interface ContentReadConfig {
   openaiModel: string | null
+  aiProviderMode?: 'mock' | 'openai' | undefined
   asOf?: Date
 }
 
@@ -396,7 +397,7 @@ export async function readContentFromDb(db: Db, companyId: string, contentId: st
   return mapContent(aggregate, freshness, approval, asOf)
 }
 
-export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions) {
+export async function listContents(prisma: PrismaClient, companyId: string, options: ContentListOptions, config: ContentReadConfig = { openaiModel: null }) {
   if (options.productId) await assertCompanyProduct(prisma, companyId, options.productId)
   const filters: Prisma.ContentWhereInput[] = [{ companyId }]
   if (options.contextType) filters.push({ contextType: options.contextType })
@@ -436,7 +437,7 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   })
   const complete = rows.filter(hasBrief)
   const projected = await Promise.all(complete.map(async (row) => {
-    const freshness = await assessmentFreshness(prisma, companyId, row, undefined)
+    const freshness = await assessmentFreshness(prisma, companyId, row, config)
     const approval = await currentApprovalProjection(prisma, companyId, row, freshness)
     const lifecycle = deriveLifecycleStatus({ ...row, ...lifecycleProjection(row) }, Boolean(approval))
     return { row, approvalValid: Boolean(approval), lifecycle }
@@ -452,7 +453,7 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   }
 }
 
-export async function updateContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, input: ContentPatchInput, actorId: string, requestId: string, config?: { openaiModel: string | null }) {
+export async function updateContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, input: ContentPatchInput, actorId: string, requestId: string, config?: ContentReadConfig) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const current = await getContentAggregate(tx, companyId, contentId)
@@ -501,7 +502,7 @@ export async function updateContent(prisma: PrismaClient, companyId: string, con
   })
 }
 
-export async function updateVariantCopy(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, platform: PlatformCode, input: VariantCopyInput, actorId: string, requestId: string, config?: { openaiModel: string | null }) {
+export async function updateVariantCopy(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, platform: PlatformCode, input: VariantCopyInput, actorId: string, requestId: string, config?: ContentReadConfig) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -529,7 +530,7 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
   })
 }
 
-export async function progressContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, stage: ProgressStage, actorId: string, requestId: string, config?: { openaiModel: string | null }) {
+export async function progressContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, stage: ProgressStage, actorId: string, requestId: string, config?: ContentReadConfig) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -545,7 +546,7 @@ export async function progressContent(prisma: PrismaClient, companyId: string, c
   })
 }
 
-export async function duplicateContent(prisma: PrismaClient, companyId: string, actorId: string, contentId: string, expectedVersion: number, idempotencyKey: string, requestId: string, config?: { openaiModel: string | null }) {
+export async function duplicateContent(prisma: PrismaClient, companyId: string, actorId: string, contentId: string, expectedVersion: number, idempotencyKey: string, requestId: string, config?: ContentReadConfig) {
   return executeIdempotent(prisma, {
     companyId,
     operation: `content.duplicate:${contentId}`,
@@ -614,7 +615,7 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
   })
 }
 
-export async function archiveContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, actorId: string, requestId: string, config?: { openaiModel: string | null }) {
+export async function archiveContent(prisma: PrismaClient, companyId: string, contentId: string, expectedVersion: number, actorId: string, requestId: string, config?: ContentReadConfig) {
   return prisma.$transaction(async (tx) => {
     await lockContent(tx, companyId, contentId, expectedVersion)
     const content = await getContentAggregate(tx, companyId, contentId)
@@ -770,7 +771,7 @@ export async function getContentAggregate(db: Db, companyId: string, contentId: 
  * the M4 input hash from live context and never changes the assessment row or
  * the current pointer while serving a Content read.
  */
-export async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { openaiModel: string | null }) {
+export async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { openaiModel: string | null; aiProviderMode?: 'mock' | 'openai' | undefined }) {
   const result = new Map<string, 'current' | 'stale'>()
   const assessed = content.variants.filter((variant) => Boolean(variant.currentAssessment))
   if (assessed.length === 0) return result
@@ -779,11 +780,12 @@ export async function assessmentFreshness(db: Db, companyId: string, content: Co
     const settings = await db.aiSettings.findUnique({ where: { companyId } })
     const prompt = await db.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
     if (!settings || !prompt) throw new Error('M4 projection inputs are incomplete.')
-    const model = settings.modelId ?? config?.openaiModel ?? settings.modelDisplayName
+    const usingMock = config?.aiProviderMode === 'mock'
+    const model = usingMock ? 'deterministic-fixtures' : settings.modelId ?? config?.openaiModel ?? settings.modelDisplayName
     const execution = {
-      provider: AI_PROVIDER,
+      provider: usingMock ? 'mock' : AI_PROVIDER,
       model,
-      mode: settings.mode,
+      mode: usingMock ? 'demo' : settings.mode,
       generationLanguage: settings.generationLanguage,
       settingsVersion: settings.version,
       promptVersion: {
@@ -875,12 +877,12 @@ export async function currentApprovalProjection(db: Db, companyId: string, conte
   return await approvalIsCurrent(db, companyId, content, freshness) ? mapApprovalAction(content.currentApproval!) : null
 }
 
-export async function assertReviewUnlockedForContent(db: Db, companyId: string, content: CompleteContentRow, config?: { openaiModel: string | null }) {
+export async function assertReviewUnlockedForContent(db: Db, companyId: string, content: CompleteContentRow, config?: ContentReadConfig) {
   const freshness = await assessmentFreshness(db, companyId, content, config)
   if (await approvalIsCurrent(db, companyId, content, freshness)) throw reviewLocked()
 }
 
-export async function assertReviewUnlocked(db: Db, companyId: string, contentId: string, config?: { openaiModel: string | null }) {
+export async function assertReviewUnlocked(db: Db, companyId: string, contentId: string, config?: ContentReadConfig) {
   const content = await getContentAggregate(db, companyId, contentId)
   await assertReviewUnlockedForContent(db, companyId, content, config)
   return content

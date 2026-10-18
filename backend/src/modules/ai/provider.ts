@@ -18,6 +18,9 @@ export interface AiProviderResult {
 }
 
 export interface AiProvider {
+  readonly providerId?: string
+  readonly modelId?: string
+  readonly executionMode?: 'real' | 'demo'
   generate(request: AiProviderRequest): Promise<AiProviderResult>
   isConfigured?(model?: string): boolean
 }
@@ -55,8 +58,10 @@ export interface TopicDiscoveryProviderResult {
 }
 
 export interface TopicDiscoveryProvider {
+  readonly providerId?: string
+  readonly modelId?: string
+  readonly executionMode?: 'real' | 'demo'
   discoverTopics(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
-  discoverCreativeReferenceFacts?(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
   recommendPublicationTimes?(request: TopicDiscoveryProviderRequest): Promise<TopicDiscoveryProviderResult>
   isConfigured?(model?: string): boolean
 }
@@ -64,6 +69,9 @@ export interface TopicDiscoveryProvider {
 export interface ProspectResearchProviderRequest extends TopicDiscoveryProviderRequest {}
 export interface ProspectResearchProviderResult extends TopicDiscoveryProviderResult {}
 export interface ProspectResearchProvider {
+  readonly providerId?: string
+  readonly modelId?: string
+  readonly executionMode?: 'real' | 'demo'
   researchProspect(request: ProspectResearchProviderRequest): Promise<ProspectResearchProviderResult>
   isConfigured?(model?: string): boolean
 }
@@ -74,7 +82,6 @@ export interface AiImageProviderRequest {
   quality: 'low' | 'medium' | 'high'
   size: '1024x1024' | '1024x1536' | '1536x1024'
   outputFormat: 'png'
-  background?: 'transparent'
   timeoutMs: number
   signal?: AbortSignal | undefined
 }
@@ -107,8 +114,19 @@ export interface AiProviderResponseDiagnostics {
 }
 
 export interface AiImageProvider {
+  readonly providerId?: string
+  readonly modelId?: string
+  readonly executionMode?: 'real' | 'demo'
   generateImage(request: AiImageProviderRequest): Promise<AiImageProviderResult>
   isConfigured?(model?: string): boolean
+}
+
+export function aiExecution(provider: { providerId?: string; modelId?: string; executionMode?: 'real' | 'demo' }, requestedModel: string) {
+  return {
+    provider: provider.providerId ?? 'openai',
+    model: provider.modelId ?? requestedModel,
+    mode: provider.executionMode ?? 'real',
+  }
 }
 
 export type AiProviderFailureKind = 'timeout' | 'rate_limit' | 'provider' | 'not_configured' | 'invalid_response'

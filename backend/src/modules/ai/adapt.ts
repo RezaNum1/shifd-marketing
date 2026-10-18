@@ -24,7 +24,7 @@ import {
   calculateCost, mapAiRequest, mapPromptVersion, mapProviderFailure, usageForDb,
   type AiRequestDto, type PromptVersionDto, type RateSelection,
 } from './service.js'
-import { AiProviderFailure, type AiProvider, type AiProviderResult } from './provider.js'
+import { AiProviderFailure, aiExecution, type AiProvider, type AiProviderResult } from './provider.js'
 
 interface PreparedAdaptation {
   aiRequestId: string
@@ -121,7 +121,7 @@ export async function adaptContent(
           promptVersionId: input.promptVersionId,
           module: M3_MODULE,
           operation: M3_OPERATION,
-          provider: AI_PROVIDER,
+          provider: input.provider,
           model: input.model,
           mode: input.mode,
           language: input.language,
@@ -265,8 +265,9 @@ async function buildAdaptationInput(
   const prompt = await tx.promptVersion.findFirst({ where: { module: M3_MODULE, operation: M3_OPERATION, status: 'active' } })
   if (!prompt) throw inputNotReady(['promptVersion'])
   const configuredModel = settings.modelId ?? config.openaiModel ?? undefined
-  const model = configuredModel ?? settings.modelDisplayName
-  const mode = settings.mode as AiMode
+  const runtime = aiExecution(provider, configuredModel ?? settings.modelDisplayName)
+  const model = runtime.model
+  const mode = runtime.mode as AiMode
   const language = settings.generationLanguage
   if (!comparisonOnly && provider.isConfigured && !provider.isConfigured(configuredModel)) throw aiNotConfigured()
 
@@ -287,7 +288,7 @@ async function buildAdaptationInput(
     enabled: target.enabled,
   }
   const execution = {
-    provider: AI_PROVIDER,
+    provider: runtime.provider,
     model,
     mode,
     generationLanguage: language,
@@ -367,7 +368,7 @@ async function buildAdaptationInput(
     settingsVersion: settings.version,
     promptVersionId: prompt.id,
     promptVersion: mapPromptVersion(prompt),
-    provider: AI_PROVIDER,
+    provider: runtime.provider,
     model,
     mode,
     language,
@@ -470,7 +471,7 @@ async function finalizeAdaptation(
       inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
       estimatedCostUsd: estimatedCost, providerRequestId: providerResult.providerRequestId,
     } })
-    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel })
+    const content = await readContentFromDb(tx, companyId, prepared.contentId, { openaiModel: config.openaiModel, aiProviderMode: config.aiProviderMode })
     const log = await tx.aiRequestLog.findUnique({ where: { id: prepared.aiRequestId }, include: { promptVersion: true } })
     if (!log) throw conflict('AI request evidence could not be finalized.')
     const body: AdaptResponse = { data: { content, request: mapAiRequest(log) } }

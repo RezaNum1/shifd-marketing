@@ -19,7 +19,7 @@ import BaseTextarea from "../components/ui/BaseTextarea.vue";
 import InfoTooltip from "../components/ui/InfoTooltip.vue";
 import InlineAlert from "../components/ui/InlineAlert.vue";
 import StatusBadge from "../components/ui/StatusBadge.vue";
-import { useContentWorkflowStore } from "../stores/contentWorkflow";
+import { readWorkflowResume, useContentWorkflowStore } from "../stores/contentWorkflow";
 import { useContentIdeasStore } from "../stores/contentIdeas";
 import { useCompanyContextStore } from "../stores/companyContext";
 import { useProductsStore } from "../stores/products";
@@ -27,15 +27,14 @@ import type { ContentIdea } from "../types/contentIdea";
 import { useRouter } from "vue-router";
 import ContentWorkflowStepper from "../components/content/ContentWorkflowStepper.vue";
 import CanvaDesignLinkPanel from "../components/content/CanvaDesignLinkPanel.vue";
-import CanvaReadyComposer from "../components/content/CanvaReadyComposer.vue";
 import CreativeThumbnail from "../components/content/CreativeThumbnail.vue";
 import BrandAssessmentCard from "../components/content/BrandAssessmentCard.vue";
 import VisualDirectionCard from "../components/content/VisualDirectionCard.vue";
 import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
 import * as creativeReferenceApi from "../api/creativeReferences";
 import * as schedulingApi from "../api/scheduling";
-import { createRequestKey, errorMessage, isApiError } from "../api/client";
-import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFact, CreativeReferenceFormat, CreativeReferenceGenerationMode, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
+import { createRequestKey, errorMessage } from "../api/client";
+import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
 
 const ui = useUiStore();
 const router = useRouter();
@@ -51,6 +50,7 @@ const brief = workflow.brief;
 const activeStep = toRef(workflow, "activeStep");
 const isSaving = ref(false);
 const savedAt = ref<string | null>(null);
+const creativeSavedAt = ref<string | null>(null);
 const isEditingDraft = ref(false);
 const generatedContent = workflow.generatedContent;
 const visualDirection = workflow.visualDirection;
@@ -86,23 +86,14 @@ const publicationRecommendationsError = ref("");
 const creativeReferenceBatches = ref<BackendCreativeReferenceBatch[]>([]);
 const creativeReferencePlatform = ref<CreativeReferencePlatform>("instagram");
 const creativeReferenceFormat = ref<CreativeReferenceFormat>("single_image");
-const creativeReferenceGenerationMode = ref<CreativeReferenceGenerationMode>("original_design");
 const creativeReferenceSlideCount = ref("5");
 const creativeReferenceStyle = ref<CreativeReferenceStyle>("modern_minimal");
 const creativeReferenceMood = ref<CreativeReferenceMood>("professional");
 const creativeReferenceAspectRatio = ref<CreativeReferenceAspectRatio>("portrait_4_5");
 const creativeReferenceInstruction = ref("");
-const creativeReferenceFacts = ref<CreativeReferenceFact[]>([]);
-const creativeReferenceFactConcern = ref("");
-const selectedCreativeReferenceFactIds = ref<string[]>([]);
-const creativeReferenceFactsLoading = ref(false);
-const creativeReferenceFactsError = ref("");
 const creativeReferenceLoading = ref(false);
 const creativeReferenceError = ref("");
 const creativeReferenceAbortController = ref<AbortController | null>(null);
-// Stay safely disabled until the backend reports that its configured model
-// supports transparent image output.
-const canvaReadyUnavailable = ref(true);
 const selectedCreativeReferenceId = ref<string | null>(null);
 const useSameSchedule = toRef(workflow, "useSameSchedule");
 const instagramSchedule = workflow.instagramSchedule;
@@ -145,6 +136,21 @@ const selectedProduct = computed(() =>
   productsStore.getProduct(brief.product),
 );
 const topicLength = computed(() => brief.topic.length);
+const INSTAGRAM_CAPTION_MAX_LENGTH = 2200;
+const instagramCaptionCharacterCount = computed(() =>
+  instagramContent.caption.length +
+  instagramContent.hashtags.length +
+  (instagramContent.caption.length && instagramContent.hashtags.length ? 1 : 0),
+);
+const instagramCaptionMaxLength = computed(() =>
+  Math.max(0, INSTAGRAM_CAPTION_MAX_LENGTH - instagramContent.hashtags.length - (instagramContent.hashtags.length ? 1 : 0)),
+);
+const instagramHashtagsMaxLength = computed(() =>
+  Math.max(0, INSTAGRAM_CAPTION_MAX_LENGTH - instagramContent.caption.length - (instagramContent.caption.length ? 1 : 0)),
+);
+const instagramCaptionWithinLimit = computed(
+  () => !enabledPlatforms.instagram || instagramCaptionCharacterCount.value <= INSTAGRAM_CAPTION_MAX_LENGTH,
+);
 const selectedProductName = computed(
   () => selectedProduct.value?.name ?? "No product selected",
 );
@@ -189,7 +195,7 @@ const generatedVariant = computed(() => ({
   label: generatedContent.title ? "Backend generation" : "Awaiting generation",
 }));
 const canContinueToCreative = computed(
-  () => enabledPlatforms.instagram || enabledPlatforms.linkedin,
+  () => (enabledPlatforms.instagram || enabledPlatforms.linkedin) && instagramCaptionWithinLimit.value,
 );
 const creativeStatusOptions = [
   { value: "not-started", label: "Not Started" },
@@ -305,6 +311,7 @@ const canApproveContent = computed(
   () =>
     canContinueToReview.value &&
     canContinueToCreative.value &&
+    instagramCaptionWithinLimit.value &&
     reviewChecklistComplete.value &&
     !reviewNeedsRecheck.value &&
     reviewOverridesComplete.value,
@@ -313,6 +320,7 @@ const approvalPendingItems = computed(() => [
   ...(!reviewChecklistComplete.value ? [`Human review: ${reviewChecklistCount.value} of 5 checks complete`] : []),
   ...(reviewNeedsRecheck.value ? ["Re-check edited platform content"] : []),
   ...(!reviewOverridesComplete.value ? ["Resolve alignment warnings with a justification"] : []),
+  ...(!instagramCaptionWithinLimit.value ? ["Keep the Instagram caption and hashtags within 2,200 characters"] : []),
   ...(!canContinueToReview.value ? ["Complete the required creative assets"] : []),
 ]);
 const approvedTimestampLabel = computed(
@@ -505,9 +513,7 @@ async function loadCreativeReferences() {
   try {
     const result = await creativeReferenceApi.listCreativeReferences(workflow.contentId);
     creativeReferenceBatches.value = result.data.batches;
-    canvaReadyUnavailable.value = !result.data.canvaReadyAvailable;
     if (result.data.batches[0]) applyCreativeReferenceBatchSettings(result.data.batches[0]);
-    else creativeReferenceGenerationMode.value = "original_design";
     const selected = result.data.batches.flatMap((batch) => batch.references).find((reference) => reference.selected);
     selectedCreativeReferenceId.value = selected?.id ?? null;
     const pending = result.data.batches.find((batch) => ['pending', 'processing'].includes(batch.status));
@@ -530,7 +536,6 @@ async function loadCreativeReferences() {
 function applyCreativeReferenceBatchSettings(batch: BackendCreativeReferenceBatch) {
   creativeReferencePlatform.value = batch.platform;
   creativeReferenceFormat.value = batch.creativeFormat;
-  creativeReferenceGenerationMode.value = canvaReadyUnavailable.value ? "original_design" : batch.generationMode ?? "original_design";
   creativeReferenceSlideCount.value = String(batch.expectedReferenceCount);
   creativeReferenceStyle.value = batch.style;
   creativeReferenceMood.value = batch.mood;
@@ -543,22 +548,6 @@ async function retryCreativeReferenceBatch() {
   if (!batch || batch.creativeFormat !== "carousel") return;
   applyCreativeReferenceBatchSettings(batch);
   await generateCreativeReferences();
-}
-
-async function researchCreativeReferenceFacts() {
-  if (creativeReferenceFactsLoading.value || !workflow.contentId) return;
-  creativeReferenceFactsLoading.value = true;
-  creativeReferenceFactsError.value = "";
-  try {
-    const result = await creativeReferenceApi.discoverCreativeReferenceFacts(workflow.contentId, creativeReferenceFactConcern.value.trim());
-    creativeReferenceFacts.value = result.data.facts;
-    selectedCreativeReferenceFactIds.value = [];
-    if (!result.data.facts.length) creativeReferenceFactsError.value = "No source-backed unique facts were found for this topic. Try refining the content topic.";
-  } catch (error) {
-    creativeReferenceFactsError.value = errorMessage(error, "Unable to research facts for this topic.");
-  } finally {
-    creativeReferenceFactsLoading.value = false;
-  }
 }
 
 function updateCanvaDesignLink(link: NonNullable<typeof workflow.canonical>['canvaDesignLink'] | null) {
@@ -584,14 +573,12 @@ async function generateCreativeReferences() {
   try {
     const result = await creativeReferenceApi.createCreativeReferences(workflow.contentId, {
       platform: creativeReferencePlatform.value,
-      generationMode: creativeReferenceGenerationMode.value,
       format: creativeReferenceFormat.value,
       slideCount: Number(creativeReferenceSlideCount.value),
       style: creativeReferenceStyle.value,
       mood: creativeReferenceMood.value,
       aspectRatio: creativeReferenceAspectRatio.value,
       additionalInstruction: creativeReferenceInstruction.value.trim() || null,
-      selectedFacts: creativeReferenceFacts.value.filter((fact) => selectedCreativeReferenceFactIds.value.includes(fact.id)),
     }, createRequestKey("creative-references.create"));
     creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
     applyCreativeReferenceBatchSettings(result.data.batch);
@@ -606,15 +593,11 @@ async function generateCreativeReferences() {
       creativeReferenceError.value = "Generation failed. Retry the batch; completed slides remain saved.";
       return;
     }
-    ui.notify(finished.status === "partial" ? `${finished.references.length} of ${expected} visual references were generated.` : finished.generationMode === "canva_ready" ? "Canva-ready illustration assets are ready." : finished.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", finished.status === "partial" ? "warning" : "success");
+    ui.notify(finished.status === "partial" ? `${finished.references.length} of ${expected} visual references were generated.` : finished.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", finished.status === "partial" ? "warning" : "success");
   } catch (error) {
     if (controller.signal.aborted) {
       ui.notify("Stopped monitoring. Generation continues in the background; reopen this page to check its status.", "info");
       return;
-    }
-    if (isApiError(error) && error.code === "CANVA_READY_UNSUPPORTED") {
-      canvaReadyUnavailable.value = true;
-      creativeReferenceGenerationMode.value = "original_design";
     }
     creativeReferenceError.value = errorMessage(error, "Unable to generate visual references.");
   } finally {
@@ -637,7 +620,6 @@ async function monitorCreativeReferenceBatch(contentId: string, batchId: string,
     if (signal.aborted) return null;
     const result = await creativeReferenceApi.listCreativeReferences(contentId);
     creativeReferenceBatches.value = result.data.batches;
-    canvaReadyUnavailable.value = !result.data.canvaReadyAvailable;
     const updated = result.data.batches.find((batch) => batch.id === batchId);
     if (updated && terminalStatuses.has(updated.status)) return updated;
   }
@@ -745,6 +727,29 @@ async function continueToReview() {
   if (!(await workflow.saveEditorial()) || !(await workflow.progress("ready_for_review"))) return;
   creativeValidation.value = "";
   activeStep.value = "review";
+}
+
+async function saveCreativeProgress() {
+  if (isSaving.value || workflow.loading) return;
+  if (!workflow.contentId) {
+    creativeValidation.value = "Create the Content brief before saving creative progress.";
+    return;
+  }
+  isSaving.value = true;
+  creativeValidation.value = "";
+  try {
+    if (enabledPlatforms.instagram && !(await workflow.attachCreative("instagram", instagramAssets.value))) return;
+    if (enabledPlatforms.linkedin) {
+      if (!reuseInstagramCreative.value && !(await workflow.attachCreative("linkedin", linkedInAssets.value))) return;
+      if (!(await workflow.setReuseCreative(reuseInstagramCreative.value))) return;
+    }
+    if (!(await workflow.saveEditorial())) return;
+    if (!(await workflow.progress("creative_in_progress"))) return;
+    creativeSavedAt.value = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date());
+    ui.notify("Creative progress saved. You can continue from this step later.", "success");
+  } finally {
+    isSaving.value = false;
+  }
 }
 
 function markAssessmentNeedsRecheck(platform: "instagram" | "linkedin") {
@@ -1033,7 +1038,18 @@ async function continueToGenerate() {
 onMounted(() => {
   syncLoadingLock(workflow.loading);
   void Promise.all([ideas.load(), productsStore.load(), companyContext.load()]);
-  if (workflow.contentId) void loadCreativeReferences();
+  if (workflow.contentId) {
+    void loadCreativeReferences();
+  } else {
+    const resume = readWorkflowResume();
+    if (resume) {
+      void workflow.load(resume.contentId).then((content) => {
+        if (!content) return;
+        if (resume.step) activeStep.value = resume.step;
+        if (activeStep.value === "creative") void loadCreativeReferences();
+      });
+    }
+  }
 });
 </script>
 
@@ -1100,10 +1116,10 @@ onMounted(() => {
             </template>
             <div class="generated-fields" :class="{ 'is-editing': isEditingDraft }">
               <BaseInput id="generated-title" v-model="generatedContent.title" label="Title" :number="1" />
-              <BaseTextarea v-model="generatedContent.coreMessage" label="Core Message" :rows="2" :number="2" />
-              <BaseTextarea v-model="generatedContent.hook" label="Hook" :rows="2" :number="3" />
-              <BaseTextarea v-model="generatedContent.body" label="Body" :rows="7" :number="4" />
-              <BaseTextarea v-model="generatedContent.cta" label="CTA" :rows="2" :number="5" />
+              <BaseTextarea v-model="generatedContent.coreMessage" label="Core Message" :rows="2" :number="2" auto-resize />
+              <BaseTextarea v-model="generatedContent.hook" label="Hook" :rows="2" :number="3" auto-resize />
+              <BaseTextarea v-model="generatedContent.body" label="Body" :rows="7" :number="4" auto-resize />
+              <BaseTextarea v-model="generatedContent.cta" label="CTA" :rows="2" :number="5" auto-resize />
             </div>
             <InlineAlert title="Backend generation" tone="info">
               This draft is generated from the selected Brief by the configured backend AI service.
@@ -1161,10 +1177,10 @@ onMounted(() => {
               </BaseButton>
             </div>
             <div class="adapt-fields">
-              <BaseTextarea id="instagram-caption" v-model="instagramContent.caption" label="Caption" :rows="7" :disabled="!enabledPlatforms.instagram" :number="1" />
+              <BaseTextarea id="instagram-caption" v-model="instagramContent.caption" label="Caption" :rows="7" :disabled="!enabledPlatforms.instagram" :number="1" :hint="`${instagramCaptionCharacterCount} / 2,200 characters including hashtags`" :maxlength="instagramCaptionMaxLength" auto-resize />
               <BaseInput v-model="instagramContent.cta" label="CTA" :disabled="!enabledPlatforms.instagram" :number="2" />
-              <BaseTextarea v-model="instagramContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.instagram" :number="3" />
-              <BaseTextarea v-model="instagramContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.instagram" :number="4" />
+              <BaseTextarea v-model="instagramContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.instagram" :number="3" :maxlength="instagramHashtagsMaxLength" auto-resize />
+              <BaseTextarea v-model="instagramContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.instagram" :number="4" auto-resize />
             </div>
             <BaseButton variant="secondary" :disabled="!enabledPlatforms.instagram" @click="regenerateInstagram">
               <AppIcon name="sparkles" :size="16" />Regenerate Instagram
@@ -1190,10 +1206,10 @@ onMounted(() => {
               </BaseButton>
             </div>
             <div class="adapt-fields">
-              <BaseTextarea id="linkedin-post-copy" v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :disabled="!enabledPlatforms.linkedin" :number="1" />
+              <BaseTextarea id="linkedin-post-copy" v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :disabled="!enabledPlatforms.linkedin" :number="1" auto-resize />
               <BaseInput v-model="linkedInContent.cta" label="CTA" :disabled="!enabledPlatforms.linkedin" :number="2" />
-              <BaseTextarea v-model="linkedInContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.linkedin" :number="3" />
-              <BaseTextarea v-model="linkedInContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.linkedin" :number="4" />
+              <BaseTextarea v-model="linkedInContent.hashtags" label="Suggested Hashtags" :rows="2" :disabled="!enabledPlatforms.linkedin" :number="3" auto-resize />
+              <BaseTextarea v-model="linkedInContent.visualRecommendation" label="Visual Recommendation" :rows="4" :disabled="!enabledPlatforms.linkedin" :number="4" auto-resize />
             </div>
             <BaseButton variant="secondary" :disabled="!enabledPlatforms.linkedin" @click="regenerateLinkedIn">
               <AppIcon name="sparkles" :size="16" />Regenerate LinkedIn
@@ -1202,8 +1218,11 @@ onMounted(() => {
         </BaseCard>
       </div>
 
-      <InlineAlert v-if="!canContinueToCreative" title="Select at least one platform" tone="warning">
+      <InlineAlert v-if="!enabledPlatforms.instagram && !enabledPlatforms.linkedin" title="Select at least one platform" tone="warning">
         Enable Instagram or LinkedIn before continuing to Creative.
+      </InlineAlert>
+      <InlineAlert v-else-if="!instagramCaptionWithinLimit" title="Instagram caption is too long" tone="warning">
+        Caption and hashtags contain {{ instagramCaptionCharacterCount }} characters. Keep the combined total at or below 2,200.
       </InlineAlert>
 
       <div class="adapt-footer">
@@ -1260,11 +1279,6 @@ onMounted(() => {
       </div>
 
       <BaseCard title="AI Visual Reference" description="Generate visual concepts as design references before creating the final creative in Canva.">
-        <fieldset class="creative-generation-mode">
-          <legend>Generation mode</legend>
-          <label><input v-model="creativeReferenceGenerationMode" type="radio" value="original_design" :disabled="creativeReferenceLoading || isApproved" /><span><strong>Original Design</strong><small>Keep generating complete visual references as before.</small></span></label>
-          <label><input v-model="creativeReferenceGenerationMode" type="radio" value="canva_ready" :disabled="creativeReferenceLoading || isApproved || canvaReadyUnavailable" /><span><strong>Canva-Ready Design <StatusBadge tone="info">Experimental</StatusBadge></strong><small>{{ canvaReadyUnavailable ? 'Unavailable: the configured image model does not support transparent backgrounds.' : 'Generate a transparent hero illustration, then compose editable layers locally.' }}</small></span></label>
-        </fieldset>
         <div class="creative-reference-form">
           <BaseSelect v-model="creativeReferencePlatform" label="Platform" :options="creativeReferencePlatformOptions" />
           <BaseSelect v-model="creativeReferenceFormat" label="Content format" :options="creativeReferenceFormatOptions" />
@@ -1274,36 +1288,11 @@ onMounted(() => {
           <BaseSelect v-model="creativeReferenceAspectRatio" label="Image ratio" :options="creativeReferenceAspectRatioOptions" />
           <BaseTextarea v-model="creativeReferenceInstruction" label="Custom design concerns and visual direction (optional)" hint="Add any specific visual concerns, elements to include or avoid, layout preferences, or brand details." :rows="5" maxlength="1500" placeholder="Example: Use a clean white background, vary the visual metaphor across slides, keep numbering consistent, and reserve space for the Shifd Labs logo on the final slide." />
         </div>
-        <section class="creative-reference-facts" aria-labelledby="creative-reference-facts-title">
-          <div class="creative-reference-facts-heading">
-            <div>
-              <h3 id="creative-reference-facts-title">Unique facts for this content</h3>
-              <p>Research source-backed facts related to “{{ brief.topic || 'your content topic' }}”. Add a concern to guide the search, then select facts for the visual concepts. If none are selected, they will not be used.</p>
-            </div>
-            <BaseButton variant="secondary" size="compact" :loading="creativeReferenceFactsLoading" :disabled="creativeReferenceFactsLoading || !workflow.contentId || !brief.topic.trim() || isApproved" @click="researchCreativeReferenceFacts">
-              <AppIcon name="search" :size="15" />{{ creativeReferenceFacts.length ? 'Research again' : 'Find unique facts' }}
-            </BaseButton>
-          </div>
-          <BaseTextarea v-model="creativeReferenceFactConcern" label="Research concern (optional)" hint="Tell AI which angle, question, audience concern, or kind of evidence to prioritize alongside the content context." :rows="2" maxlength="1500" placeholder="Example: Find recent evidence about how context affects AI answer quality, especially for small business teams." :disabled="creativeReferenceFactsLoading || isApproved" />
-          <InlineAlert v-if="creativeReferenceFactsError" tone="warning">{{ creativeReferenceFactsError }}</InlineAlert>
-          <div v-if="creativeReferenceFactsLoading" class="creative-reference-facts-empty" role="status">Searching reliable sources and checking facts…</div>
-          <div v-else-if="creativeReferenceFacts.length" class="creative-reference-facts-list">
-            <label v-for="fact in creativeReferenceFacts" :key="fact.id" class="creative-reference-fact" :class="{ 'is-selected': selectedCreativeReferenceFactIds.includes(fact.id) }">
-              <input v-model="selectedCreativeReferenceFactIds" type="checkbox" :value="fact.id" :disabled="isApproved" />
-              <span class="creative-reference-fact-copy">
-                <strong>{{ fact.title }}</strong>
-                <span>{{ fact.fact }}</span>
-                <span class="creative-reference-fact-sources">Sources: <a v-for="(source, index) in fact.sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }}<span v-if="index < fact.sources.length - 1"> · </span></a></span>
-              </span>
-            </label>
-          </div>
-          <div v-else class="creative-reference-facts-empty">Fact research is optional. Find facts to explore source-backed details, then select only the ones you want included.</div>
-        </section>
         <div class="creative-reference-actions">
           <div>
             <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
-            <p v-if="creativeReferenceFormat === 'carousel'">{{ creativeReferenceGenerationMode === 'canva_ready' ? 'Generate one transparent hero illustration per slide; backgrounds and editable text are composed locally.' : 'Generate one image per slide using the content copy as the narrative source. All slides share the same grid, color palette, typography, and visual language.' }} This uses {{ creativeReferenceSlideCount }} image requests.</p>
-            <p v-else>{{ creativeReferenceGenerationMode === 'canva_ready' ? 'Generate three transparent hero illustrations, then build native editable background, decoration, and typography layers locally.' : 'Generate three single-image directions: educational, product showcase, and process insight. Each includes Shifd Labs brand guidance and Canva asset search terms.' }} This uses three image requests.</p>
+            <p v-if="creativeReferenceFormat === 'carousel'">Generate one image per slide using the content copy as the narrative source. All slides share the same grid, color palette, typography, and visual language. This uses {{ creativeReferenceSlideCount }} image requests.</p>
+            <p v-else>Generate three single-image directions: educational, product showcase, and process insight. Each includes Shifd Labs brand guidance and Canva asset search terms. This uses three image requests.</p>
           </div>
           <BaseButton class="creative-reference-generate-button" size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
             <AppIcon name="sparkles" :size="17" />{{ creativeReferenceActionLabel }}
@@ -1338,10 +1327,9 @@ onMounted(() => {
           </div>
           <div class="creative-reference-grid" :class="{ 'is-carousel': latestCreativeReferenceBatch.creativeFormat === 'carousel' }">
             <article v-for="reference in latestCreativeReferenceBatch.references" :key="reference.id" class="creative-reference-card" :class="{ 'is-selected': reference.selected || selectedCreativeReferenceId === reference.id }">
-              <img v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" :src="reference.imageUrl" :alt="`${reference.conceptName} visual reference`" :style="{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : '4 / 5' }" class="creative-reference-image" />
+              <img :src="reference.imageUrl" :alt="`${reference.conceptName} visual reference`" :style="{ aspectRatio: reference.width && reference.height ? `${reference.width} / ${reference.height}` : '4 / 5' }" class="creative-reference-image" />
               <div class="creative-reference-card-body">
                 <div class="creative-reference-card-heading"><div><strong>{{ latestCreativeReferenceBatch.creativeFormat === 'carousel' ? `Slide ${reference.slideNumber ?? reference.conceptIndex + 1}: ${reference.conceptName}` : reference.conceptName }}</strong><small class="creative-reference-template-type">{{ latestCreativeReferenceBatch.creativeFormat === 'carousel' ? `${reference.slideNumber ?? reference.conceptIndex + 1} of ${latestCreativeReferenceBatch.expectedReferenceCount} · ${reference.templateType === 'process_carousel' ? 'Carousel sequence' : 'Slide'}` : reference.templateType === "educational" ? "Educational content" : reference.templateType === "product_showcase" ? "Product showcase" : reference.templateType === "process_insight" ? "Process insight" : "Design reference" }}</small></div><StatusBadge v-if="latestCreativeReferenceBatch.creativeFormat !== 'carousel' && (reference.selected || selectedCreativeReferenceId === reference.id)" tone="success">Selected Reference</StatusBadge></div>
-                <CanvaReadyComposer v-if="latestCreativeReferenceBatch.generationMode === 'canva_ready'" :reference="reference" :headline="workflow.generatedContent.title" :subtitle="reference.slideCopy || workflow.generatedContent.coreMessage" :cta="workflow.generatedContent.cta" :slide-number="latestCreativeReferenceBatch.creativeFormat === 'carousel' ? reference.slideNumber : null" :slide-count="latestCreativeReferenceBatch.expectedReferenceCount" />
                 <dl class="creative-reference-notes">
                   <div v-if="reference.slideCopy"><dt>Slide message</dt><dd>{{ reference.slideCopy }}</dd></div>
                   <div><dt>Rationale</dt><dd>{{ reference.rationale }}</dd></div>
@@ -1355,8 +1343,8 @@ onMounted(() => {
                 <div class="creative-reference-card-actions">
                   <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat !== 'carousel'" size="compact" :disabled="reference.selected || selectedCreativeReferenceId === reference.id" @click="selectCreativeReference(reference)">{{ reference.selected || selectedCreativeReferenceId === reference.id ? "Selected" : "Select reference" }}</BaseButton>
                   <BaseButton variant="ghost" size="compact" @click="copyDesignNotes(reference)">Copy Canva Brief</BaseButton>
-                  <BaseButton v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" variant="ghost" size="compact" @click="copyReferenceImage(reference)">Copy Image</BaseButton>
-                  <BaseButton v-if="latestCreativeReferenceBatch.generationMode !== 'canva_ready'" variant="ghost" size="compact" @click="downloadReferenceImage(reference)">Download PNG</BaseButton>
+                  <BaseButton variant="ghost" size="compact" @click="copyReferenceImage(reference)">Copy Image</BaseButton>
+                  <BaseButton variant="ghost" size="compact" @click="downloadReferenceImage(reference)">Download PNG</BaseButton>
                 </div>
               </div>
             </article>
@@ -1460,7 +1448,11 @@ onMounted(() => {
 
       <div class="creative-footer">
         <BaseButton variant="ghost" @click="activeStep = 'adapt'"><AppIcon name="arrow-left" :size="16" />Back to Adapt</BaseButton>
-        <BaseButton size="comfortable" @click="continueToReview">Continue to Review <AppIcon name="arrow-right" :size="17" /></BaseButton>
+        <div class="creative-footer-actions">
+          <span v-if="creativeSavedAt" class="save-status">Saved at {{ creativeSavedAt }}</span>
+          <BaseButton variant="secondary" :loading="isSaving || workflow.loading" :disabled="isApproved || isSaving || workflow.loading" @click="saveCreativeProgress"><AppIcon name="library" :size="17" />Save progress</BaseButton>
+          <BaseButton size="comfortable" :disabled="isSaving || workflow.loading" @click="continueToReview">Continue to Review <AppIcon name="arrow-right" :size="17" /></BaseButton>
+        </div>
       </div>
     </div>
 
@@ -1479,9 +1471,9 @@ onMounted(() => {
           <div class="review-platform-body">
             <div id="review-copy-instagram" class="review-copy-fields">
               <div class="review-section-heading"><span class="brief-overline">Final Copy</span><BaseButton variant="ghost" size="compact" @click="editReviewPlatform('instagram')"><AppIcon name="settings" :size="15" />{{ reviewEditing.instagram ? "Editing" : "Edit Manually" }}</BaseButton></div>
-              <BaseTextarea v-model="instagramContent.caption" label="Caption" :rows="7" :readonly="!reviewEditing.instagram" :number="1" @input="markAssessmentNeedsRecheck('instagram')" />
+              <BaseTextarea v-model="instagramContent.caption" label="Caption" :rows="7" :readonly="!reviewEditing.instagram" :number="1" :hint="`${instagramCaptionCharacterCount} / 2,200 characters including hashtags`" :maxlength="instagramCaptionMaxLength" auto-resize @input="markAssessmentNeedsRecheck('instagram')" />
               <BaseInput v-model="instagramContent.cta" label="CTA" :readonly="!reviewEditing.instagram" :number="2" @input="markAssessmentNeedsRecheck('instagram')" />
-              <BaseTextarea v-model="instagramContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.instagram" :number="3" @input="markAssessmentNeedsRecheck('instagram')" />
+              <BaseTextarea v-model="instagramContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.instagram" :number="3" :maxlength="instagramHashtagsMaxLength" @input="markAssessmentNeedsRecheck('instagram')" />
             </div>
             <div id="review-creative-instagram" class="review-asset-preview-panel">
               <div class="review-section-heading"><span class="brief-overline">Uploaded Creative</span><span class="review-muted">{{ instagramAssets.length }} assets</span></div>
@@ -1506,7 +1498,7 @@ onMounted(() => {
           <div class="review-platform-body">
             <div id="review-copy-linkedin" class="review-copy-fields">
               <div class="review-section-heading"><span class="brief-overline">Final Copy</span><BaseButton variant="ghost" size="compact" @click="editReviewPlatform('linkedin')"><AppIcon name="settings" :size="15" />{{ reviewEditing.linkedin ? "Editing" : "Edit Manually" }}</BaseButton></div>
-              <BaseTextarea v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :readonly="!reviewEditing.linkedin" :number="1" @input="markAssessmentNeedsRecheck('linkedin')" />
+              <BaseTextarea v-model="linkedInContent.postCopy" label="Post Copy" :rows="9" :readonly="!reviewEditing.linkedin" :number="1" auto-resize @input="markAssessmentNeedsRecheck('linkedin')" />
               <BaseInput v-model="linkedInContent.cta" label="CTA" :readonly="!reviewEditing.linkedin" :number="2" @input="markAssessmentNeedsRecheck('linkedin')" />
               <BaseTextarea v-model="linkedInContent.hashtags" label="Hashtags" :rows="2" :readonly="!reviewEditing.linkedin" :number="3" @input="markAssessmentNeedsRecheck('linkedin')" />
             </div>
@@ -1526,6 +1518,10 @@ onMounted(() => {
           </div>
         </BaseCard>
       </section>
+
+      <InlineAlert v-if="!instagramCaptionWithinLimit" title="Instagram caption is too long" tone="warning">
+        Caption and hashtags contain {{ instagramCaptionCharacterCount }} characters. Keep the combined total at or below 2,200.
+      </InlineAlert>
 
       <BaseCard title="Human Final Review" description="Review the actual content, then record your final decision.">
         <div class="human-review-layout">
@@ -1854,6 +1850,7 @@ onMounted(() => {
               label="Content angle and thesis"
               :rows="4"
               :number="3"
+              auto-resize
               tooltip="Describe the argument or perspective behind the topic, including the key takeaway you want the audience to remember."
             />
 
@@ -1862,6 +1859,7 @@ onMounted(() => {
               label="Execution constraints and style tone"
               :rows="3"
               :number="4"
+              auto-resize
               tooltip="Set writing and execution rules for generation: tone, length, required details, and claims or topics to avoid."
             />
           </div>

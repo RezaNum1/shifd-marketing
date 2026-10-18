@@ -159,12 +159,6 @@ runIntegration('Creative Reference database integration', () => {
     expect(await prisma.creativeReferenceBatch.count({ where: { contentId: contentId! } })).toBe(2)
     expect(await prisma.promptVersion.count({ where: { module: 'M2', operation: CREATIVE_REFERENCE_CONCEPT_OPERATION, version: CREATIVE_REFERENCE_PROMPT_VERSION } })).toBe(1)
 
-    const canvaReadyImages = new FakeImageProvider()
-    const canvaReady = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), canvaReadyImages, storage, companyId, actorId, contentId!, { ...input, generationMode: 'canva_ready' }, 'batch-canva-ready')
-    expect(canvaReady.body.data.batch).toMatchObject({ generationMode: 'canva_ready', status: 'completed' })
-    expect(canvaReadyImages.calls).toBe(3)
-    expect(canvaReadyImages.requests.every((request) => request.background === 'transparent' && request.outputFormat === 'png')).toBe(true)
-
     const partial = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(2), storage, companyId, actorId, contentId!, input, 'batch-partial')
     expect(partial.body.data.batch.status).toBe('partial')
     expect(partial.body.data.batch.references).toHaveLength(2)
@@ -172,7 +166,7 @@ runIntegration('Creative Reference database integration', () => {
     await expect(createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(0), storage, companyId, actorId, contentId!, input, 'batch-failed')).rejects.toMatchObject({ code: 'AI_PROVIDER_ERROR' })
     const failed = await prisma.creativeReferenceBatch.findFirstOrThrow({ where: { contentId: contentId!, status: 'failed' }, orderBy: { createdAt: 'desc' } })
     expect(await prisma.creativeReference.count({ where: { batchId: failed.id } })).toBe(0)
-    expect(await listCreativeReferenceBatches(prisma, companyId, contentId!)).toHaveLength(5)
+    expect(await listCreativeReferenceBatches(prisma, companyId, contentId!)).toHaveLength(4)
   })
 
   it('persists one audited Canva link per Content, supports update and removal, and enforces company ownership', async () => {
