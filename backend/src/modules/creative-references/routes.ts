@@ -5,7 +5,7 @@ import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import { allowedKeys, enumValue, object, optionalText } from '../context/normalize.js'
 import type { AiImageProvider, AiProvider } from '../ai/provider.js'
 import type { AssetStorage } from '../assets/storage.js'
-import { createCreativeReferenceBatch, CREATIVE_REFERENCE_ASPECT_RATIOS, CREATIVE_REFERENCE_FORMATS, CREATIVE_REFERENCE_MOODS, CREATIVE_REFERENCE_PLATFORMS, CREATIVE_REFERENCE_SLIDE_COUNT_RANGE, CREATIVE_REFERENCE_STYLES, listCreativeReferenceBatches, openCreativeReference, recoverInterruptedCreativeReferenceBatches, selectCreativeReference, type CreativeReferenceInput } from './service.js'
+import { createCreativeReferenceBatch, CREATIVE_REFERENCE_ASPECT_RATIOS, CREATIVE_REFERENCE_FORMATS, CREATIVE_REFERENCE_MOODS, CREATIVE_REFERENCE_PLATFORMS, CREATIVE_REFERENCE_SLIDE_COUNT_RANGE, CREATIVE_REFERENCE_STYLES, listCreativeReferenceBatches, openCreativeReference, recoverInterruptedCreativeReferenceBatches, reviseCreativeReference, selectCreativeReference, type CreativeReferenceInput } from './service.js'
 
 export async function creativeReferenceRoutes(app: FastifyInstance, options: { config: AppConfig; aiProvider: AiProvider; imageProvider: AiImageProvider; storage: AssetStorage }) {
   app.addHook('onReady', async () => {
@@ -49,6 +49,18 @@ export async function creativeReferenceRoutes(app: FastifyInstance, options: { c
     return reply.send({ data: await selectCreativeReference(app.prisma, auth.user.companyId, routeId(request), referenceId(request)) })
   })
 
+  app.post('/contents/:id/creative-references/:referenceId/revise', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const body = object(request.body, 'Creative reference revision')
+    allowedKeys(body, ['instruction'], 'body')
+    const instruction = optionalText(body.instruction, 'instruction')
+    if (!instruction?.trim()) throw validationError('A revision instruction is required.')
+    if (instruction.length > 1500) throw validationError('The revision instruction is too long.', { instruction: 'Use at most 1,500 characters.' })
+    return reply.send({ data: await reviseCreativeReference(app.prisma, options.config, options.imageProvider, options.storage, auth.user.companyId, auth.user.id, routeId(request), referenceId(request), instruction.trim()) })
+  })
+
   app.get('/contents/:id/creative-references/:referenceId/image', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     try {
@@ -65,13 +77,17 @@ export async function creativeReferenceRoutes(app: FastifyInstance, options: { c
 
 function parseInput(value: unknown): CreativeReferenceInput {
   const body = object(value, 'Creative reference request')
-  allowedKeys(body, ['platform', 'format', 'slideCount', 'style', 'mood', 'aspectRatio', 'additionalInstruction'], 'body')
+  allowedKeys(body, ['platform', 'format', 'slideCount', 'style', 'mood', 'aspectRatio', 'additionalInstruction', 'sourceBatchId', 'lockedSlideNumbers'], 'body')
   const additionalInstruction = optionalText(body.additionalInstruction, 'additionalInstruction')
   if (additionalInstruction && additionalInstruction.length > 1500) throw validationError('The additional instruction is too long.', { additionalInstruction: 'Use at most 1,500 characters.' })
   const format = body.format === undefined ? 'single_image' : enumValue(body.format, CREATIVE_REFERENCE_FORMATS, 'format')!
   const slideCount = body.slideCount === undefined ? 5 : body.slideCount
   if (!Number.isInteger(slideCount) || (slideCount as number) < CREATIVE_REFERENCE_SLIDE_COUNT_RANGE.min || (slideCount as number) > CREATIVE_REFERENCE_SLIDE_COUNT_RANGE.max) throw validationError('The carousel slide count is invalid.', { slideCount: `Choose ${CREATIVE_REFERENCE_SLIDE_COUNT_RANGE.min}–${CREATIVE_REFERENCE_SLIDE_COUNT_RANGE.max} slides.` })
-  return { platform: enumValue(body.platform, CREATIVE_REFERENCE_PLATFORMS, 'platform')!, format, slideCount: slideCount as number, style: enumValue(body.style, CREATIVE_REFERENCE_STYLES, 'style')!, mood: enumValue(body.mood, CREATIVE_REFERENCE_MOODS, 'mood')!, aspectRatio: enumValue(body.aspectRatio, CREATIVE_REFERENCE_ASPECT_RATIOS, 'aspectRatio')!, additionalInstruction }
+  const lockedSlideNumbers = body.lockedSlideNumbers === undefined ? [] : body.lockedSlideNumbers
+  if (!Array.isArray(lockedSlideNumbers) || lockedSlideNumbers.some((n) => !Number.isInteger(n))) throw validationError('Locked slide numbers are invalid.')
+  const sourceBatchId = body.sourceBatchId === undefined ? null : body.sourceBatchId
+  if (sourceBatchId !== null && (typeof sourceBatchId !== 'string' || !uuid(sourceBatchId))) throw validationError('The source storyboard is invalid.')
+  return { platform: enumValue(body.platform, CREATIVE_REFERENCE_PLATFORMS, 'platform')!, format, slideCount: slideCount as number, style: enumValue(body.style, CREATIVE_REFERENCE_STYLES, 'style')!, mood: enumValue(body.mood, CREATIVE_REFERENCE_MOODS, 'mood')!, aspectRatio: enumValue(body.aspectRatio, CREATIVE_REFERENCE_ASPECT_RATIOS, 'aspectRatio')!, additionalInstruction, sourceBatchId, lockedSlideNumbers }
 }
 
 function requireEmptyBody(value: unknown) { if (value !== undefined && value !== null && (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value as object).length)) throw badRequest('This endpoint does not accept a request body.') }

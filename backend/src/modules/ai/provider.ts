@@ -86,6 +86,10 @@ export interface AiImageProviderRequest {
   signal?: AbortSignal | undefined
 }
 
+export interface AiImageEditRequest extends AiImageProviderRequest {
+  image: Buffer
+}
+
 export interface AiImageProviderResult {
   base64: string
   providerRequestId: string | null
@@ -118,6 +122,7 @@ export interface AiImageProvider {
   readonly modelId?: string
   readonly executionMode?: 'real' | 'demo'
   generateImage(request: AiImageProviderRequest): Promise<AiImageProviderResult>
+  editImage?(request: AiImageEditRequest): Promise<AiImageProviderResult>
   isConfigured?(model?: string): boolean
 }
 

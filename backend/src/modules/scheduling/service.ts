@@ -90,7 +90,7 @@ export async function createOrUpdateSchedules(
       const content = await getContentAggregate(tx, companyId, contentId)
       const now = config.clock.now()
       assertNotArchived(content)
-      validateScheduleInputs(schedules, now)
+      validateScheduleInputs(schedules)
       await applyPlanningTarget(tx, companyId, contentId, target)
       const approvalActionId = await currentApprovalId(tx, companyId, content, config)
       const prepared = schedules.map((input) => {
@@ -194,7 +194,7 @@ export async function reschedule(
     if (!variant || !schedule || schedule.id !== scheduleId) throw notFound()
     if (!variant.enabled) throw conflict('Only enabled Variants can be scheduled.')
     if (variant.publication) throw conflict('A published Variant cannot be rescheduled.')
-    validateScheduleInputs([{ ...input, platform: variant.platform as PlatformCode }], now)
+    validateScheduleInputs([{ ...input, platform: variant.platform as PlatformCode }])
     const approvalActionId = await currentApprovalId(tx, companyId, content, config)
     await tx.contentSchedule.update({
       where: { id: scheduleId },
@@ -624,13 +624,13 @@ function assertNotArchived(content: CompleteContentRow) {
   if (content.archivedAt) throw conflict('Archived Content cannot be scheduled or published.')
 }
 
-function validateScheduleInputs(inputs: ScheduleInput[], now: Date) {
+function validateScheduleInputs(inputs: ScheduleInput[]) {
   if (inputs.length === 0) throw validationError('At least one schedule is required.', { schedules: 'Choose at least one platform.' })
   const platforms = new Set<PlatformCode>()
   for (const input of inputs) {
     if (platforms.has(input.platform)) throw validationError('Platforms must be unique in a schedule request.', { schedules: 'Do not submit a platform more than once.' })
     platforms.add(input.platform)
-    if (!validDate(input.scheduledAt) || input.scheduledAt.getTime() <= now.getTime()) throw validationError('Scheduled time must be in the future.', { scheduledAt: 'Use a future RFC3339 timestamp.' })
+    if (!validDate(input.scheduledAt)) throw validationError('Scheduled time is invalid.', { scheduledAt: 'Use a valid RFC3339 timestamp.' })
     assertTimezone(input.timezone)
   }
 }

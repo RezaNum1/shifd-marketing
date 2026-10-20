@@ -39,6 +39,8 @@ export interface CreativeReferenceInput {
   mood: CreativeReferenceMood
   aspectRatio: CreativeReferenceAspectRatio
   additionalInstruction: string | null
+  sourceBatchId?: string | null
+  lockedSlideNumbers?: number[]
 }
 
 interface Concept {
@@ -124,6 +126,11 @@ export async function createCreativeReferenceBatch(
   }
 
   const content = await loadPlannerContext(prisma, companyId, contentId)
+  const lockedSlides = input.format === 'carousel' && input.sourceBatchId && input.lockedSlideNumbers?.length
+    ? await prisma.creativeReference.findMany({ where: { batchId: input.sourceBatchId, batch: { companyId, contentId, creativeFormat: 'carousel', platform: input.platform }, slideNumber: { in: input.lockedSlideNumbers } }, orderBy: { slideNumber: 'asc' } })
+    : []
+  if (input.lockedSlideNumbers?.length && lockedSlides.length !== input.lockedSlideNumbers.length) throw validationError('One or more locked slides are unavailable. Reload the storyboard and try again.')
+  if (input.lockedSlideNumbers?.some((n) => !Number.isInteger(n) || n < 1 || n > input.slideCount)) throw validationError('A locked slide number is invalid.')
   const settings = await prisma.aiSettings.findUnique({ where: { companyId } })
   if (!settings) throw aiNotConfigured()
   const textModel = aiExecution(provider, settings.modelId ?? config.openaiModel ?? '').model
@@ -132,7 +139,7 @@ export async function createCreativeReferenceBatch(
   if (imageProvider.isConfigured && !imageProvider.isConfigured(imageModel)) throw aiNotConfigured()
   const size = SIZE_BY_ASPECT[input.aspectRatio]
   const expectedReferenceCount = input.format === 'carousel' ? input.slideCount : 3
-  const snapshot = buildSnapshot(content, input)
+  const snapshot = { ...buildSnapshot(content, input), lockedSlides: lockedSlides.map(({ slideNumber, conceptName, slideCopy, rationale, layoutNotes, visualFocus, typographyDirection, carouselOutline }) => ({ slideNumber, conceptName, slideCopy, rationale, layoutNotes, visualFocus, typographyDirection, carouselOutline })) }
   const inputHash = requestHash(snapshot)
   const promptVersion = await ensurePromptVersion(prisma, requestHash(CONCEPT_SYSTEM_PROMPT))
   const batchId = randomUUID()
@@ -227,8 +234,28 @@ async function runCreativeReferenceBatch(
   }
 
   const references: CreativeReferenceDto[] = []
+  // Carry locked slides forward with their exact image and copy. A new immutable
+  // storage object is created because each reference owns a unique storage key.
+  if (input.lockedSlideNumbers?.length && input.sourceBatchId) {
+    const locked = await prisma.creativeReference.findMany({ where: { batchId: input.sourceBatchId, batch: { companyId, contentId, creativeFormat: 'carousel', platform: input.platform }, slideNumber: { in: input.lockedSlideNumbers } }, orderBy: { slideNumber: 'asc' } })
+    for (const row of locked) {
+      const temp = await storage.writeTemp(await storage.read(row.storageKey), config.assetMaxBytes)
+      let storageKey: string | null = null
+      try {
+        storageKey = await storage.promote(temp.key)
+        const clone = await prisma.creativeReference.create({ data: { batchId, conceptIndex: row.conceptIndex, conceptName: row.conceptName, templateType: row.templateType, slideNumber: row.slideNumber, slideCopy: row.slideCopy, rationale: row.rationale, layoutNotes: row.layoutNotes, visualFocus: row.visualFocus, typographyDirection: row.typographyDirection, canvaBrief: row.canvaBrief, assetSearchKeywords: row.assetSearchKeywords, carouselOutline: row.carouselOutline, imagePrompt: row.imagePrompt, storageKey, mimeType: row.mimeType, fileSize: row.fileSize, width: row.width, height: row.height, selectedAt: row.selectedAt } })
+        references.push(mapReference(clone, contentId, input.platform))
+        storageKey = null
+      } finally {
+        await storage.discardTemp(temp.key).catch(() => undefined)
+        if (storageKey) await storage.delete(storageKey).catch(() => undefined)
+      }
+    }
+  }
   let lastImageFailure: AppError | null = null
-  for (const [conceptIndex, concept] of concepts.entries()) {
+  const conceptsToGenerate = concepts.filter((concept) => !input.lockedSlideNumbers?.includes(concept.slideNumber))
+  for (const concept of conceptsToGenerate) {
+    const conceptIndex = concept.slideNumber ? concept.slideNumber - 1 : concepts.indexOf(concept)
     const imageLogId = randomUUID()
     const imageSnapshot = { batchId, contentId, platform: input.platform, format: input.format, slideNumber: concept.slideNumber || null, slideCopy: concept.slideCopy, style: input.style, mood: input.mood, aspectRatio: input.aspectRatio, size, conceptIndex, conceptName: concept.conceptName, imagePrompt: concept.imagePrompt }
     await prisma.aiRequestLog.create({ data: aiLogData({ id: imageLogId, companyId, contentId, actorId, promptVersionId: promptVersion.id, operation: CREATIVE_REFERENCE_IMAGE_OPERATION, provider: imageProvider.providerId ?? 'openai', model: imageModel, mode: imageProvider.executionMode ?? settings.mode, language: settings.generationLanguage, inputHash: requestHash(imageSnapshot), snapshot: imageSnapshot }) })
@@ -333,6 +360,53 @@ export async function openCreativeReference(prisma: PrismaClient, storage: Asset
   return { row, stream: await storage.read(row.storageKey) }
 }
 
+export async function reviseCreativeReference(prisma: PrismaClient, config: AppConfig, imageProvider: AiImageProvider, storage: AssetStorage, companyId: string, actorId: string, contentId: string, referenceId: string, instruction: string) {
+  const reference = await prisma.creativeReference.findFirst({ where: { id: referenceId, batch: { companyId, contentId } }, include: { batch: true } })
+  if (!reference) throw notFound()
+  if (!imageProvider.editImage) throw aiNotConfigured()
+  const imageModel = aiExecution(imageProvider, config.openaiImageModel ?? 'gpt-image-2.5-sunburst').model
+  if (imageProvider.isConfigured && !imageProvider.isConfigured(imageModel)) throw aiNotConfigured()
+  const settings = await prisma.aiSettings.findUnique({ where: { companyId } })
+  const plannerLog = reference.batch.conceptPlannerAiRequestLogId
+    ? await prisma.aiRequestLog.findUnique({ where: { id: reference.batch.conceptPlannerAiRequestLogId }, select: { promptVersionId: true } })
+    : null
+  if (!plannerLog) throw aiOutputInvalid('The visual reference prompt metadata is unavailable.')
+  const logId = randomUUID()
+  const snapshot = { referenceId, batchId: reference.batchId, slideNumber: reference.slideNumber, conceptName: reference.conceptName, originalPrompt: reference.imagePrompt, revisionInstruction: instruction }
+  await prisma.aiRequestLog.create({ data: aiLogData({ id: logId, companyId, contentId, actorId, promptVersionId: plannerLog.promptVersionId, operation: CREATIVE_REFERENCE_IMAGE_OPERATION, provider: imageProvider.providerId ?? 'openai', model: imageModel, mode: imageProvider.executionMode ?? settings?.mode ?? 'real', language: settings?.generationLanguage ?? 'English', inputHash: requestHash(snapshot), snapshot }) })
+  const started = Date.now()
+  let newStorageKey: string | null = null
+  try {
+    const originalStream = await storage.read(reference.storageKey)
+    const chunks: Buffer[] = []
+    for await (const chunk of originalStream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const original = Buffer.concat(chunks)
+    const result = await imageProvider.editImage({ model: imageModel, image: original, prompt: `Edit this existing Shifd Labs visual reference. Keep its overall composition, brand style, slide message, typography, and all elements that are not mentioned in the requested changes. Apply only these requested changes: ${instruction}\n\nOriginal design direction: ${reference.imagePrompt}`, quality: config.openaiImageQuality ?? 'medium', size: reference.batch.actualGeneratedSize as '1024x1024' | '1024x1536' | '1536x1024', outputFormat: 'png', timeoutMs: config.aiRequestTimeoutMs })
+    let buffer = Buffer.from(result.base64, 'base64')
+    if (reference.batch.requestedAspectRatio === 'portrait_4_5') buffer = await sharp(buffer).resize(1080, 1350, { fit: 'contain', background: '#FFFFFF' }).png().toBuffer()
+    const temp = await storage.writeTemp(Readable.from(buffer), config.assetMaxBytes)
+    try {
+      const inspected = await storage.inspectImage(temp.key)
+      if (inspected.mimeType !== 'image/png') throw new Error('Revised reference is not PNG.')
+      newStorageKey = await storage.promote(temp.key)
+      const previousStorageKey = reference.storageKey
+      await prisma.$transaction(async (tx) => {
+        await tx.creativeReference.update({ where: { id: reference.id }, data: { storageKey: newStorageKey!, mimeType: inspected.mimeType, fileSize: BigInt(buffer.byteLength), width: inspected.width, height: inspected.height, imageAiRequestLogId: logId } })
+        await tx.aiRequestLog.update({ where: { id: logId }, data: { inputTokens: result.inputTokens ?? null, outputTokens: result.outputTokens ?? null, latencyMs: Date.now() - started, status: 'success', providerRequestId: result.providerRequestId, completedAt: new Date() } })
+      })
+      newStorageKey = null
+      await storage.delete(previousStorageKey).catch(() => undefined)
+    } finally {
+      await storage.discardTemp(temp.key).catch(() => undefined)
+    }
+  } catch (error) {
+    await prisma.aiRequestLog.update({ where: { id: logId }, data: { latencyMs: Date.now() - started, status: 'failed', errorCode: error instanceof AiProviderFailure ? error.kind.toUpperCase() : 'IMAGE_EDIT_FAILED', errorMessage: error instanceof AiProviderFailure ? error.message : 'Creative reference image edit failed.', completedAt: new Date() } }).catch(() => undefined)
+    if (newStorageKey) await storage.delete(newStorageKey).catch(() => undefined)
+    throw mapProviderFailure(error)
+  }
+  return readBatch(prisma, companyId, contentId, reference.batchId)
+}
+
 async function readBatch(prisma: PrismaClient, companyId: string, contentId: string, batchId: string) {
   const row = await prisma.creativeReferenceBatch.findFirst({ where: { id: batchId, companyId, contentId }, include: { references: { orderBy: { conceptIndex: 'asc' } } } })
   if (!row) throw notFound()
@@ -344,7 +418,7 @@ function mapBatch(row: any, contentId: string): CreativeReferenceBatchDto {
 }
 
 function mapReference(row: any, contentId: string, platform: string): CreativeReferenceDto {
-  return { id: row.id, conceptIndex: row.conceptIndex, conceptName: row.conceptName, templateType: row.templateType ?? null, slideNumber: row.slideNumber ?? null, slideCopy: row.slideCopy ?? null, rationale: row.rationale, layoutNotes: row.layoutNotes, visualFocus: row.visualFocus, typographyDirection: row.typographyDirection, canvaBrief: row.canvaBrief ?? null, assetSearchKeywords: row.assetSearchKeywords ?? [], carouselOutline: row.carouselOutline ?? [], imageUrl: `/api/contents/${contentId}/creative-references/${row.id}/image`, mimeType: row.mimeType, fileSize: Number(row.fileSize), width: row.width, height: row.height, selected: Boolean(row.selectedAt), selectedAt: row.selectedAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString() }
+  return { id: row.id, conceptIndex: row.conceptIndex, conceptName: row.conceptName, templateType: row.templateType ?? null, slideNumber: row.slideNumber ?? null, slideCopy: row.slideCopy ?? null, rationale: row.rationale, layoutNotes: row.layoutNotes, visualFocus: row.visualFocus, typographyDirection: row.typographyDirection, canvaBrief: row.canvaBrief ?? null, assetSearchKeywords: row.assetSearchKeywords ?? [], carouselOutline: row.carouselOutline ?? [], imageUrl: `/api/contents/${contentId}/creative-references/${row.id}/image?v=${row.updatedAt.getTime()}`, mimeType: row.mimeType, fileSize: Number(row.fileSize), width: row.width, height: row.height, selected: Boolean(row.selectedAt), selectedAt: row.selectedAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString() }
 }
 
 async function assertContent(prisma: PrismaClient, companyId: string, contentId: string) {
@@ -368,7 +442,7 @@ function buildSnapshot(content: any, input: CreativeReferenceInput) {
 function renderPlannerPrompt(snapshot: UnknownRecord) {
   const campaign = snapshot.campaign as Record<string, unknown>
   if (campaign.creativeFormat === 'carousel') {
-    return `Create exactly ${campaign.slideCount} ordered slide concepts for one coherent carousel storyboard. Return one concept per slide, with slideNumber from 1 to ${campaign.slideCount}. Use one shared design system across every slide (same grid, margins, palette, typography, recurring marker and illustration style), while varying the focal visual to match each slide's message. Derive the slide sequence from the actual master and platform variant copy in the context; preserve its message and do not add unsupported claims. Use only the supplied campaign copy and context. Put one complete ordered outline of ${campaign.slideCount} concise slide roles in the root carouselOutline field. Each conceptName should identify its slide and role. slideCopy should be a concise source-grounded message for that slide. Each canvaBrief should explain practical placement and recreation for that specific slide. Keep every image prompt focused on a single slide, never a contact sheet. Do not return alternate design directions.\n${JSON.stringify(snapshot)}`
+    return `Create exactly ${campaign.slideCount} ordered slide concepts for one coherent carousel storyboard. Return one concept per slide, with slideNumber from 1 to ${campaign.slideCount}. Use one shared design system across every slide (same grid, margins, palette, typography, recurring marker and illustration style), while varying the focal visual to match each slide's message. Derive the slide sequence from the actual master and platform variant copy in the context; preserve its message and do not add unsupported claims. Use only the supplied campaign copy and context. Put one complete ordered outline of ${campaign.slideCount} concise slide roles in the root carouselOutline field. Each conceptName should identify its slide and role. slideCopy should be a concise source-grounded message for that slide. Each canvaBrief should explain practical placement and recreation for that specific slide. Keep every image prompt focused on a single slide, never a contact sheet. Do not return alternate design directions. For slide numbers listed in lockedSlides, preserve the supplied conceptName, slideCopy, outline role, and visual direction exactly; use them as fixed story beats. Write unlocked slides so the narrative flows from the immediately preceding locked slide and toward the next locked slide, without changing locked text or messages.\n${JSON.stringify(snapshot)}`
   }
   return `Create exactly three alternative single-image concepts: educational, product_showcase, and process_insight (a single-slide diagram/insight, not a carousel). Put an empty array in the root carouselOutline field. Return slideNumber 0 and empty slideCopy for every concept. Each concept needs practical Canva steps, asset search keywords, a clear headline area, a mobile-readable layout, and a brand-consistent color/type plan. Use only the supplied campaign copy and context. Do not add externally sourced claims or statistics.\n${JSON.stringify(snapshot)}`
 }

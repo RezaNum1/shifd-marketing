@@ -9,6 +9,8 @@ export interface CreativeReferenceInput {
   mood: CreativeReferenceMood
   aspectRatio: CreativeReferenceAspectRatio
   additionalInstruction: string | null
+  sourceBatchId?: string | null
+  lockedSlideNumbers?: number[]
 }
 
 export function listCreativeReferences(contentId: string) {
@@ -21,4 +23,8 @@ export function createCreativeReferences(contentId: string, input: CreativeRefer
 
 export function selectCreativeReference(contentId: string, referenceId: string) {
   return request<BackendCreativeReferenceBatch>(`/contents/${contentId}/creative-references/${referenceId}/select`, { method: 'POST', json: {} })
+}
+
+export function reviseCreativeReference(contentId: string, referenceId: string, instruction: string) {
+  return request<BackendCreativeReferenceBatch>(`/contents/${contentId}/creative-references/${referenceId}/revise`, { method: 'POST', json: { instruction }, idempotencyKey: createRequestKey('creative-references.revise') })
 }

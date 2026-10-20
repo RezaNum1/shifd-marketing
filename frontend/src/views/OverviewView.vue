@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '../components/app/PageHeader.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -13,10 +13,14 @@ import type { ContentCalendarStatus, ContentPlatform } from '../types/content'
 import type { BackendCalendarEntry } from '../types/backend'
 import type { Tone } from '../types/ui'
 import InlineAlert from '../components/ui/InlineAlert.vue'
+import { useIntegrationsStore } from '../stores/integrations'
 
 const router = useRouter()
 const workflow = useContentWorkflowStore()
 const overview = useOverviewStore()
+const integrations = useIntegrationsStore()
+const refreshing = ref(false)
+const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000
 const pageHelp = {
   purpose: 'See the current state of your marketing work in one place, including upcoming posts, items that need attention, and recent performance.',
   steps: [
@@ -89,7 +93,34 @@ function calendarEntry(entry: BackendCalendarEntry): CalendarSummaryEntry {
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
   return { contentId: entry.contentId, title: entry.title, topic: entry.title, platform: entry.platform, contextName: entry.product?.name ?? entry.company.name, pillar: entry.pillarCode, date: `${get('year')}-${get('month')}-${get('day')}`, time: new Intl.DateTimeFormat('en-GB', { timeZone: entry.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(entry.scheduledAt)), at: new Date(entry.scheduledAt), status: entry.status === 'published' ? 'Published' : entry.status === 'ready_to_publish' ? 'Ready to Publish' : 'Scheduled' }
 }
-onMounted(() => { void overview.load(true) })
+async function refreshOverview() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await integrations.load()
+    const instagram = integrations.instagram
+    const lastSyncAt = instagram?.lastSync ? Date.parse(instagram.lastSync) : 0
+    const syncIsDue = !Number.isFinite(lastSyncAt) || !lastSyncAt || Date.now() - lastSyncAt >= AUTO_SYNC_INTERVAL_MS
+    if (instagram?.status === 'connected' && syncIsDue) await integrations.syncInstagram()
+    await overview.load(true)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+function refreshWhenVisible() {
+  if (document.visibilityState === 'visible') void refreshOverview()
+}
+
+onMounted(() => {
+  void refreshOverview()
+  window.addEventListener('focus', refreshWhenVisible)
+  document.addEventListener('visibilitychange', refreshWhenVisible)
+})
+onUnmounted(() => {
+  window.removeEventListener('focus', refreshWhenVisible)
+  document.removeEventListener('visibilitychange', refreshWhenVisible)
+})
 </script>
 
 <template>

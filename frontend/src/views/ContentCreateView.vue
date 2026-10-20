@@ -92,9 +92,14 @@ const creativeReferenceMood = ref<CreativeReferenceMood>("professional");
 const creativeReferenceAspectRatio = ref<CreativeReferenceAspectRatio>("portrait_4_5");
 const creativeReferenceInstruction = ref("");
 const creativeReferenceLoading = ref(false);
+const lockedCreativeSlideNumbers = ref<number[]>([]);
+const lockedCreativeSourceBatchId = ref<string | null>(null);
 const creativeReferenceError = ref("");
 const creativeReferenceAbortController = ref<AbortController | null>(null);
 const selectedCreativeReferenceId = ref<string | null>(null);
+const revisingCreativeReferenceId = ref<string | null>(null);
+const creativeReferenceRevisionInstruction = ref("");
+const creativeReferenceRevisionLoading = ref(false);
 const useSameSchedule = toRef(workflow, "useSameSchedule");
 const instagramSchedule = workflow.instagramSchedule;
 const linkedInSchedule = workflow.linkedInSchedule;
@@ -251,7 +256,11 @@ const missingCreativeSlideNumbers = computed(() => {
   return Array.from({ length: batch.expectedReferenceCount }, (_, index) => index + 1).filter((slideNumber) => !generated.has(slideNumber));
 });
 const storyboardSelected = computed(() => Boolean(latestCreativeReferenceBatch.value?.references.length && latestCreativeReferenceBatch.value.references.every((reference) => reference.selected)));
-const creativeReferenceActionLabel = computed(() => creativeReferenceFormat.value === "carousel" ? `Generate ${creativeReferenceSlideCount.value} slides` : "Generate 3 options");
+const creativeReferenceActionLabel = computed(() => {
+  if (creativeReferenceFormat.value !== "carousel") return "Generate 3 options";
+  const lockedCount = lockedCreativeSourceBatchId.value === latestCreativeReferenceBatch.value?.id ? lockedCreativeSlideNumbers.value.length : 0;
+  return `Generate ${Math.max(0, Number(creativeReferenceSlideCount.value) - lockedCount)} slides`;
+});
 const missingCreativePlatforms = computed(() => {
   const missing: string[] = [];
   if (enabledPlatforms.instagram && instagramAssets.value.length === 0) {
@@ -327,16 +336,6 @@ const approvedTimestampLabel = computed(
   () => approvedAt.value ?? "Not approved",
 );
 const schedulePlatformCount = computed(() => enabledReviewPlatforms.value.length);
-const scheduleDateMinimum = computed(() => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: ARTIFACT_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-});
 const schedulePlatformRows = computed(() => [
   {
     id: "instagram" as const,
@@ -562,6 +561,8 @@ async function generateCreativeReferences() {
     return;
   }
   const generationPlatform = creativeReferencePlatform.value;
+  const sourceBatch = latestCreativeReferenceBatch.value;
+  const lockedSlides = creativeReferenceFormat.value === "carousel" && sourceBatch?.creativeFormat === "carousel" && lockedCreativeSourceBatchId.value === sourceBatch.id ? [...lockedCreativeSlideNumbers.value] : [];
   // Replace the active result set immediately; previously generated batches
   // remain persisted and can still be loaded again later.
   creativeReferenceBatches.value = creativeReferenceBatches.value.filter((batch) => batch.platform !== generationPlatform);
@@ -579,6 +580,8 @@ async function generateCreativeReferences() {
       mood: creativeReferenceMood.value,
       aspectRatio: creativeReferenceAspectRatio.value,
       additionalInstruction: creativeReferenceInstruction.value.trim() || null,
+      sourceBatchId: lockedSlides.length ? sourceBatch?.id ?? null : null,
+      lockedSlideNumbers: lockedSlides,
     }, createRequestKey("creative-references.create"));
     creativeReferenceBatches.value = [result.data.batch, ...creativeReferenceBatches.value];
     applyCreativeReferenceBatchSettings(result.data.batch);
@@ -604,6 +607,22 @@ async function generateCreativeReferences() {
     if (creativeReferenceAbortController.value === controller) creativeReferenceAbortController.value = null;
     creativeReferenceLoading.value = false;
   }
+}
+
+function toggleCreativeSlideLock(slideNumber: number) {
+  const batchId = latestCreativeReferenceBatch.value?.id;
+  if (!batchId) return;
+  if (lockedCreativeSourceBatchId.value !== batchId) {
+    lockedCreativeSourceBatchId.value = batchId;
+    lockedCreativeSlideNumbers.value = [];
+  }
+  lockedCreativeSlideNumbers.value = lockedCreativeSlideNumbers.value.includes(slideNumber)
+    ? lockedCreativeSlideNumbers.value.filter((number) => number !== slideNumber)
+    : [...lockedCreativeSlideNumbers.value, slideNumber].sort((a, b) => a - b);
+}
+
+function isCreativeSlideLocked(slideNumber: number) {
+  return lockedCreativeSourceBatchId.value === latestCreativeReferenceBatch.value?.id && lockedCreativeSlideNumbers.value.includes(slideNumber);
 }
 
 function cancelCreativeReferenceGeneration() {
@@ -637,6 +656,31 @@ async function selectCreativeReference(reference: BackendCreativeReference) {
     ui.notify("Reference selected for Canva inspiration. Final creative upload is still required.", "success");
   } catch (error) {
     creativeReferenceError.value = errorMessage(error, "Unable to select this reference.");
+  }
+}
+
+function openCreativeReferenceRevision(reference: BackendCreativeReference) {
+  revisingCreativeReferenceId.value = revisingCreativeReferenceId.value === reference.id ? null : reference.id;
+  creativeReferenceRevisionInstruction.value = "";
+}
+
+async function reviseCreativeReference(reference: BackendCreativeReference) {
+  if (!workflow.contentId || creativeReferenceRevisionLoading.value) return;
+  const instruction = creativeReferenceRevisionInstruction.value.trim();
+  if (!instruction) { creativeReferenceError.value = "Describe the design change you want for this image."; return; }
+  if (instruction.length > 1500) { creativeReferenceError.value = "Revision instructions must be 1,500 characters or fewer."; return; }
+  creativeReferenceRevisionLoading.value = true;
+  creativeReferenceError.value = "";
+  try {
+    const result = await creativeReferenceApi.reviseCreativeReference(workflow.contentId, reference.id, instruction);
+    creativeReferenceBatches.value = creativeReferenceBatches.value.map((batch) => batch.id === result.data.id ? result.data : batch);
+    revisingCreativeReferenceId.value = null;
+    creativeReferenceRevisionInstruction.value = "";
+    ui.notify("Image revised. Other carousel slides were left unchanged.", "success");
+  } catch (error) {
+    creativeReferenceError.value = errorMessage(error, "Unable to revise this image.");
+  } finally {
+    creativeReferenceRevisionLoading.value = false;
   }
 }
 
@@ -944,11 +988,10 @@ async function scheduleContent() {
     ({ schedule }) =>
       !schedule.date ||
       !schedule.time ||
-      Number.isNaN(scheduleDateTime(schedule).getTime()) ||
-      scheduleDateTime(schedule).getTime() <= Date.now(),
+      Number.isNaN(scheduleDateTime(schedule).getTime()),
   );
   if (invalid) {
-    scheduleValidation.value = `Choose a future publication date and time for ${invalid.platform === "instagram" ? "Instagram" : "LinkedIn"}.`;
+    scheduleValidation.value = `Choose a valid publication date and time for ${invalid.platform === "instagram" ? "Instagram" : "LinkedIn"}.`;
     return;
   }
   const scheduled = await workflow.schedule();
@@ -1291,7 +1334,7 @@ onMounted(() => {
         <div class="creative-reference-actions">
           <div>
             <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
-            <p v-if="creativeReferenceFormat === 'carousel'">Generate one image per slide using the content copy as the narrative source. All slides share the same grid, color palette, typography, and visual language. This uses {{ creativeReferenceSlideCount }} image requests.</p>
+            <p v-if="creativeReferenceFormat === 'carousel'">Generate one image per slide using the content copy as the narrative source. Lock finished slides to keep their image and copy when regenerating. Remaining slides follow the locked storyboard. This uses {{ Number(creativeReferenceSlideCount) - (lockedCreativeSourceBatchId === latestCreativeReferenceBatch?.id ? lockedCreativeSlideNumbers.length : 0) }} image requests.</p>
             <p v-else>Generate three single-image directions: educational, product showcase, and process insight. Each includes Shifd Labs brand guidance and Canva asset search terms. This uses three image requests.</p>
           </div>
           <BaseButton class="creative-reference-generate-button" size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
@@ -1341,10 +1384,19 @@ onMounted(() => {
                 </dl>
                 <ol v-if="reference.carouselOutline.length && reference.conceptIndex === 0" class="creative-reference-carousel-outline"><li v-for="(slide, index) in reference.carouselOutline" :key="`${reference.id}-${index}`"><strong>Slide {{ index + 1 }}</strong>{{ slide }}</li></ol>
                 <div class="creative-reference-card-actions">
+                  <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel'" variant="ghost" size="compact" :disabled="creativeReferenceLoading" :aria-pressed="isCreativeSlideLocked(reference.slideNumber ?? reference.conceptIndex + 1)" @click="toggleCreativeSlideLock(reference.slideNumber ?? reference.conceptIndex + 1)">{{ isCreativeSlideLocked(reference.slideNumber ?? reference.conceptIndex + 1) ? '🔒 Locked' : 'Lock slide' }}</BaseButton>
+                  <BaseButton variant="secondary" size="compact" :disabled="creativeReferenceRevisionLoading || creativeReferenceLoading" @click="openCreativeReferenceRevision(reference)">{{ revisingCreativeReferenceId === reference.id ? "Close revision" : "Revise this image" }}</BaseButton>
                   <BaseButton v-if="latestCreativeReferenceBatch.creativeFormat !== 'carousel'" size="compact" :disabled="reference.selected || selectedCreativeReferenceId === reference.id" @click="selectCreativeReference(reference)">{{ reference.selected || selectedCreativeReferenceId === reference.id ? "Selected" : "Select reference" }}</BaseButton>
                   <BaseButton variant="ghost" size="compact" @click="copyDesignNotes(reference)">Copy Canva Brief</BaseButton>
                   <BaseButton variant="ghost" size="compact" @click="copyReferenceImage(reference)">Copy Image</BaseButton>
                   <BaseButton variant="ghost" size="compact" @click="downloadReferenceImage(reference)">Download PNG</BaseButton>
+                </div>
+                <div v-if="revisingCreativeReferenceId === reference.id" class="creative-reference-revision">
+                  <BaseTextarea v-model="creativeReferenceRevisionInstruction" label="What should change in this image?" :rows="3" :maxlength="1500" :disabled="creativeReferenceRevisionLoading" placeholder="For example: use a cleaner two-column layout and make the headline larger. Keep the colors and message." />
+                  <div class="creative-reference-revision-actions">
+                    <small>Only this image will be revised. Other carousel slides stay the same.</small>
+                    <BaseButton size="compact" :loading="creativeReferenceRevisionLoading" :disabled="creativeReferenceRevisionLoading || !creativeReferenceRevisionInstruction.trim()" @click="reviseCreativeReference(reference)">Apply revision</BaseButton>
+                  </div>
                 </div>
               </div>
             </article>
@@ -1640,7 +1692,6 @@ onMounted(() => {
                     label="Publication date"
                     :number="1"
                     type="date"
-                    :min="scheduleDateMinimum"
                     :disabled="row.id === 'linkedin' && useSameSchedule"
                     @update:model-value="updateScheduleDate(row.id, $event)"
                   />

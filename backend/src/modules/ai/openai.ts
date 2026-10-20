@@ -1,8 +1,9 @@
 import OpenAI, { APIConnectionTimeoutError, APIError } from 'openai'
+import { toFile } from 'openai/uploads'
 import type { AppConfig } from '../../config/env.js'
 import { M4_CHECK_LABELS } from './output.js'
 import { CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION, M2_DISCOVERY_OUTPUT_SCHEMA_VERSION, M2_INDUSTRY_IDEATION_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_CHAT_OUTPUT_SCHEMA_VERSION, M2_TELEGRAM_STRUCTURE_OUTPUT_SCHEMA_VERSION, M3_OUTPUT_SCHEMA_VERSION, M4_OUTPUT_SCHEMA_VERSION, OUTPUT_SCHEMA_VERSION, PROSPECT_RESEARCH_SCHEMA_VERSION, PROSPECT_EMAIL_DRAFT_SCHEMA_VERSION, PUBLICATION_TIME_RECOMMENDATION_SCHEMA_VERSION } from './constants.js'
-import { AiProviderFailure, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
+import { AiProviderFailure, type AiImageEditRequest, type AiImageProvider, type AiImageProviderRequest, type AiImageProviderResult, type AiProvider, type AiProviderDiagnostics, type AiProviderRequest, type AiProviderResponseDiagnostics, type AiProviderResult, type ProspectResearchProvider, type ProspectResearchProviderRequest, type ProspectResearchProviderResult, type TopicDiscoveryProvider, type TopicDiscoveryProviderRequest, type TopicDiscoveryProviderResult, type TopicDiscoverySource, type TopicDiscoverySourceDiagnostics } from './provider.js'
 
 type JsonSchema = Record<string, unknown>
 
@@ -450,6 +451,27 @@ export class OpenAiAiProvider implements AiProvider, AiImageProvider, TopicDisco
       if (error instanceof APIError && error.status === 429) throw new AiProviderFailure('rate_limit', 'The OpenAI image provider rate limit was reached.', safeRequestId(error.requestID), safeDiagnostics(error))
       const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
       throw new AiProviderFailure('provider', 'The OpenAI image provider request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : safeUnknownDiagnostics(error))
+    }
+  }
+
+  async editImage(request: AiImageEditRequest): Promise<AiImageProviderResult> {
+    if (!this.client || !request.model.trim()) throw new AiProviderFailure('not_configured', 'The OpenAI provider is not configured.')
+    try {
+      const image = await toFile(request.image, 'creative-reference.png', { type: 'image/png' })
+      const { data: response, request_id: sdkRequestId } = await this.client.images.edit({
+        model: request.model, image, prompt: request.prompt, quality: request.quality,
+        size: request.size, output_format: request.outputFormat, n: 1,
+      }, { timeout: request.timeoutMs, maxRetries: 0, signal: request.signal }).withResponse()
+      const providerRequestId = nonBlankString(sdkRequestId)
+      const base64 = response.data?.[0]?.b64_json
+      if (typeof base64 !== 'string' || !base64.trim()) throw new AiProviderFailure('invalid_response', 'The provider returned no edited image data.', providerRequestId)
+      return { base64, providerRequestId, inputTokens: safeTokenCount(response.usage?.input_tokens), cachedInputTokens: safeTokenCount((response.usage?.input_tokens_details as { cached_tokens?: unknown } | undefined)?.cached_tokens), outputTokens: safeTokenCount(response.usage?.output_tokens) }
+    } catch (error) {
+      if (error instanceof AiProviderFailure) throw error
+      if (error instanceof APIConnectionTimeoutError) throw new AiProviderFailure('timeout', 'The OpenAI image edit request timed out.')
+      if (error instanceof APIError && error.status === 429) throw new AiProviderFailure('rate_limit', 'The OpenAI image provider rate limit was reached.', safeRequestId(error.requestID), safeDiagnostics(error))
+      const requestId = error instanceof APIError ? safeRequestId(error.requestID) : null
+      throw new AiProviderFailure('provider', 'The OpenAI image edit request failed.', requestId, error instanceof APIError ? safeDiagnostics(error) : safeUnknownDiagnostics(error))
     }
   }
 }
