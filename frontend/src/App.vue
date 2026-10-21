@@ -13,6 +13,6 @@ onBeforeUnmount(() => stopTranslation?.())
 </script>
 
 <template>
-  <RouterView v-if="route.name === 'login' || route.name === 'public-review'" />
+  <RouterView v-if="route.name === 'login' || route.name === 'public-review' || route.name === 'public-email-draft'" />
   <AppShell v-else />
 </template>
