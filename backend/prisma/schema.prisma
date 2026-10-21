@@ -279,6 +279,7 @@ model ProspectEmailDraft {
   offering           String                    @default("custom_web_application")
   origin             String                    @default("manual")
   status             String                    @default("draft")
+  shareToken         String?                   @unique @map("share_token")
   archivedAt         DateTime?                 @map("archived_at") @db.Timestamptz(3)
   createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -289,11 +290,23 @@ model ProspectEmailDraft {
   aiRequestLog       AiRequestLog?             @relation(fields: [companyId, aiRequestLogId], references: [companyId, id], onDelete: Restrict)
   researchClaims     ProspectEmailDraftClaim[]
   outboundActivities OutboundActivity[]
+  feedback           ProspectEmailDraftFeedback[]
 
   @@unique([companyId, id])
   @@unique([companyId, aiRequestLogId])
   @@index([companyId, prospectId, status, updatedAt(sort: Desc)])
   @@map("prospect_email_drafts")
+}
+
+model ProspectEmailDraftFeedback {
+  id        String             @id @default(uuid()) @db.Uuid
+  draftId   String             @map("draft_id") @db.Uuid
+  message   String
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  draft     ProspectEmailDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+
+  @@index([draftId, createdAt(sort: Desc)])
+  @@map("prospect_email_draft_feedback")
 }
 
 model ProspectEmailDraftClaim {

@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { Prospect, ProspectInput, ProspectImportField, ProspectImportPreview, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftInput, ProspectEmailDraftListItem, ProspectOutreachFact, OutboundActivity, OutboundActivityInput, OutboundSummary } from '../types/prospect'
+import type { Prospect, ProspectInput, ProspectImportField, ProspectImportPreview, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftInput, ProspectEmailDraftListItem, ProspectEmailDraftFeedback, ProspectOutreachFact, OutboundActivity, OutboundActivityInput, OutboundSummary } from '../types/prospect'
 
 export function listProspects(query: URLSearchParams) { return request<Prospect[]>('/prospects?' + query.toString()) }
 export function getProspect(id: string) { return request<Prospect>(`/prospects/${id}`) }
@@ -15,6 +15,10 @@ export function getProspectEmailDraft(id: string, draftId: string) { return requ
 export function createProspectEmailDraft(id: string, input: ProspectEmailDraftInput) { return request<ProspectEmailDraft>(`/prospects/${id}/outreach-drafts`, { method: 'POST', json: input }) }
 export function updateProspectEmailDraft(id: string, draftId: string, input: Pick<ProspectEmailDraftInput, 'subject' | 'body' | 'recipientName' | 'recipientEmail'>) { return request<ProspectEmailDraft>(`/prospects/${id}/outreach-drafts/${draftId}`, { method: 'PUT', json: input }) }
 export function archiveProspectEmailDraft(id: string, draftId: string) { return request<{ id: string; status: 'archived' }>(`/prospects/${id}/outreach-drafts/${draftId}/archive`, { method: 'POST', json: {} }) }
+export function createProspectEmailDraftShare(id: string, draftId: string) { return request<{ token: string }>(`/prospects/${id}/outreach-drafts/${draftId}/share`, { method: 'POST', json: {} }) }
+export function getPublicEmailDraft(token: string) { return request<{ subject: string; body: string }>(`/public-email-drafts/${encodeURIComponent(token)}`, { skipCsrf: true }) }
+export function submitPublicEmailDraftFeedback(token: string, message: string) { return request<{ id: string; createdAt: string }>(`/public-email-drafts/${encodeURIComponent(token)}/feedback`, { method: 'POST', json: { message }, skipCsrf: true }) }
+export function listProspectEmailDraftFeedback(id: string, draftId: string) { return request<ProspectEmailDraftFeedback[]>(`/prospects/${id}/outreach-drafts/${draftId}/feedback`) }
 export function getProspectOutreachFacts(id: string) { return request<ProspectOutreachFact[]>(`/prospects/${id}/outreach-facts`) }
 export function generateProspectEmailDraft(id: string, input: { objective: string; offering: string; tone: string; language: 'English' | 'Indonesian'; customInstructions?: string; claimIds: string[] }) { return request<{ subject: string; body: string; generationId: string; claims: ProspectOutreachFact[]; usage: { inputTokens: number | null; outputTokens: number | null } }>(`/prospects/${id}/outreach-drafts/generate`, { method: 'POST', json: input }) }
 export function listProspectOutboundActivities(id: string, page = 1, limit = 100) { return request<OutboundActivity[]>(`/prospects/${id}/outbound-activities?page=${page}&limit=${limit}`) }

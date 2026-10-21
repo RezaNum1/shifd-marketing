@@ -29,6 +29,7 @@ export interface ProspectEmailDraft {
   generation: { id: string; provider: string; model: string; inputTokens: string | null; outputTokens: string | null; estimatedCostUsd: string | null } | null
   researchClaims: ProspectOutreachFact[]
 }
+export interface ProspectEmailDraftFeedback { id: string; message: string; createdAt: string }
 export interface ProspectEmailDraftInput {
   subject: string; body: string; recipientName?: string | null; recipientEmail?: string | null
   language?: 'English' | 'Indonesian'; tone?: string; objective?: string; offering?: string

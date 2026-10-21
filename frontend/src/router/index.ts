@@ -73,6 +73,13 @@ routes.push({
 })
 
 routes.push({
+  path: '/email-draft/:token',
+  name: 'public-email-draft',
+  component: () => import('../views/PublicEmailDraftView.vue'),
+  meta: { title: 'Shared email draft', description: 'View a shared email draft.', icon: 'copy', breadcrumbs: [] },
+})
+
+routes.push({
   path: '/:pathMatch(.*)*',
   name: 'not-found',
   component: () => import('../views/NotFoundView.vue'),
@@ -91,7 +98,7 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.name === 'public-review') return true
+  if (to.name === 'public-review' || to.name === 'public-email-draft') return true
   const auth = useAuthStore()
   await auth.bootstrap()
   if (to.name === 'login') return auth.isAuthenticated ? { path: '/' } : true

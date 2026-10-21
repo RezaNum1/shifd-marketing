@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import type { AppConfig } from '../../config/env.js'
 import { AppError, aiNotConfigured, aiOutputInvalid, notFound, validationError } from '../../shared/errors/AppError.js'
 import { requestHash } from '../context/normalize.js'
@@ -165,6 +165,40 @@ export async function archiveProspectEmailDraft(prisma: PrismaClient, companyId:
   if (!draft) throw notFound('Email draft not found.')
   await prisma.prospectEmailDraft.update({ where: { id: draft.id }, data: { status: 'archived', archivedAt: new Date(), updatedAt: new Date(), version: { increment: 1 } } })
   return { id: draft.id, status: 'archived' as const }
+}
+
+export async function createOrReadEmailDraftShare(prisma: PrismaClient, companyId: string, prospectId: string, draftId: string) {
+  const draft = await prisma.prospectEmailDraft.findFirst({ where: { id: draftId, companyId, prospectId, status: 'draft' }, select: { id: true, shareToken: true } })
+  if (!draft) throw notFound('Email draft not found.')
+  if (draft.shareToken) return { token: draft.shareToken }
+
+  const token = randomBytes(32).toString('base64url')
+  await prisma.prospectEmailDraft.updateMany({ where: { id: draftId, companyId, prospectId, status: 'draft', shareToken: null }, data: { shareToken: token } })
+  const saved = await prisma.prospectEmailDraft.findFirst({ where: { id: draftId, companyId, prospectId, status: 'draft' }, select: { shareToken: true } })
+  if (!saved?.shareToken) throw notFound('Email draft not found.')
+  return { token: saved.shareToken }
+}
+
+export async function readPublicEmailDraft(prisma: PrismaClient, token: string) {
+  if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) throw notFound()
+  const draft = await prisma.prospectEmailDraft.findFirst({ where: { shareToken: token, status: 'draft', archivedAt: null }, select: { subject: true, body: true } })
+  if (!draft) throw notFound()
+  return draft
+}
+
+export async function createPublicEmailDraftFeedback(prisma: PrismaClient, token: string, message: string) {
+  if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) throw notFound()
+  const draft = await prisma.prospectEmailDraft.findFirst({ where: { shareToken: token, status: 'draft', archivedAt: null }, select: { id: true } })
+  if (!draft) throw notFound()
+  const feedback = await prisma.prospectEmailDraftFeedback.create({ data: { draftId: draft.id, message: message.trim() }, select: { id: true, createdAt: true } })
+  return { id: feedback.id, createdAt: feedback.createdAt.toISOString() }
+}
+
+export async function listProspectEmailDraftFeedback(prisma: PrismaClient, companyId: string, prospectId: string, draftId: string) {
+  const draft = await prisma.prospectEmailDraft.findFirst({ where: { id: draftId, companyId, prospectId }, select: { id: true } })
+  if (!draft) throw notFound('Email draft not found.')
+  const feedback = await prisma.prospectEmailDraftFeedback.findMany({ where: { draftId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, message: true, createdAt: true } })
+  return feedback.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }))
 }
 
 export function parseEmailOutput(text: string) {
