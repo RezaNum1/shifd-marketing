@@ -26,6 +26,7 @@ export class ApiError extends Error {
 
 export interface ApiResult<T> {
   data: T
+  page?: { number?: number; limit?: number; total?: number; totalPages?: number; nextCursor?: string | null }
   etag: string | null
   response: Response
 }
@@ -98,7 +99,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   const data = isDataEnvelope<T>(raw) ? raw.data : undefined as T
-  return { data, etag: response.headers.get('ETag'), response }
+  const page = raw && typeof raw === 'object' && 'page' in raw && raw.page && typeof raw.page === 'object'
+    ? raw.page as ApiResult<T>['page']
+    : undefined
+  return { data, page, etag: response.headers.get('ETag'), response }
 }
 
 function resolveUrl(path: string) {

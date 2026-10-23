@@ -12,7 +12,7 @@ export function listBusinessInquiries(page = 1) { return request(`/business-inqu
 export function createBusinessInquiry(input: Record<string, unknown>) { return request('/business-inquiries', { method: 'POST', json: input }) }
 export function createProductionTime(input: { contentId: string; minutes: number; occurredAt?: string; notes?: string }) { return request('/production-time', { method: 'POST', json: input }) }
 export function getOverview() { return request<BackendOverviewReport>('/overview') }
-export function listPublications() { return request<BackendPublicationFeedItem[]>('/publications?limit=100') }
+export function listPublications(cursor?: string) { const query = new URLSearchParams({ limit: '100' }); if (cursor) query.set('cursor', cursor); return request<BackendPublicationFeedItem[]>(`/publications?${query.toString()}`) }
 export function listLinkedInMetrics() { return request<BackendWeeklyMetric[]>('/metrics/linkedin?limit=100') }
 export function listInquiryMetrics() { return request<BackendInquiryMetric[]>('/metrics/inquiries?limit=100') }
 export function createLinkedInMetric(input: Record<string, unknown>) { return request<BackendWeeklyMetric>('/metrics/linkedin', { method: 'POST', json: input }) }

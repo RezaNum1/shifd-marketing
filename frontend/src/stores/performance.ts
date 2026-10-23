@@ -39,15 +39,26 @@ export const usePerformanceStore = defineStore('performance', () => {
   async function loadSupportingData() {
     supportingLoading.value = true
     try {
-      const [metrics, inquiries, recentPublications] = await Promise.all([performanceApi.listLinkedInMetrics(), performanceApi.listInquiryMetrics(), performanceApi.listPublications()])
+      const [metrics, inquiries, recentPublications] = await Promise.all([performanceApi.listLinkedInMetrics(), performanceApi.listInquiryMetrics(), loadAllPublications()])
       weeklyMetrics.value = metrics.data.map(normalizeWeeklyMetric)
       inboundInquiries.value = inquiries.data.map((item) => ({ id: item.id, weekStart: item.weekStart, weekEnd: item.weekEnd, count: item.count, source: 'manual' as const, version: item.version }))
-      publications.value = recentPublications.data
+      publications.value = recentPublications
       metrics.data.forEach((item) => { metricEtags.value[item.id] = `"${item.version}"` })
       supportingLoaded.value = true
     } catch (reason: unknown) {
       error.value = errorMessage(reason, 'Unable to load supporting performance data.')
     } finally { supportingLoading.value = false }
+  }
+
+  async function loadAllPublications() {
+    const rows: Awaited<ReturnType<typeof performanceApi.listPublications>>['data'] = []
+    let cursor: string | undefined
+    do {
+      const result = await performanceApi.listPublications(cursor)
+      rows.push(...result.data)
+      cursor = result.page?.nextCursor ?? undefined
+    } while (cursor)
+    return rows
   }
 
   async function load(weeks: 4 | 8 | 12 = 8, platform: 'combined' | PerformancePlatform = 'combined') {

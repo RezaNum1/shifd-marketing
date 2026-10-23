@@ -35,6 +35,8 @@ export const dictionary: Record<string, string> = {
   'Manage target organizations and import prospect lists.': 'Kelola organisasi sasaran dan impor daftar prospek.',
   'Review and update prospect organization information.': 'Tinjau dan perbarui informasi organisasi prospek.',
   'Page not found': 'Halaman tidak ditemukan',
+  'Rows per page': 'Baris per halaman', Showing: 'Menampilkan', ' of ': ' dari ', Page: 'Halaman', Previous: 'Sebelumnya', Next: 'Berikutnya',
+  'Previous page': 'Halaman sebelumnya', 'Next page': 'Halaman berikutnya',
   'We couldn’t find that page': 'Halaman tersebut tidak ditemukan',
   'Back to Overview': 'Kembali ke Ringkasan',
   'Back to Products': 'Kembali ke Produk',

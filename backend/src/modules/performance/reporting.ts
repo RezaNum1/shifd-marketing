@@ -283,7 +283,7 @@ export function buildOverviewReport(snapshot: ReportingSnapshot, asOf: Date) {
     thisWeek: { start: thisWeek.start.toISOString(), end: thisWeek.end.toISOString(), consistency: thisWeekConsistency },
     performanceSnapshot: { summary: performance.summary, followers: performance.followers, period: performance.period },
     upcoming,
-    recentlyPublished: snapshot.publications.slice(0, 5).map((row) => recentPublication(row, snapshot.metrics, snapshot.accounts)),
+    recentlyPublished: snapshot.publications.map((row) => recentPublication(row, snapshot.metrics, snapshot.accounts)),
     readyToPublish,
     ideas: { readyCount: snapshot.readyIdeaCount, latest: snapshot.ideas.slice(0, 3).map(mapIdea) },
     context: {

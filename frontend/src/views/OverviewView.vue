@@ -7,6 +7,7 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import TablePagination from '../components/ui/TablePagination.vue'
 import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import { useOverviewStore } from '../stores/overview'
 import type { ContentCalendarStatus, ContentPlatform } from '../types/content'
@@ -20,6 +21,8 @@ const workflow = useContentWorkflowStore()
 const overview = useOverviewStore()
 const integrations = useIntegrationsStore()
 const refreshing = ref(false)
+const recentPublishedPage = ref(1)
+const recentPublishedPageSize = ref(5)
 const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000
 const pageHelp = {
   purpose: 'See the current state of your marketing work in one place, including upcoming posts, items that need attention, and recent performance.',
@@ -56,7 +59,8 @@ const report = computed(() => overview.report)
 const plannedEntries = computed(() => report.value?.upcoming.filter((entry) => entry.status !== 'published').map(calendarEntry) ?? [])
 const readyToPublishCount = computed(() => report.value?.readyToPublish ?? 0)
 const upcoming = computed(() => plannedEntries.value.slice(0, 5))
-const recentPublished = computed(() => report.value?.recentlyPublished.slice(0, 5).map((item) => ({ record: { id: item.content.id, title: item.content.title }, platform: item.publication.platform, publication: item.publication })) ?? [])
+const recentPublished = computed(() => report.value?.recentlyPublished.map((item) => ({ record: { id: item.content.id, title: item.content.title }, platform: item.publication.platform, publication: item.publication })) ?? [])
+const visibleRecentPublished = computed(() => recentPublished.value.slice((recentPublishedPage.value - 1) * recentPublishedPageSize.value, recentPublishedPage.value * recentPublishedPageSize.value))
 const publishedPosts = computed(() => report.value?.published.effectivePosts ?? 0)
 const needsReview = computed(() => Array.from({ length: report.value?.needsReviewCampaigns ?? 0 }, (_, index) => ({ id: String(index) })))
 const readyIdeasCount = computed(() => report.value?.ideas.readyCount ?? 0)
@@ -166,7 +170,7 @@ onUnmounted(() => {
 
     <section class="overview-two-column">
       <BaseCard title="Marketing Context" description="Deterministic readiness from the canonical context stores."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/context/company')">Manage Context <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="context-readiness"><div><span>Company Context</span><StatusBadge :tone="contextReadiness.company ? 'success' : 'warning'">{{ contextReadiness.company ? 'Configured' : 'Needs setup' }}</StatusBadge></div><div><span>Products</span><StatusBadge :tone="contextReadiness.activeProducts ? 'success' : 'warning'">{{ contextReadiness.activeProducts }} Active</StatusBadge></div><div><span>Brand Context</span><StatusBadge :tone="contextReadiness.brand ? 'success' : 'warning'">{{ contextReadiness.brand ? 'Configured' : 'Needs setup' }}</StatusBadge></div></div></BaseCard>
-      <BaseCard title="Recent Published" description="The latest manually recorded platform publications."><div v-if="recentPublished.length" class="recent-list"><button v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`" type="button" class="recent-item" @click="openContent(item.record.id)"><span><strong>{{ item.record.title }}</strong><small>{{ platformLabel(item.platform) }}</small></span><span class="recent-item__date">{{ formatDateTime(item.publication.publishedAt) }}</span><StatusBadge tone="success">Published</StatusBadge></button></div><EmptyState v-else icon="library" title="No content published yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
+      <BaseCard title="Recent Published" description="The latest manually recorded platform publications."><div v-if="recentPublished.length" class="recent-list"><button v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`" type="button" class="recent-item" @click="openContent(item.record.id)"><span><strong>{{ item.record.title }}</strong><small>{{ platformLabel(item.platform) }}</small></span><span class="recent-item__date">{{ formatDateTime(item.publication.publishedAt) }}</span><StatusBadge tone="success">Published</StatusBadge></button><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" :page-size-options="[5, 10, 25, 50]" /></div><EmptyState v-else icon="library" title="No content published yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
     </section>
     </template>
   </div>

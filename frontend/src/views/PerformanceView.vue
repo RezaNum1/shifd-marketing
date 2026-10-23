@@ -10,6 +10,7 @@ import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
+import TablePagination from '../components/ui/TablePagination.vue'
 import { usePerformanceStore } from '../stores/performance'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { listProspects } from '../api/prospects'
@@ -46,6 +47,10 @@ const contentLibrary = useContentLibraryStore()
 const ui = useUiStore()
 const period = ref('8')
 const platform = ref<PlatformFilter>('combined')
+const recentPublishedPage = ref(1)
+const recentPublishedPageSize = ref(10)
+const evaluationComparePage = ref(1)
+const evaluationComparePageSize = ref(10)
 const prospects = ref<Prospect[]>([])
 const platformRows = ['instagram', 'linkedin'] as const
 const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
@@ -55,6 +60,7 @@ const snapshotForm = reactive({ stage: 'week0' as 'week0' | 'week4', instagramFo
 const inquiryForm = reactive({ receivedAt: localDateTimeInput(), channel: 'whatsapp', companyName: '', prospectId: '', summary: '', relevance: 'unreviewed', source: 'Founder-recorded message', sourceReference: '', followUpNotes: '' })
 const productionForm = reactive({ contentId: '', minutes: '', occurredAt: localDateTimeInput(), notes: '' })
 const evaluation = computed(() => performance.evaluation)
+const visibleEvaluationComparison = computed(() => (evaluation.value?.comparison ?? []).slice((evaluationComparePage.value - 1) * evaluationComparePageSize.value, evaluationComparePage.value * evaluationComparePageSize.value))
 const contentOptions = computed(() => contentLibrary.records.map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
 const prospectOptions = computed(() => [{ value: '', label: 'No linked prospect' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
 const evaluationPeriodsLabel = computed(() => {
@@ -62,6 +68,7 @@ const evaluationPeriodsLabel = computed(() => {
   return periods ? `${formatDate(periods.baseline.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} baseline · ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.endExclusive, { dateStyle: 'medium' })} intervention` : 'Set a start date to configure the 28-day baseline and intervention.'
 })
 watch(() => evaluation.value?.evaluation, (config) => { if (config) { evaluationStart.value = config.startDate; measurementDefinitionNotes.value = typeof config.definitions.customNotes === 'string' ? config.definitions.customNotes : '' } })
+watch(() => evaluation.value?.comparison.length, () => { evaluationComparePage.value = 1 })
 
 const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }]
 const platformOptions: SelectOption[] = [{ value: 'combined', label: 'Combined' }, { value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
@@ -253,7 +260,7 @@ const followerChart = computed(() => platform.value === 'combined'
   ? [{ label: 'Instagram', color: '#7c3aed', values: followerSeries.value.instagram.map((item) => item.followers) }, { label: 'LinkedIn', color: '#1d4ed8', values: followerSeries.value.linkedin.map((item) => item.followers) }]
   : [{ label: platformLabel(platform.value), color: platform.value === 'instagram' ? '#7c3aed' : '#1d4ed8', values: (platform.value === 'instagram' ? followerSeries.value.instagram : followerSeries.value.linkedin).map((item) => item.followers) }])
 const chartLabels = computed(() => selectedWeeks.value.map((item) => `W${item.weekStart.slice(5, 7)}-${item.weekStart.slice(8, 10)}`))
-const recentPublished = computed(() => performance.publications.slice(0, 5).map((item) => ({
+const recentPublished = computed(() => performance.publications.map((item) => ({
   record: { id: item.content.id, title: item.content.title, topic: item.content.title },
   platform: item.publication.platform,
   publication: item.publication,
@@ -262,6 +269,8 @@ const recentPublished = computed(() => performance.publications.slice(0, 5).map(
   engagements: item.platformMetricsForPublicationWeek?.engagements ?? null,
   postMetrics: item.postMetrics,
 })))
+const visibleRecentPublished = computed(() => recentPublished.value.slice((recentPublishedPage.value - 1) * recentPublishedPageSize.value, recentPublishedPage.value * recentPublishedPageSize.value))
+watch([platform, () => performance.publications.length], () => { recentPublishedPage.value = 1 })
 const inquiryWindow = computed(() => report.value?.inquiries.weeks.slice(-periodWeeks.value) ?? [])
 const inquiryTotal = computed(() => inquiryWindow.value.reduce((sum, item) => sum + item.count, 0))
 
@@ -343,7 +352,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
       </BaseCard>
 
       <BaseCard v-if="evaluation?.evaluation" title="3. Compare results" description="Compare the 4-week baseline with the intervention. Missing or incomplete values appear as N/A.">
-        <details class="evaluation-details" open><summary>Baseline and intervention comparison</summary><div class="evaluation-table-wrap"><table class="performance-table evaluation-table"><caption>Baseline and intervention KPI comparison</caption><thead><tr><th>KPI</th><th>Baseline</th><th>Intervention</th><th>Absolute change</th><th>Change %</th><th>Source / status</th></tr></thead><tbody><tr v-for="item in evaluation.comparison" :key="item.kpi"><th scope="row">{{ item.kpi }}</th><td>{{ formatMaybeNumber(item.baseline) }}</td><td>{{ formatMaybeNumber(item.intervention) }}</td><td>{{ comparisonChange(item.absoluteChange) }}</td><td>{{ formatPercent(item.percentageChange) }}</td><td>{{ item.source }} · {{ item.status }}<small v-if="item.sourceRecordIds?.length">{{ item.sourceRecordIds.join(', ') }}</small></td></tr></tbody></table></div></details>
+        <details class="evaluation-details" open><summary>Baseline and intervention comparison</summary><div class="evaluation-table-wrap"><table class="performance-table evaluation-table"><caption>Baseline and intervention KPI comparison</caption><thead><tr><th>KPI</th><th>Baseline</th><th>Intervention</th><th>Absolute change</th><th>Change %</th><th>Source / status</th></tr></thead><tbody><tr v-for="item in visibleEvaluationComparison" :key="item.kpi"><th scope="row">{{ item.kpi }}</th><td>{{ formatMaybeNumber(item.baseline) }}</td><td>{{ formatMaybeNumber(item.intervention) }}</td><td>{{ comparisonChange(item.absoluteChange) }}</td><td>{{ formatPercent(item.percentageChange) }}</td><td>{{ item.source }} · {{ item.status }}<small v-if="item.sourceRecordIds?.length">{{ item.sourceRecordIds.join(', ') }}</small></td></tr></tbody></table><TablePagination v-model:page="evaluationComparePage" v-model:page-size="evaluationComparePageSize" :total="evaluation.comparison.length" /></div></details>
       </BaseCard>
     </section>
 
@@ -417,7 +426,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
       <BaseCard title="Supplementary Inquiry Volume" description="Supplementary Metric · WhatsApp Business manual tracking."><template #actions><strong class="inquiry-total">{{ inquiryTotal }} inquiries</strong></template><div class="inquiry-chart"><div v-for="item in inquiryWindow" :key="item.id" class="inquiry-bar"><span :style="{ height: `${Math.max(8, (item.count / Math.max(1, ...inquiryWindow.map((entry) => entry.count))) * 100)}%` }" /><small>{{ formatDate(item.weekStart, { month: 'short', day: 'numeric' }) }}</small><b>{{ item.count }}</b></div></div><p class="helper-text">Inquiry counts are observed supplementary data; no attribution to individual posts is inferred.</p></BaseCard>
     </section>
 
-      <BaseCard v-if="!isEvaluationPage" title="Recent Published Content" description="Recent publications with metrics returned by the connected platform."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in recentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
+      <BaseCard v-if="!isEvaluationPage" title="Recent Published Content" description="Recent publications with metrics returned by the connected platform."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" /></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
 
     <div v-if="!isEvaluationPage" class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>Enter weekly LinkedIn observations from this menu.</span></div>
     </template>

@@ -1,16 +1,20 @@
 <script setup lang="ts" generic="T extends { id: string | number }">
+import { computed, ref, watch } from 'vue'
 import type { TableColumn } from '../../types/ui'
+import TablePagination from './TablePagination.vue'
 
-withDefaults(
-  defineProps<{
+const props = withDefaults(defineProps<{
     caption: string
     columns: TableColumn[]
     rows: T[]
     loading?: boolean
     emptyMessage?: string
-  }>(),
-  { loading: false, emptyMessage: 'No results to display.' },
-)
+    initialPageSize?: number
+  }>(), { loading: false, emptyMessage: 'No results to display.', initialPageSize: 10 })
+const page = ref(1)
+const pageSize = ref(props.initialPageSize)
+const visibleRows = computed(() => props.rows.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch(() => props.rows, () => { page.value = 1 })
 
 function cellValue(row: T, key: string) {
   return (row as Record<string, unknown>)[key] ?? '—'
@@ -50,7 +54,7 @@ function cellValue(row: T, key: string) {
           </td>
         </tr>
         <template v-else>
-          <tr v-for="row in rows" :key="row.id">
+          <tr v-for="row in visibleRows" :key="row.id">
             <td
               v-for="column in columns"
               :key="column.key"
@@ -68,4 +72,5 @@ function cellValue(row: T, key: string) {
       </tbody>
     </table>
   </div>
+  <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="rows.length" />
 </template>
