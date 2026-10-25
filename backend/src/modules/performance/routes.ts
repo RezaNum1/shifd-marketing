@@ -23,7 +23,7 @@ import { buildOverviewReport, buildPerformanceReport, listRecentPublications, lo
 import type { Clock } from '../../shared/time/clock.js'
 import type { InstagramInsightsProvider } from './instagram/provider.js'
 import type { InstagramSyncResult } from './instagram/sync.js'
-import { createBusinessInquiry, createProductionTimeLog, readEvaluation, saveEvaluation, saveEvaluationSnapshot } from './evaluation.js'
+import { createBusinessInquiry, createProductionTimeLog, readEvaluation, readEvaluationRange, saveEvaluation, saveEvaluationSnapshot } from './evaluation.js'
 
 const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts', 'nativeEngagementRate', 'evidenceAssetId', 'notes'] as const
 const evaluationKeys = ['startDate', 'timezone', 'definitions'] as const
@@ -38,6 +38,17 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
   app.get('/evaluation', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     return reply.send({ data: await readEvaluation(app.prisma, auth.user.companyId, options.clock.now()) })
+  })
+
+  app.get('/evaluation/range', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = queryObject(request)
+    allowedKeys(query, ['startDate', 'endDate'], 'query')
+    const startDate = query.startDate ? parseDateOnly(query.startDate, 'startDate').toISOString().slice(0, 10) : undefined
+    const endDate = query.endDate ? parseDateOnly(query.endDate, 'endDate').toISOString().slice(0, 10) : undefined
+    if (!startDate || !endDate) throw validationError('Choose both a start date and an end date.')
+    if (startDate > endDate) throw validationError('The start date must be on or before the end date.')
+    return reply.send({ data: await readEvaluationRange(app.prisma, auth.user.companyId, startDate, endDate) })
   })
 
   app.put('/evaluation', async (request, reply) => {

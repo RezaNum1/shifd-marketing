@@ -65,6 +65,31 @@ export interface MarketingEvaluationDashboard {
   historicalOutbound: { emailsSent: number; followUpsCompleted: number; repliesReceived: number; interestedResponses: number; meetings: number; demonstrations: number; approachedCompanies: number; provenance: { historical: number; artifactAssisted: number; nonArtifactAssisted: number }; sourceRecordIds: string[] }
 }
 
+export interface CustomEvaluationRange {
+  range: { startDate: string; endDate: string; endExclusive: string; days: number; timezone: string }
+  totals: {
+    publishedPosts: number; instagram: number; linkedin: number; uniqueContentCampaigns: number; prospectLinkedPublications: number
+    emailsSent: number; followUpsCompleted: number; repliesReceived: number; interestedResponses: number; meetings: number
+    demonstrations: number; otherActivities: number; outboundActivities: number; prospectsContacted: number
+  }
+  weekly: Array<{
+    startDate: string; endDate: string; publishedPosts: number; instagram: number; linkedin: number
+    outboundActivities: number; emailsSent: number; followUpsCompleted: number; repliesReceived: number
+    interestedResponses: number; meetings: number; demonstrations: number; otherActivities: number; prospectsContacted: number
+  }>
+  publications: Array<{
+    id: string; title: string; contentId: string; platform: string; publishedAt: string; targetIndustry: string | null; targetProspectId: string | null
+    metrics: PublicationMetricValues | null
+    metricHistory: Array<{ observedAt: string } & PublicationMetricValues>
+  }>
+  outboundActivities: Array<{ id: string; prospectId: string; prospectName: string; activityType: string; status: string; occurredAt: string | null; responseClassification: string | null }>
+}
+
+export interface PublicationMetricValues {
+  views: string | null; reach: string | null; likes: string | null; comments: string | null
+  saves: string | null; shares: string | null; totalInteractions: string | null
+}
+
 export interface EvaluationPeriodSummary {
   period: { start: string; endExclusive: string; days: number; status: 'complete' | 'partial' | 'not_started' }
   publications: { total: number; byPlatform: { instagram: number; linkedin: number }; campaigns: number; targeting: { industryTargeted: number; prospectLinked: number; industryOnly: number; general: number; byIndustry: Record<string, number> }; records: Array<Record<string, unknown>>; source: string; sourceRecordIds: string[] }

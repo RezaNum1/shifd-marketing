@@ -1,11 +1,15 @@
 import { request } from './client'
 import type { BackendInquiryMetric, BackendPerformanceReport, BackendPublicationFeedItem, BackendOverviewReport, BackendWeeklyMetric } from '../types/backend'
-import type { MarketingEvaluationDashboard } from '../types/performance'
+import type { CustomEvaluationRange, MarketingEvaluationDashboard } from '../types/performance'
 
 export function getPerformance(weeks: 4 | 8 | 12, platform: 'combined' | 'instagram' | 'linkedin') {
   return request<BackendPerformanceReport>(`/performance?weeks=${weeks}&platform=${platform}`)
 }
 export function getEvaluation() { return request<MarketingEvaluationDashboard>('/evaluation') }
+export function getEvaluationRange(startDate: string, endDate: string) {
+  const query = new URLSearchParams({ startDate, endDate })
+  return request<CustomEvaluationRange>(`/evaluation/range?${query.toString()}`)
+}
 export function saveEvaluation(input: { startDate: string; timezone?: string; definitions?: { customNotes?: string } }) { return request<MarketingEvaluationDashboard['evaluation']>('/evaluation', { method: 'PUT', json: input }) }
 export function recordEvaluationSnapshot(id: string, input: Record<string, unknown>) { return request(`/evaluation/${id}/snapshots`, { method: 'POST', json: input }) }
 export function listBusinessInquiries(page = 1) { return request(`/business-inquiries?page=${page}&limit=100`) }

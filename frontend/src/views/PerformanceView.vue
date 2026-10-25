@@ -17,7 +17,7 @@ import { listProspects } from '../api/prospects'
 import type { Prospect } from '../types/prospect'
 import { useUiStore } from '../stores/ui'
 import InlineAlert from '../components/ui/InlineAlert.vue'
-import type { PerformancePlatform } from '../types/performance'
+import type { CustomEvaluationRange, PerformancePlatform } from '../types/performance'
 import type { SelectOption, Tone } from '../types/ui'
 
 type PlatformFilter = 'combined' | PerformancePlatform
@@ -52,6 +52,11 @@ const recentPublishedPageSize = ref(10)
 const evaluationComparePage = ref(1)
 const evaluationComparePageSize = ref(10)
 const prospects = ref<Prospect[]>([])
+const customRangeStart = ref(addLocalDays(localDateInZone(new Date(), 'Asia/Jakarta'), -27))
+const customRangeEnd = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
+const customRangeApplying = ref(false)
+const growthPublicationId = ref('')
+const growthMetric = ref('totalInteractions')
 const platformRows = ['instagram', 'linkedin'] as const
 const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
 const evaluationSaving = ref(false)
@@ -60,6 +65,32 @@ const snapshotForm = reactive({ stage: 'week0' as 'week0' | 'week4', instagramFo
 const inquiryForm = reactive({ receivedAt: localDateTimeInput(), channel: 'whatsapp', companyName: '', prospectId: '', summary: '', relevance: 'unreviewed', source: 'Founder-recorded message', sourceReference: '', followUpNotes: '' })
 const productionForm = reactive({ contentId: '', minutes: '', occurredAt: localDateTimeInput(), notes: '' })
 const evaluation = computed(() => performance.evaluation)
+const customRange = computed(() => performance.customRange)
+const growthMetricOptions: SelectOption[] = [
+  { value: 'views', label: 'Views' }, { value: 'reach', label: 'Reach' }, { value: 'likes', label: 'Likes' },
+  { value: 'comments', label: 'Comments' }, { value: 'saves', label: 'Saves' }, { value: 'shares', label: 'Shares' },
+  { value: 'totalInteractions', label: 'Total interactions' },
+]
+const growthPublicationOptions = computed(() => (customRange.value?.publications ?? []).map((publication) => ({ value: publication.id, label: `${publication.title} · ${platformLabel(publication.platform as PlatformFilter)}` })))
+const selectedGrowthPublication = computed(() => customRange.value?.publications.find((publication) => publication.id === growthPublicationId.value))
+const selectedGrowthMetricLabel = computed(() => growthMetricOptions.find((item) => item.value === growthMetric.value)?.label ?? 'Total interactions')
+const selectedGrowthObservations = computed(() => (selectedGrowthPublication.value?.metricHistory ?? []).map((snapshot) => ({
+  observedAt: snapshot.observedAt,
+  value: snapshot[growthMetric.value as keyof typeof snapshot] === null ? null : Number(snapshot[growthMetric.value as keyof typeof snapshot]),
+})))
+const growthChartLabels = computed(() => selectedGrowthObservations.value.map((item) => formatDate(item.observedAt, { month: 'short', day: 'numeric' })))
+const growthChartSeries = computed(() => [{ label: selectedGrowthMetricLabel.value, color: '#1d4ed8', values: selectedGrowthObservations.value.map((item) => item.value) }])
+const contentGrowth = computed(() => {
+  const values = selectedGrowthObservations.value.filter((item): item is { observedAt: string; value: number } => item.value !== null)
+  if (values.length < 2) return null
+  const first = values[0]!.value
+  const latest = values.at(-1)!.value
+  const change = latest - first
+  return { first, latest, change, percentage: first > 0 ? change / first * 100 : null }
+})
+watch(() => customRange.value?.publications, (publications) => {
+  if (!publications?.some((publication) => publication.id === growthPublicationId.value)) growthPublicationId.value = publications?.[0]?.id ?? ''
+}, { immediate: true })
 const visibleEvaluationComparison = computed(() => (evaluation.value?.comparison ?? []).slice((evaluationComparePage.value - 1) * evaluationComparePageSize.value, evaluationComparePage.value * evaluationComparePageSize.value))
 const contentOptions = computed(() => contentLibrary.records.map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
 const prospectOptions = computed(() => [{ value: '', label: 'No linked prospect' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
@@ -284,13 +315,33 @@ function signedNumber(value: number | null) { return value === null ? 'Not avail
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
 function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
 function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
+function addLocalDays(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
 function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
 function comparisonChange(value: number | null) { return value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toLocaleString()}` }
+function growthForPublication(publication: CustomEvaluationRange['publications'][number]) {
+  const values = publication.metricHistory.flatMap((snapshot) => {
+    const raw = snapshot[growthMetric.value as keyof typeof snapshot]
+    return raw === null ? [] : [Number(raw)]
+  })
+  if (values.length < 2) return null
+  const first = values[0]!
+  const change = values.at(-1)! - first
+  return { change, percentage: first > 0 ? change / first * 100 : null }
+}
 async function saveEvaluation() {
   evaluationSaving.value = true
   const result = await performance.configureEvaluation({ startDate: evaluationStart.value, definitions: { customNotes: measurementDefinitionNotes.value } })
   evaluationSaving.value = false
   if (result) ui.notify('Evaluation configuration saved as a new revision.', 'success')
+}
+async function applyCustomRange() {
+  if (!customRangeStart.value || !customRangeEnd.value || customRangeStart.value > customRangeEnd.value) {
+    performance.customRangeError = 'Tanggal mulai harus sebelum atau sama dengan tanggal akhir.'
+    return
+  }
+  customRangeApplying.value = true
+  await performance.loadCustomEvaluationRange(customRangeStart.value, customRangeEnd.value)
+  customRangeApplying.value = false
 }
 async function saveSnapshot() {
   const config = evaluation.value?.evaluation
@@ -313,7 +364,7 @@ async function saveProductionTime() {
 }
 onMounted(async () => {
   void performance.load(periodWeeks.value, platform.value)
-  await Promise.all([performance.loadEvaluation(), contentLibrary.load()])
+  await Promise.all([performance.loadEvaluation(), performance.loadCustomEvaluationRange?.(customRangeStart.value, customRangeEnd.value), contentLibrary.load()])
   try { prospects.value = (await listProspects(new URLSearchParams({ page: '1', limit: '100' }))).data }
   catch { prospects.value = [] }
 })
@@ -332,6 +383,25 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
     <section v-if="!isEvaluationPage" class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Metrics summarize the selected period. Missing provider values appear as “Not available”.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report</span><span>LinkedIn · Manual entry</span></div></section>
 
     <section v-if="isEvaluationPage" class="evaluation-section" aria-label="Four-week research evaluation">
+      <BaseCard title="Custom date range" description="Choose any start and end date to review published content and prospect outreach week by week.">
+        <div class="evaluation-controls"><BaseInput v-model="customRangeStart" label="Start date" type="date" /><BaseInput v-model="customRangeEnd" label="End date" type="date" /><BaseButton :disabled="customRangeApplying || !customRangeStart || !customRangeEnd || customRangeStart > customRangeEnd" @click="applyCustomRange">{{ customRangeApplying ? 'Loading…' : 'Apply date range' }}</BaseButton></div>
+        <p v-if="customRange" class="helper-text">{{ formatDate(customRange.range.startDate) }} – {{ formatDate(customRange.range.endDate) }} · {{ customRange.range.days }} days · timezone {{ customRange.range.timezone }}</p>
+        <InlineAlert v-if="performance.customRangeError" title="Date range unavailable" tone="danger">{{ performance.customRangeError }}</InlineAlert>
+        <div v-if="performance.customRangeLoading" class="evaluation-note" role="status">Loading the selected period…</div>
+        <template v-if="customRange">
+          <div class="custom-range-summary"><div><strong>{{ formatNumber(customRange.totals.publishedPosts) }}</strong><span>published posts</span><small>{{ customRange.totals.instagram }} Instagram · {{ customRange.totals.linkedin }} LinkedIn</small></div><div><strong>{{ formatNumber(customRange.totals.uniqueContentCampaigns) }}</strong><span>content campaigns</span><small>{{ customRange.totals.prospectLinkedPublications }} linked to prospects</small></div><div><strong>{{ formatNumber(customRange.totals.outboundActivities) }}</strong><span>outbound activities</span><small>{{ customRange.totals.prospectsContacted }} prospects emailed</small></div><div><strong>{{ formatNumber(customRange.totals.repliesReceived) }}</strong><span>replies received</span><small>{{ customRange.totals.interestedResponses }} interested</small></div></div>
+          <section class="content-growth" aria-label="Content growth chart">
+            <div class="content-growth__heading"><div><h3>Content growth preview</h3><p>Track the selected post's metric across Instagram sync snapshots.</p></div><div class="content-growth__filters"><BaseSelect v-model="growthPublicationId" label="Published content" :options="growthPublicationOptions" /><BaseSelect v-model="growthMetric" label="Metric" :options="growthMetricOptions" /></div></div>
+            <p class="helper-text">{{ selectedGrowthPublication?.platform === 'instagram' ? (selectedGrowthObservations.some(item => item.value !== null) ? 'Instagram post metrics are cumulative. Growth compares the first and latest saved observations; sync Instagram regularly to build a trend.' : 'No Instagram post metrics are stored yet. Connect Instagram and sync to start collecting observations for this content.') : 'LinkedIn post-level metrics are not available from the current data source. The chart will appear when this content has supported metric observations.' }}</p>
+            <div v-if="contentGrowth" class="content-growth__stats"><div><span>Latest {{ selectedGrowthMetricLabel.toLowerCase() }}</span><strong>{{ formatNumber(contentGrowth.latest) }}</strong></div><div><span>Change since first observation</span><strong>{{ signedNumber(contentGrowth.change) }}</strong></div><div><span>Growth</span><strong>{{ contentGrowth.percentage === null ? 'N/A' : formatPercent(contentGrowth.percentage) }}</strong></div></div>
+            <TrendChart :labels="growthChartLabels" :series="growthChartSeries" :format-value="formatNumber" />
+            <p v-if="selectedGrowthPublication && selectedGrowthObservations.filter(item => item.value !== null).length < 2" class="helper-text">{{ selectedGrowthObservations.some(item => item.value !== null) ? 'One observation is available. Sync Instagram again later to see growth over time.' : `No ${selectedGrowthMetricLabel.toLowerCase()} observations are available for this content yet.` }}</p>
+          </section>
+          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-content-table"><caption>Post-level metrics for published content in the selected range</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Interactions</th><th>{{ selectedGrowthMetricLabel }} growth</th><th>Observations</th></tr></thead><tbody><tr v-for="publication in customRange.publications" :key="publication.id"><th scope="row"><button type="button" class="content-link" @click="growthPublicationId = publication.id"><strong>{{ publication.title }}</strong><small>{{ publication.targetIndustry || 'general' }} · {{ publication.targetProspectId ? 'prospect-linked' : 'no prospect linked' }}</small></button></th><td>{{ publication.platform }}</td><td>{{ formatDate(publication.publishedAt) }}</td><td>{{ publication.metrics?.views === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.views)) }}</td><td>{{ publication.metrics?.reach === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.reach)) }}</td><td>{{ publication.metrics?.totalInteractions === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.totalInteractions)) }}</td><td>{{ growthForPublication(publication) ? `${signedNumber(growthForPublication(publication)!.change)}${growthForPublication(publication)!.percentage === null ? '' : ` (${formatPercent(growthForPublication(publication)!.percentage!)})`}` : 'Need 2 observations' }}</td><td>{{ publication.metricHistory.length }}</td></tr><tr v-if="!customRange.publications.length"><td colspan="8">No published content in this date range.</td></tr></tbody></table></div>
+          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-table"><caption>Weekly publishing and prospect activity, with weeks counted from the selected start date</caption><thead><tr><th>Week</th><th>Published</th><th>Instagram</th><th>LinkedIn</th><th>Outbound</th><th>Prospects emailed</th><th>Replies</th><th>Follow-ups</th><th>Meetings</th><th>Demos</th></tr></thead><tbody><tr v-for="week in customRange.weekly" :key="week.startDate"><th scope="row">{{ formatDate(week.startDate, { month: 'short', day: 'numeric' }) }} – {{ formatDate(week.endDate, { month: 'short', day: 'numeric', year: 'numeric' }) }}</th><td>{{ week.publishedPosts }}</td><td>{{ week.instagram }}</td><td>{{ week.linkedin }}</td><td>{{ week.outboundActivities }}</td><td>{{ week.prospectsContacted }}</td><td>{{ week.repliesReceived }}<small>{{ week.interestedResponses }} interested</small></td><td>{{ week.followUpsCompleted }}</td><td>{{ week.meetings }}</td><td>{{ week.demonstrations }}</td></tr><tr v-if="customRange.weekly.length === 0"><td colspan="10">No activity in this date range.</td></tr></tbody></table></div>
+          <details class="evaluation-details"><summary>Prospect activities ({{ customRange.outboundActivities.length }})</summary><ul class="inquiry-record-list"><li v-for="activity in customRange.outboundActivities" :key="activity.id">{{ activity.occurredAt ? formatDate(activity.occurredAt.slice(0, 10)) : '—' }} · {{ activity.prospectName }} · {{ activity.activityType.replaceAll('_', ' ') }}<span v-if="activity.responseClassification"> · {{ activity.responseClassification.replaceAll('_', ' ') }}</span></li><li v-if="!customRange.outboundActivities.length">No prospect activities during this range.</li></ul></details>
+        </template>
+      </BaseCard>
       <BaseCard title="1. Set the evaluation dates" description="Choose when the 4-week intervention begins. The 4 weeks before it become the baseline.">
         <p class="form-guidance">Start here even if you have not entered any measurements yet. Saving a changed date creates a new revision and keeps the previous results.</p>
         <div class="evaluation-controls"><BaseInput v-model="evaluationStart" label="Intervention start date" type="date" /><BaseInput v-model="measurementDefinitionNotes" label="Custom measurement notes (optional)" /><BaseButton :disabled="evaluationSaving || !evaluationStart" @click="saveEvaluation">{{ evaluationSaving ? 'Saving…' : evaluation?.evaluation ? 'Save New Revision' : 'Set evaluation dates' }}</BaseButton></div>
@@ -447,6 +517,21 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .evaluation-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .evaluation-controls, .evaluation-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
 .evaluation-controls > *, .evaluation-form > * { flex: 1 1 170px; }
+.custom-range-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.custom-range-summary > div { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+.custom-range-summary strong { color: var(--color-ink); font-size: 20px; }
+.custom-range-summary span { color: var(--color-ink); font-size: 12px; font-weight: 600; }
+.custom-range-summary small { color: var(--color-muted); font-size: 11px; }
+.content-growth { display: grid; gap: 8px; margin: 18px 0; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.content-growth__heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; }
+.content-growth__heading h3 { margin: 0; color: var(--color-ink); font-size: 15px; }
+.content-growth__heading p { margin: 4px 0 0; color: var(--color-muted); font-size: 12px; }
+.content-growth__filters { display: flex; gap: 10px; min-width: min(520px, 60%); }
+.content-growth__filters > * { flex: 1 1 180px; }
+.content-growth__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.content-growth__stats > div { display: grid; gap: 5px; padding: 10px; border-radius: var(--radius-control); background: var(--color-well); }
+.content-growth__stats span { color: var(--color-muted); font-size: 11px; }
+.content-growth__stats strong { color: var(--color-ink); font-size: 15px; }
 .evaluation-progress { display: grid; gap: 10px; margin: 16px 0; }
 .evaluation-progress > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 12px; }
 .source-status-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
@@ -457,6 +542,8 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .snapshot-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; }
 .evaluation-table-wrap { overflow-x: auto; margin-top: 16px; }
 .evaluation-table { min-width: 820px; }
+.custom-range-table { min-width: 1060px; }
+.custom-range-content-table { min-width: 900px; }
 .platform-execution-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .platform-execution p, .platform-observation p, .evaluation-snapshot p, .outbound-period span { margin: 0; color: var(--color-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .platform-observation { margin: 10px 0; max-height: 260px; overflow: auto; }
@@ -522,6 +609,6 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .custom-range-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .content-growth__heading { align-items: stretch; flex-direction: column; } .content-growth__filters { min-width: 0; flex-direction: column; } .content-growth__stats { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list, .snapshot-form { grid-template-columns: 1fr; } }
 </style>

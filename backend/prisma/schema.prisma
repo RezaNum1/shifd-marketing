@@ -935,6 +935,7 @@ model PublicationRecord {
   schedule            ContentSchedule     @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
   marker              User                @relation("PublicationMarkedBy", fields: [markedBy], references: [id], onDelete: Restrict)
   metrics             PublicationMetric[]
+  metricSnapshots     PublicationMetricSnapshot[]
 
   @@index([publishedAt])
   @@map("publication_records")
@@ -966,6 +967,24 @@ model PublicationMetric {
   @@index([publicationRecordId, observedAt])
   @@index([socialAccountId, observedAt])
   @@map("publication_metrics")
+}
+
+model PublicationMetricSnapshot {
+  id                  String            @id @default(uuid()) @db.Uuid
+  publicationRecordId String            @map("publication_record_id") @db.Uuid
+  observedAt          DateTime          @map("observed_at") @db.Timestamptz(3)
+  views               BigInt?
+  reach               BigInt?
+  likes               BigInt?
+  comments            BigInt?
+  saves               BigInt?
+  shares              BigInt?
+  totalInteractions   BigInt?           @map("total_interactions")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  publicationRecord   PublicationRecord @relation(fields: [publicationRecordId], references: [id], onDelete: Cascade)
+
+  @@index([publicationRecordId, observedAt])
+  @@map("publication_metric_snapshots")
 }
 
 model VariantAsset {

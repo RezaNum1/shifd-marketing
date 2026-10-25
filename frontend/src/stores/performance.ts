@@ -5,7 +5,7 @@ import * as performanceApi from '../api/performance'
 import { errorMessage, isApiError } from '../api/client'
 import { beginCommand, completeCommand, discardCommand } from '../api/idempotency'
 import type { BackendPerformanceReport, BackendWeeklyMetric } from '../types/backend'
-import type { InboundInquiryMetric, MarketingEvaluationDashboard, PerformancePlatform, WeeklyMetric } from '../types/performance'
+import type { CustomEvaluationRange, InboundInquiryMetric, MarketingEvaluationDashboard, PerformancePlatform, WeeklyMetric } from '../types/performance'
 
 export const usePerformanceStore = defineStore('performance', () => {
   const report = ref<BackendPerformanceReport | null>(null)
@@ -21,6 +21,9 @@ export const usePerformanceStore = defineStore('performance', () => {
   const evaluation = ref<MarketingEvaluationDashboard | null>(null)
   const evaluationLoading = ref(false)
   const evaluationError = ref('')
+  const customRange = ref<CustomEvaluationRange | null>(null)
+  const customRangeLoading = ref(false)
+  const customRangeError = ref('')
 
   async function loadReport(weeks: 4 | 8 | 12 = 8, platform: 'combined' | PerformancePlatform = 'combined') {
     loading.value = true
@@ -71,6 +74,14 @@ export const usePerformanceStore = defineStore('performance', () => {
     try { evaluation.value = (await performanceApi.getEvaluation()).data; return evaluation.value }
     catch (reason: unknown) { evaluationError.value = errorMessage(reason, 'Unable to load evaluation dashboard.'); return undefined }
     finally { evaluationLoading.value = false }
+  }
+
+  async function loadCustomEvaluationRange(startDate: string, endDate: string) {
+    customRangeLoading.value = true
+    customRangeError.value = ''
+    try { customRange.value = (await performanceApi.getEvaluationRange(startDate, endDate)).data; return customRange.value }
+    catch (reason: unknown) { customRangeError.value = errorMessage(reason, 'Unable to load the selected date range.'); return undefined }
+    finally { customRangeLoading.value = false }
   }
 
   async function configureEvaluation(input: { startDate: string; timezone?: string; definitions?: { customNotes?: string } }) {
@@ -138,7 +149,7 @@ export const usePerformanceStore = defineStore('performance', () => {
     }
   }
 
-  return { report, weeklyMetrics, inboundInquiries, publications, loading, supportingLoading, supportingLoaded, loaded, error, evaluation, evaluationLoading, evaluationError, loadEvaluation, configureEvaluation, recordSnapshot, addBusinessInquiry, addProductionTime, load, loadReport, loadSupportingData, addWeeklyMetric, saveLinkedInMetric }
+  return { report, weeklyMetrics, inboundInquiries, publications, loading, supportingLoading, supportingLoaded, loaded, error, evaluation, evaluationLoading, evaluationError, customRange, customRangeLoading, customRangeError, loadCustomEvaluationRange, loadEvaluation, configureEvaluation, recordSnapshot, addBusinessInquiry, addProductionTime, load, loadReport, loadSupportingData, addWeeklyMetric, saveLinkedInMetric }
 })
 
 export function normalizeWeeklyMetric(value: BackendWeeklyMetric): WeeklyMetric {

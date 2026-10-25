@@ -79,6 +79,112 @@ export function isWithinHalfOpenPeriod(value: Date, start: Date, endExclusive: D
   return value >= start && value < endExclusive
 }
 
+/** Read content publication and prospect activity totals for an arbitrary local date range. */
+export async function readEvaluationRange(prisma: PrismaClient, companyId: string, startDate: string, endDate: string) {
+  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { reportingTimezone: true } })
+  if (!company) throw notFound('Company not found.')
+  const timezone = company.reportingTimezone
+  const start = localDayStart(startDate, timezone)
+  const endExclusive = localDayStart(addLocalDays(endDate, 1), timezone)
+  const dayCount = Math.round((Date.UTC(Number(endDate.slice(0, 4)), Number(endDate.slice(5, 7)) - 1, Number(endDate.slice(8, 10))) - Date.UTC(Number(startDate.slice(0, 4)), Number(startDate.slice(5, 7)) - 1, Number(startDate.slice(8, 10)))) / DAY) + 1
+  if (dayCount > 3660) throw validationError('The selected date range cannot exceed 10 years.')
+
+  const [publications, activities] = await Promise.all([
+    prisma.publicationRecord.findMany({
+      where: { variant: { content: { companyId } }, publishedAt: { gte: start, lt: endExclusive } },
+      select: {
+        id: true, publishedAt: true,
+        variant: { select: { platform: true, contentId: true, content: { select: { targetIndustry: true, targetProspectId: true, brief: { select: { topic: true } } } } } },
+        metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
+        metricSnapshots: { orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 100 },
+      },
+      orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
+    }),
+    prisma.outboundActivity.findMany({
+      where: { companyId, archivedAt: null, status: { in: ['recorded', 'completed'] }, occurredAt: { gte: start, lt: endExclusive } },
+      select: { id: true, prospectId: true, activityType: true, status: true, occurredAt: true, responseClassification: true, prospect: { select: { name: true } } },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    }),
+  ])
+
+  const weekly = [] as Array<{
+    startDate: string; endDate: string; publishedPosts: number; instagram: number; linkedin: number
+    outboundActivities: number; emailsSent: number; followUpsCompleted: number; repliesReceived: number
+    interestedResponses: number; meetings: number; demonstrations: number; otherActivities: number; prospectsContacted: number
+  }>
+  for (let offset = 0; offset < dayCount; offset += 7) {
+    const weekStartDate = addLocalDays(startDate, offset)
+    const weekEndDate = addLocalDays(startDate, Math.min(offset + 6, dayCount - 1))
+    const weekStart = localDayStart(weekStartDate, timezone)
+    const weekEnd = localDayStart(addLocalDays(weekEndDate, 1), timezone)
+    const pubs = publications.filter((row) => row.publishedAt >= weekStart && row.publishedAt < weekEnd)
+    const events = activities.filter((row) => row.occurredAt && row.occurredAt >= weekStart && row.occurredAt < weekEnd)
+    const countType = (type: string) => events.filter((row) => row.activityType === type).length
+    weekly.push({
+      startDate: weekStartDate, endDate: weekEndDate,
+      publishedPosts: pubs.length,
+      instagram: pubs.filter((row) => row.variant.platform === 'instagram').length,
+      linkedin: pubs.filter((row) => row.variant.platform === 'linkedin').length,
+      outboundActivities: events.length,
+      emailsSent: countType('email_sent'),
+      followUpsCompleted: countType('follow_up'),
+      repliesReceived: countType('reply_received'),
+      interestedResponses: events.filter((row) => row.activityType === 'reply_received' && row.responseClassification === 'interested').length,
+      meetings: countType('meeting'),
+      demonstrations: countType('product_demonstration'),
+      otherActivities: countType('other'),
+      prospectsContacted: new Set(events.filter((row) => row.activityType === 'email_sent').map((row) => row.prospectId)).size,
+    })
+  }
+  const sum = (key: keyof typeof weekly[number]) => weekly.reduce((total, row) => total + (typeof row[key] === 'number' ? row[key] as number : 0), 0)
+  const totalProspectsContacted = new Set(activities.filter((row) => row.activityType === 'email_sent').map((row) => row.prospectId)).size
+
+  return {
+    range: { startDate, endDate, endExclusive: endExclusive.toISOString(), days: dayCount, timezone },
+    totals: {
+      publishedPosts: sum('publishedPosts'), instagram: sum('instagram'), linkedin: sum('linkedin'),
+      uniqueContentCampaigns: new Set(publications.map((row) => row.variant.contentId)).size,
+      prospectLinkedPublications: publications.filter((row) => Boolean(row.variant.content.targetProspectId)).length,
+      emailsSent: sum('emailsSent'), followUpsCompleted: sum('followUpsCompleted'), repliesReceived: sum('repliesReceived'),
+      interestedResponses: sum('interestedResponses'), meetings: sum('meetings'), demonstrations: sum('demonstrations'),
+      otherActivities: sum('otherActivities'), outboundActivities: sum('outboundActivities'), prospectsContacted: totalProspectsContacted,
+    },
+    weekly,
+    publications: publications.map((row) => {
+      const snapshots = [...row.metricSnapshots].reverse()
+      const legacyMetric = row.metrics[0]
+      const history = snapshots.length
+        ? snapshots.map((snapshot) => ({ observedAt: snapshot.observedAt.toISOString(), ...mapRangeMetric(snapshot)! }))
+        : legacyMetric ? [{ observedAt: legacyMetric.observedAt.toISOString(), ...mapRangeMetric(legacyMetric)! }] : []
+      return {
+        id: row.id, title: row.variant.content.brief?.topic ?? 'Untitled content', contentId: row.variant.contentId, platform: row.variant.platform,
+        publishedAt: row.publishedAt.toISOString(), targetIndustry: row.variant.content.targetIndustry,
+        targetProspectId: row.variant.content.targetProspectId,
+        metrics: mapRangeMetric(snapshots.at(-1) ?? legacyMetric ?? null),
+        metricHistory: history,
+      }
+    }),
+    outboundActivities: activities.map((row) => ({
+      id: row.id, prospectId: row.prospectId, prospectName: row.prospect.name, activityType: row.activityType,
+      status: row.status, occurredAt: row.occurredAt?.toISOString() ?? null,
+      responseClassification: row.responseClassification,
+    })),
+  }
+}
+
+function mapRangeMetric(row: { views: bigint | null; reach: bigint | null; likes: bigint | null; comments: bigint | null; saves: bigint | null; shares: bigint | null; totalInteractions: bigint | null } | null) {
+  if (!row) return null
+  return {
+    views: row.views?.toString() ?? null,
+    reach: row.reach?.toString() ?? null,
+    likes: row.likes?.toString() ?? null,
+    comments: row.comments?.toString() ?? null,
+    saves: row.saves?.toString() ?? null,
+    shares: row.shares?.toString() ?? null,
+    totalInteractions: row.totalInteractions?.toString() ?? null,
+  }
+}
+
 function isoBounds(bounds: { start: Date; end: Date }) { return { gte: bounds.start, lt: bounds.end } }
 function sumCounts(rows: Array<{ count: number }>) { return rows.reduce((total, row) => total + row.count, 0) }
 function eventCount(rows: Array<{ activityType: string; status: string; responseClassification: string | null; provenance: string }>, type: string, predicate: (row: typeof rows[number]) => boolean = () => true) { return rows.filter((row) => row.activityType === type && predicate(row)).length }

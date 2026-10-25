@@ -105,7 +105,7 @@ export async function syncInstagram(
       })
     }
     for (const observation of observations) {
-      await tx.publicationMetric.upsert({
+      const metric = await tx.publicationMetric.upsert({
         where: { publicationRecordId_source: { publicationRecordId: observation.publicationRecordId, source: 'instagram_api' } },
         create: {
           publicationRecordId: observation.publicationRecordId,
@@ -124,6 +124,13 @@ export async function syncInstagram(
           ...metricData(observation.insights),
           updatedAt: now,
           version: { increment: 1 },
+        },
+      })
+      await tx.publicationMetricSnapshot.create({
+        data: {
+          publicationRecordId: metric.publicationRecordId,
+          observedAt: now,
+          ...metricData(observation.insights),
         },
       })
     }
