@@ -13,6 +13,7 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import TablePagination from '../components/ui/TablePagination.vue'
 import { usePerformanceStore } from '../stores/performance'
+import { useIntegrationsStore } from '../stores/integrations'
 import { useContentLibraryStore } from '../stores/contentLibrary'
 import { listProspects } from '../api/prospects'
 import type { Prospect } from '../types/prospect'
@@ -44,8 +45,11 @@ const evaluationHelp = {
   ],
 }
 const performance = usePerformanceStore()
+const integrations = useIntegrationsStore()
 const contentLibrary = useContentLibraryStore()
 const ui = useUiStore()
+const instagramAutoSyncing = ref(false)
+const instagramAutoSyncError = ref('')
 const period = ref('8')
 const platform = ref<PlatformFilter>('combined')
 const recentPublishedPage = ref(1)
@@ -306,6 +310,21 @@ function formatPercent(value: number | null) { return value === null ? 'Not avai
 function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
 function signedNumber(value: number | null) { return value === null ? 'Not available' : `${value >= 0 ? '+' : ''}${formatNumber(value)}` }
 function toneForConsistency(value: number): Tone { return value >= 100 ? 'success' : value >= 75 ? 'info' : 'warning' }
+async function syncInstagramForPerformance() {
+  await integrations.load()
+  if (integrations.instagram?.status !== 'connected') return
+  instagramAutoSyncError.value = ''
+  instagramAutoSyncing.value = true
+  try {
+    const synced = await integrations.syncInstagram()
+    if (synced) await performance.loadSupportingData()
+    else instagramAutoSyncError.value = integrations.error || 'Instagram metrics could not be synchronized.'
+  } finally { instagramAutoSyncing.value = false }
+}
+async function refreshPerformanceOverview() {
+  await performance.load(periodWeeks.value, platform.value)
+  await syncInstagramForPerformance()
+}
 function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
 function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
 function addLocalDays(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
@@ -356,11 +375,16 @@ async function saveProductionTime() {
   if (saved) { productionForm.minutes = ''; productionForm.notes = ''; ui.notify('Active production time recorded.', 'success') }
 }
 onMounted(async () => {
-  void performance.load(periodWeeks.value, platform.value)
-  await Promise.all([performance.loadEvaluation(), performance.loadCustomEvaluationRange?.(customRangeStart.value, customRangeEnd.value), contentLibrary.load()])
+  const tasks: Promise<unknown>[] = [performance.load(periodWeeks.value, platform.value), contentLibrary.load()]
+  if (isEvaluationPage.value) {
+    tasks.push(performance.loadEvaluation(), performance.loadCustomEvaluationRange?.(customRangeStart.value, customRangeEnd.value) ?? Promise.resolve())
+  }
+  await Promise.all(tasks)
+  if (!isEvaluationPage.value) await syncInstagramForPerformance()
   try { prospects.value = (await listProspects(new URLSearchParams({ page: '1', limit: '100' }))).data }
   catch { prospects.value = [] }
 })
+watch(isEvaluationPage, (isEvaluation) => { if (!isEvaluation) void refreshPerformanceOverview() })
 watch([period, platform], () => { void performance.load(periodWeeks.value, platform.value) })
 </script>
 
@@ -371,6 +395,8 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
     </PageHeader>
     <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
     <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
+    <InlineAlert v-if="!isEvaluationPage && instagramAutoSyncing" title="Refreshing Instagram metrics">Published post metrics are being synchronized…</InlineAlert>
+    <InlineAlert v-else-if="!isEvaluationPage && instagramAutoSyncError" title="Instagram sync unavailable" tone="danger">{{ instagramAutoSyncError }}</InlineAlert>
 
     <template v-if="performance.loaded || evaluation">
     <section v-if="!isEvaluationPage" class="performance-toolbar" aria-label="Performance data controls"><div class="performance-toolbar__note"><AppIcon name="chart" :size="16" /><span>Metrics summarize the selected period. Missing provider values appear as “Not available”.</span></div><div class="performance-toolbar__source"><span>Instagram · Backend report</span><span>LinkedIn · Manual entry</span></div></section>
