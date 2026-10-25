@@ -15,12 +15,17 @@ const props = defineProps<{
 
 const width = 640
 const height = 230
-const padding = { top: 16, right: 18, bottom: 32, left: 42 }
+const padding = { top: 18, right: 20, bottom: 38, left: 72 }
 const plotWidth = width - padding.left - padding.right
 const plotHeight = height - padding.top - padding.bottom
 const formatValue = props.formatValue ?? ((value: number) => value.toLocaleString())
 const maxValue = computed(() => Math.max(1, ...props.series.flatMap((series) => series.values.filter((value): value is number => value !== null))))
 const yTicks = computed(() => [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(maxValue.value * ratio)))
+const xLabelIndexes = computed(() => {
+  if (props.labels.length <= 8) return props.labels.map((_, index) => index)
+  const count = 8
+  return Array.from({ length: count }, (_, index) => Math.round(index * (props.labels.length - 1) / (count - 1)))
+})
 const x = (index: number) => props.labels.length <= 1 ? padding.left : padding.left + (index / (props.labels.length - 1)) * plotWidth
 const y = (value: number) => padding.top + plotHeight - (value / maxValue.value) * plotHeight
 function points(values: Array<number | null>) { return values.map((value, index) => value === null ? '' : `${x(index)},${y(value)}`).join(' ') }
@@ -29,7 +34,7 @@ function points(values: Array<number | null>) { return values.map((value, index)
 <template>
   <div class="trend-chart" role="img" :aria-label="`Trend chart showing ${series.map((item) => item.label).join(' and ')}`">
     <p v-if="!labels.length" class="trend-chart__empty" role="status">No recorded metrics for this period.</p>
-    <svg v-else :viewBox="`0 0 ${width} ${height}`" preserveAspectRatio="none" aria-hidden="true">
+    <svg v-else :viewBox="`0 0 ${width} ${height}`" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       <g class="trend-chart__grid">
         <line v-for="tick in yTicks" :key="tick" :x1="padding.left" :x2="width - padding.right" :y1="y(tick)" :y2="y(tick)" />
       </g>
@@ -43,16 +48,16 @@ function points(values: Array<number | null>) { return values.map((value, index)
         </template>
       </g>
       <g class="trend-chart__x-labels">
-        <text v-for="(label, index) in labels" :key="label" :x="x(index)" :y="height - 9" text-anchor="middle">{{ label }}</text>
+        <text v-for="index in xLabelIndexes" :key="`${labels[index]}-${index}`" :x="x(index)" :y="height - 9" text-anchor="middle">{{ labels[index] }}</text>
       </g>
     </svg>
   </div>
 </template>
 
 <style scoped>
-.trend-chart { width: 100%; min-height: 220px; }
+.trend-chart { width: 100%; min-height: 0; }
 .trend-chart__empty { display: grid; place-items: center; min-height: 220px; margin: 0; color: var(--color-muted); font-size: 12px; }
-.trend-chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+.trend-chart svg { display: block; width: 100%; height: auto; aspect-ratio: 640 / 230; overflow: visible; }
 .trend-chart__grid line { stroke: var(--color-border); stroke-dasharray: 3 4; }
 .trend-chart__y-labels text, .trend-chart__x-labels text { fill: var(--color-subtle); font-size: 10px; font-family: var(--font-sans); }
 </style>

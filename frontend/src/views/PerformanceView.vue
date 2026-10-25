@@ -55,7 +55,6 @@ const prospects = ref<Prospect[]>([])
 const customRangeStart = ref(addLocalDays(localDateInZone(new Date(), 'Asia/Jakarta'), -27))
 const customRangeEnd = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
 const customRangeApplying = ref(false)
-const growthPublicationId = ref('')
 const growthMetric = ref('totalInteractions')
 const platformRows = ['instagram', 'linkedin'] as const
 const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
@@ -71,26 +70,39 @@ const growthMetricOptions: SelectOption[] = [
   { value: 'comments', label: 'Comments' }, { value: 'saves', label: 'Saves' }, { value: 'shares', label: 'Shares' },
   { value: 'totalInteractions', label: 'Total interactions' },
 ]
-const growthPublicationOptions = computed(() => (customRange.value?.publications ?? []).map((publication) => ({ value: publication.id, label: `${publication.title} · ${platformLabel(publication.platform as PlatformFilter)}` })))
-const selectedGrowthPublication = computed(() => customRange.value?.publications.find((publication) => publication.id === growthPublicationId.value))
 const selectedGrowthMetricLabel = computed(() => growthMetricOptions.find((item) => item.value === growthMetric.value)?.label ?? 'Total interactions')
-const selectedGrowthObservations = computed(() => (selectedGrowthPublication.value?.metricHistory ?? []).map((snapshot) => ({
-  observedAt: snapshot.observedAt,
-  value: snapshot[growthMetric.value as keyof typeof snapshot] === null ? null : Number(snapshot[growthMetric.value as keyof typeof snapshot]),
-})))
-const growthChartLabels = computed(() => selectedGrowthObservations.value.map((item) => formatDate(item.observedAt, { month: 'short', day: 'numeric' })))
-const growthChartSeries = computed(() => [{ label: selectedGrowthMetricLabel.value, color: '#1d4ed8', values: selectedGrowthObservations.value.map((item) => item.value) }])
-const contentGrowth = computed(() => {
-  const values = selectedGrowthObservations.value.filter((item): item is { observedAt: string; value: number } => item.value !== null)
-  if (values.length < 2) return null
-  const first = values[0]!.value
-  const latest = values.at(-1)!.value
-  const change = latest - first
-  return { first, latest, change, percentage: first > 0 ? change / first * 100 : null }
+const overallGrowthObservations = computed(() => {
+  const publications = customRange.value?.publications ?? []
+  const lastObservationByDay = new Map<string, number>()
+  for (const publication of publications) for (const snapshot of publication.metricHistory) {
+    const day = localDateInZone(new Date(snapshot.observedAt), customRange.value?.range.timezone ?? 'Asia/Jakarta')
+    const observedAt = new Date(snapshot.observedAt).getTime()
+    lastObservationByDay.set(day, Math.max(lastObservationByDay.get(day) ?? 0, observedAt))
+  }
+  return [...lastObservationByDay.entries()].sort(([first], [second]) => first.localeCompare(second)).flatMap(([day, cutoff]) => {
+    let total = 0
+    let postsWithMetric = 0
+    for (const publication of publications) {
+      const snapshots = publication.metricHistory.filter((snapshot) => new Date(snapshot.observedAt).getTime() <= cutoff)
+      const value = snapshots.reduce<number | null>((latest, snapshot) => {
+        const raw = snapshot[growthMetric.value as keyof typeof snapshot]
+        return raw === null ? latest : Number(raw)
+      }, null)
+      if (value !== null) { total += value; postsWithMetric++ }
+    }
+    return postsWithMetric ? [{ day, total, postsWithMetric }] : []
+  })
 })
-watch(() => customRange.value?.publications, (publications) => {
-  if (!publications?.some((publication) => publication.id === growthPublicationId.value)) growthPublicationId.value = publications?.[0]?.id ?? ''
-}, { immediate: true })
+const growthChartLabels = computed(() => overallGrowthObservations.value.map((item) => formatDate(item.day, { month: 'short', day: 'numeric' })))
+const growthChartSeries = computed(() => [{ label: `All published content · ${selectedGrowthMetricLabel.value}`, color: '#1d4ed8', values: overallGrowthObservations.value.map((item) => item.total) }])
+const contentGrowth = computed(() => {
+  const values = overallGrowthObservations.value
+  if (values.length < 2) return null
+  const first = values[0]!.total
+  const latest = values.at(-1)!.total
+  const change = latest - first
+  return { first, latest, change, percentage: first > 0 ? change / first * 100 : null, postsWithMetric: values.at(-1)!.postsWithMetric }
+})
 const visibleEvaluationComparison = computed(() => (evaluation.value?.comparison ?? []).slice((evaluationComparePage.value - 1) * evaluationComparePageSize.value, evaluationComparePage.value * evaluationComparePageSize.value))
 const contentOptions = computed(() => contentLibrary.records.map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
 const prospectOptions = computed(() => [{ value: '', label: 'No linked prospect' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
@@ -391,13 +403,13 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
         <template v-if="customRange">
           <div class="custom-range-summary"><div><strong>{{ formatNumber(customRange.totals.publishedPosts) }}</strong><span>published posts</span><small>{{ customRange.totals.instagram }} Instagram · {{ customRange.totals.linkedin }} LinkedIn</small></div><div><strong>{{ formatNumber(customRange.totals.uniqueContentCampaigns) }}</strong><span>content campaigns</span><small>{{ customRange.totals.prospectLinkedPublications }} linked to prospects</small></div><div><strong>{{ formatNumber(customRange.totals.outboundActivities) }}</strong><span>outbound activities</span><small>{{ customRange.totals.prospectsContacted }} prospects emailed</small></div><div><strong>{{ formatNumber(customRange.totals.repliesReceived) }}</strong><span>replies received</span><small>{{ customRange.totals.interestedResponses }} interested</small></div></div>
           <section class="content-growth" aria-label="Content growth chart">
-            <div class="content-growth__heading"><div><h3>Content growth preview</h3><p>Track the selected post's metric across Instagram sync snapshots.</p></div><div class="content-growth__filters"><BaseSelect v-model="growthPublicationId" label="Published content" :options="growthPublicationOptions" /><BaseSelect v-model="growthMetric" label="Metric" :options="growthMetricOptions" /></div></div>
-            <p class="helper-text">{{ selectedGrowthPublication?.platform === 'instagram' ? (selectedGrowthObservations.some(item => item.value !== null) ? 'Instagram post metrics are cumulative. Growth compares the first and latest saved observations; sync Instagram regularly to build a trend.' : 'No Instagram post metrics are stored yet. Connect Instagram and sync to start collecting observations for this content.') : 'LinkedIn post-level metrics are not available from the current data source. The chart will appear when this content has supported metric observations.' }}</p>
-            <div v-if="contentGrowth" class="content-growth__stats"><div><span>Latest {{ selectedGrowthMetricLabel.toLowerCase() }}</span><strong>{{ formatNumber(contentGrowth.latest) }}</strong></div><div><span>Change since first observation</span><strong>{{ signedNumber(contentGrowth.change) }}</strong></div><div><span>Growth</span><strong>{{ contentGrowth.percentage === null ? 'N/A' : formatPercent(contentGrowth.percentage) }}</strong></div></div>
-            <TrendChart :labels="growthChartLabels" :series="growthChartSeries" :format-value="formatNumber" />
-            <p v-if="selectedGrowthPublication && selectedGrowthObservations.filter(item => item.value !== null).length < 2" class="helper-text">{{ selectedGrowthObservations.some(item => item.value !== null) ? 'One observation is available. Sync Instagram again later to see growth over time.' : `No ${selectedGrowthMetricLabel.toLowerCase()} observations are available for this content yet.` }}</p>
+            <div class="content-growth__heading"><div><h3>Content growth preview</h3><p>Growth across all published content within the selected date range.</p></div><div class="content-growth__filters"><BaseSelect v-model="growthMetric" label="Metric" :options="growthMetricOptions" /></div></div>
+            <p class="helper-text">The chart sums each post's cumulative Instagram metric at every saved sync date. LinkedIn post-level metrics are not available from the current data source. Connect and sync Instagram regularly to build a trend.</p>
+            <div v-if="contentGrowth" class="content-growth__stats"><div><span>Latest {{ selectedGrowthMetricLabel.toLowerCase() }}</span><strong>{{ formatNumber(contentGrowth.latest) }}</strong><small>{{ contentGrowth.postsWithMetric }} posts with metric data</small></div><div><span>Change since first observation</span><strong>{{ signedNumber(contentGrowth.change) }}</strong></div><div><span>Growth</span><strong>{{ contentGrowth.percentage === null ? 'N/A' : formatPercent(contentGrowth.percentage) }}</strong></div></div>
+            <div class="content-growth__chart"><TrendChart :labels="growthChartLabels" :series="growthChartSeries" :format-value="formatNumber" /></div>
+            <p v-if="overallGrowthObservations.length < 2" class="helper-text">{{ overallGrowthObservations.length === 1 ? 'One aggregate observation is available. Sync Instagram again later to see growth over time.' : `No ${selectedGrowthMetricLabel.toLowerCase()} observations are available for published content in this range yet.` }}</p>
           </section>
-          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-content-table"><caption>Post-level metrics for published content in the selected range</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Interactions</th><th>{{ selectedGrowthMetricLabel }} growth</th><th>Observations</th></tr></thead><tbody><tr v-for="publication in customRange.publications" :key="publication.id"><th scope="row"><button type="button" class="content-link" @click="growthPublicationId = publication.id"><strong>{{ publication.title }}</strong><small>{{ publication.targetIndustry || 'general' }} · {{ publication.targetProspectId ? 'prospect-linked' : 'no prospect linked' }}</small></button></th><td>{{ publication.platform }}</td><td>{{ formatDate(publication.publishedAt) }}</td><td>{{ publication.metrics?.views === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.views)) }}</td><td>{{ publication.metrics?.reach === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.reach)) }}</td><td>{{ publication.metrics?.totalInteractions === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.totalInteractions)) }}</td><td>{{ growthForPublication(publication) ? `${signedNumber(growthForPublication(publication)!.change)}${growthForPublication(publication)!.percentage === null ? '' : ` (${formatPercent(growthForPublication(publication)!.percentage!)})`}` : 'Need 2 observations' }}</td><td>{{ publication.metricHistory.length }}</td></tr><tr v-if="!customRange.publications.length"><td colspan="8">No published content in this date range.</td></tr></tbody></table></div>
+          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-content-table"><caption>Post-level metrics for published content in the selected range</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Interactions</th><th>{{ selectedGrowthMetricLabel }} growth</th><th>Observations</th></tr></thead><tbody><tr v-for="publication in customRange.publications" :key="publication.id"><th scope="row"><span class="content-link"><strong>{{ publication.title }}</strong><small>{{ publication.targetIndustry || 'general' }} · {{ publication.targetProspectId ? 'prospect-linked' : 'no prospect linked' }}</small></span></th><td>{{ publication.platform }}</td><td>{{ formatDate(publication.publishedAt) }}</td><td>{{ publication.metrics?.views === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.views)) }}</td><td>{{ publication.metrics?.reach === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.reach)) }}</td><td>{{ publication.metrics?.totalInteractions === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.totalInteractions)) }}</td><td>{{ growthForPublication(publication) ? `${signedNumber(growthForPublication(publication)!.change)}${growthForPublication(publication)!.percentage === null ? '' : ` (${formatPercent(growthForPublication(publication)!.percentage!)})`}` : 'Need 2 observations' }}</td><td>{{ publication.metricHistory.length }}</td></tr><tr v-if="!customRange.publications.length"><td colspan="8">No published content in this date range.</td></tr></tbody></table></div>
           <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-table"><caption>Weekly publishing and prospect activity, with weeks counted from the selected start date</caption><thead><tr><th>Week</th><th>Published</th><th>Instagram</th><th>LinkedIn</th><th>Outbound</th><th>Prospects emailed</th><th>Replies</th><th>Follow-ups</th><th>Meetings</th><th>Demos</th></tr></thead><tbody><tr v-for="week in customRange.weekly" :key="week.startDate"><th scope="row">{{ formatDate(week.startDate, { month: 'short', day: 'numeric' }) }} – {{ formatDate(week.endDate, { month: 'short', day: 'numeric', year: 'numeric' }) }}</th><td>{{ week.publishedPosts }}</td><td>{{ week.instagram }}</td><td>{{ week.linkedin }}</td><td>{{ week.outboundActivities }}</td><td>{{ week.prospectsContacted }}</td><td>{{ week.repliesReceived }}<small>{{ week.interestedResponses }} interested</small></td><td>{{ week.followUpsCompleted }}</td><td>{{ week.meetings }}</td><td>{{ week.demonstrations }}</td></tr><tr v-if="customRange.weekly.length === 0"><td colspan="10">No activity in this date range.</td></tr></tbody></table></div>
           <details class="evaluation-details"><summary>Prospect activities ({{ customRange.outboundActivities.length }})</summary><ul class="inquiry-record-list"><li v-for="activity in customRange.outboundActivities" :key="activity.id">{{ activity.occurredAt ? formatDate(activity.occurredAt.slice(0, 10)) : '—' }} · {{ activity.prospectName }} · {{ activity.activityType.replaceAll('_', ' ') }}<span v-if="activity.responseClassification"> · {{ activity.responseClassification.replaceAll('_', ' ') }}</span></li><li v-if="!customRange.outboundActivities.length">No prospect activities during this range.</li></ul></details>
         </template>
@@ -526,12 +538,14 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .content-growth__heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; }
 .content-growth__heading h3 { margin: 0; color: var(--color-ink); font-size: 15px; }
 .content-growth__heading p { margin: 4px 0 0; color: var(--color-muted); font-size: 12px; }
-.content-growth__filters { display: flex; gap: 10px; min-width: min(520px, 60%); }
+.content-growth__filters { display: flex; gap: 10px; width: min(280px, 40%); }
 .content-growth__filters > * { flex: 1 1 180px; }
+.content-growth__chart { width: 100%; max-width: 1000px; margin: 0 auto; }
 .content-growth__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .content-growth__stats > div { display: grid; gap: 5px; padding: 10px; border-radius: var(--radius-control); background: var(--color-well); }
 .content-growth__stats span { color: var(--color-muted); font-size: 11px; }
 .content-growth__stats strong { color: var(--color-ink); font-size: 15px; }
+.content-growth__stats small { color: var(--color-subtle); font-size: 10px; }
 .evaluation-progress { display: grid; gap: 10px; margin: 16px 0; }
 .evaluation-progress > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 12px; }
 .source-status-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
@@ -609,6 +623,6 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .custom-range-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .content-growth__heading { align-items: stretch; flex-direction: column; } .content-growth__filters { min-width: 0; flex-direction: column; } .content-growth__stats { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid { grid-template-columns: 1fr; } .custom-range-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .content-growth__heading { align-items: stretch; flex-direction: column; } .content-growth__filters { width: 100%; flex-direction: column; } .content-growth__stats { grid-template-columns: 1fr; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list, .snapshot-form { grid-template-columns: 1fr; } }
 </style>
