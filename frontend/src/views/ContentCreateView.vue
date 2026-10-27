@@ -263,6 +263,34 @@ const creativeReferenceAspectRatioOptions = [
 const latestCreativeReferenceBatch = computed(() => creativeReferenceBatches.value.find((batch) => batch.platform === creativeReferencePlatform.value));
 const selectedCreativeReferenceBatch = computed(() => creativeReferenceBatches.value.find((batch) => batch.platform === creativeReferencePlatform.value && batch.references.some((reference) => reference.selected)) ?? null);
 const selectedCreativeReference = computed(() => selectedCreativeReferenceBatch.value?.references.find((reference) => reference.selected) ?? null);
+const creativeVisualDirection = computed(() => {
+  if (creativeReferenceFormat.value === "single_image") {
+    const content = [generatedContent.hook || generatedContent.title, generatedContent.coreMessage, generatedContent.cta]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ");
+    return {
+      ...visualDirection,
+      format: "Single image",
+      structure: [content || visualDirection.concept || "One clear headline, focal visual, and supporting message."],
+    };
+  }
+
+  const slideCount = Number(creativeReferenceSlideCount.value);
+  const latest = latestCreativeReferenceBatch.value;
+  const generatedOutline = latest?.creativeFormat === "carousel" && latest.expectedReferenceCount === slideCount
+    ? latest.references.find((reference) => reference.carouselOutline.length)?.carouselOutline
+    : undefined;
+  const source = generatedOutline?.length ? generatedOutline : visualDirection.structure;
+  const structure = generatedOutline?.length === slideCount
+    ? [...generatedOutline]
+    : Array.from({ length: slideCount }, (_, index) => {
+        if (index === 0) return source[0] || generatedContent.hook || "Opening hook";
+        if (index === slideCount - 1) return source.at(-1) || (generatedContent.cta ? `Closing message and CTA: ${generatedContent.cta}` : "Closing message and next step");
+        return source[index] && index < source.length - 1 ? source[index]! : `Supporting point ${index} from the approved post content`;
+      });
+  return { ...visualDirection, format: `Carousel · ${slideCount} slides`, structure };
+});
 const missingCreativeSlideNumbers = computed(() => {
   const batch = latestCreativeReferenceBatch.value;
   if (!batch || batch.creativeFormat !== "carousel") return [];
@@ -271,7 +299,7 @@ const missingCreativeSlideNumbers = computed(() => {
 });
 const storyboardSelected = computed(() => Boolean(latestCreativeReferenceBatch.value?.references.length && latestCreativeReferenceBatch.value.references.every((reference) => reference.selected)));
 const creativeReferenceActionLabel = computed(() => {
-  if (creativeReferenceFormat.value !== "carousel") return "Generate 3 options";
+  if (creativeReferenceFormat.value !== "carousel") return "Generate single image";
   const lockedCount = lockedCreativeSourceBatchId.value === latestCreativeReferenceBatch.value?.id ? lockedCreativeSlideNumbers.value.length : 0;
   return `Generate ${Math.max(0, Number(creativeReferenceSlideCount.value) - lockedCount)} slides`;
 });
@@ -506,10 +534,10 @@ function moveCreativeAsset(
 
 function copyVisualBrief() {
   const visualBrief = [
-    `Recommended Format: ${visualDirection.format}`,
-    `Visual Concept: ${visualDirection.concept}`,
-    `Slide Structure: ${visualDirection.structure.map((slide, index) => `${String(index + 1).padStart(2, "0")} — ${slide}`).join("; ")}`,
-    `Visual Notes: ${visualDirection.notes}`,
+    `Recommended Format: ${creativeVisualDirection.value.format}`,
+    `Visual Concept: ${creativeVisualDirection.value.concept}`,
+    `${creativeReferenceFormat.value === "carousel" ? "Slide Structure" : "Single-image Layout"}: ${creativeVisualDirection.value.structure.map((slide, index) => `${String(index + 1).padStart(2, "0")} — ${slide}`).join("; ")}`,
+    `Visual Notes: ${creativeVisualDirection.value.notes}`,
   ].join("\n");
   if (!navigator.clipboard) {
     ui.notify("Visual brief is ready to copy manually.", "info");
@@ -610,7 +638,7 @@ async function generateCreativeReferences() {
       creativeReferenceError.value = "Generation failed. Retry the batch; completed slides remain saved.";
       return;
     }
-    ui.notify(finished.status === "partial" ? `${finished.references.length} of ${expected} visual references were generated.` : finished.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Three single-image design options are ready.", finished.status === "partial" ? "warning" : "success");
+    ui.notify(finished.status === "partial" ? `${finished.references.length} of ${expected} visual references were generated.` : finished.creativeFormat === "carousel" ? `${expected}-slide Canva storyboard is ready.` : "Single-image reference is ready.", finished.status === "partial" ? "warning" : "success");
   } catch (error) {
     if (controller.signal.aborted) {
       ui.notify("Stopped monitoring. Generation continues in the background; reopen this page to check its status.", "info");
@@ -1314,7 +1342,7 @@ onMounted(() => {
 
       <div class="creative-brief-grid">
         <VisualDirectionCard
-          :direction="visualDirection"
+          :direction="creativeVisualDirection"
           title="Visual Brief"
           description="The direction generated from your master content."
           copyable
@@ -1358,9 +1386,9 @@ onMounted(() => {
         </div>
         <div class="creative-reference-actions">
           <div>
-            <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
+            <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'One single-image direction' }}</strong>
             <p v-if="creativeReferenceFormat === 'carousel'"><span>Generate one connected storyboard from the approved content. Keep each slide's message tied to the post and the slides before and after it.</span> <span>Lock finished slides to keep their image and copy when regenerating. Remaining slides follow the locked storyboard.</span> <span>This uses</span> {{ Number(creativeReferenceSlideCount) - (lockedCreativeSourceBatchId === latestCreativeReferenceBatch?.id ? lockedCreativeSlideNumbers.length : 0) }} <span>image requests.</span></p>
-            <p v-else>Generate three single-image directions: educational, product showcase, and process insight. Keep headlines grounded in the approved post content. Each includes Shifd Labs brand guidance and Canva asset search terms. This uses three image requests.</p>
+            <p v-else>Generate one image direction based on the approved post content. It includes Shifd Labs brand guidance and Canva asset search terms. This uses one image request.</p>
           </div>
           <BaseButton class="creative-reference-generate-button" size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
             <AppIcon name="sparkles" :size="17" />{{ creativeReferenceActionLabel }}
@@ -1374,8 +1402,8 @@ onMounted(() => {
             <span class="creative-reference-generation-spark">✦</span>
           </div>
           <div class="creative-reference-generation-copy">
-            <strong>{{ creativeReferenceFormat === 'carousel' ? `Building your ${creativeReferenceSlideCount}-slide storyboard` : 'Creating three visual directions' }}</strong>
-            <span>Generating the images and keeping each carousel slide in sequence.</span>
+            <strong>{{ creativeReferenceFormat === 'carousel' ? `Building your ${creativeReferenceSlideCount}-slide storyboard` : 'Creating your single-image reference' }}</strong>
+            <span>{{ creativeReferenceFormat === 'carousel' ? 'Generating the images and keeping each carousel slide in sequence.' : 'Generating one image direction from the approved post content.' }}</span>
             <small><AppIcon name="alert" :size="14" /> Generation continues in the background. You can leave this page and check its progress when you return.</small>
             <BaseButton class="creative-reference-cancel-button" variant="secondary" size="compact" :disabled="!creativeReferenceLoading" @click="cancelCreativeReferenceGeneration">Stop monitoring</BaseButton>
           </div>
@@ -1386,7 +1414,7 @@ onMounted(() => {
             <div class="creative-reference-batch-summary">
             <span>{{ ['pending', 'processing'].includes(latestCreativeReferenceBatch.status) ? "Generating visual references" : latestCreativeReferenceBatch.status === "cancelled" ? "Generation cancelled" : latestCreativeReferenceBatch.status === "failed" ? "Generation failed" : latestCreativeReferenceBatch.status === "partial" ? (latestCreativeReferenceBatch.creativeFormat === 'carousel' ? "Incomplete storyboard" : "Partial batch") : "Latest reference batch" }}</span>
               <small v-if="latestCreativeReferenceBatch.creativeFormat === 'carousel'">{{ latestCreativeReferenceBatch.references.length }} of {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides generated<span v-if="missingCreativeSlideNumbers.length"> · Slide{{ missingCreativeSlideNumbers.length === 1 ? '' : 's' }} {{ missingCreativeSlideNumbers.join(', ') }} missing</span> · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
-              <small v-else>{{ latestCreativeReferenceBatch.references.length }} of 3 options · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
+              <small v-else>{{ latestCreativeReferenceBatch.references.length }} of {{ latestCreativeReferenceBatch.expectedReferenceCount }} image · {{ latestCreativeReferenceBatch.actualGeneratedSize }}</small>
             </div>
             <div class="creative-reference-batch-actions">
               <BaseButton v-if="['partial', 'cancelled', 'failed'].includes(latestCreativeReferenceBatch.status) && latestCreativeReferenceBatch.creativeFormat === 'carousel'" variant="ghost" size="compact" :disabled="creativeReferenceLoading" @click="retryCreativeReferenceBatch">Retry all {{ latestCreativeReferenceBatch.expectedReferenceCount }} slides</BaseButton>

@@ -42,8 +42,15 @@ additional fields. The exact shape is:
   "visualDirection": { "format": "", "concept": "", "structure": [""], "notes": "" }
 }
 Every string is required and nonblank. structure must contain at least one
-nonblank string. Visual Direction describes later manual Canva work; it does
-not create or imply an image or an approval.
+nonblank string. Choose the Visual Direction format to fit the supplied
+campaign and platform. Use Single image when one composition can carry the
+message. Use Carousel only when the message benefits from a sequence of distinct
+steps or ideas. For Single image, structure should describe one composition,
+not slides. For Carousel, structure should contain only the number of slides
+needed to explain the message clearly, usually three to six. Never force a
+six-slide outline or add slides to reach a target count. Visual Direction
+describes later manual Canva work; it does not create or imply an image or an
+approval.
 
 <COMPANY_CONTEXT_DATA>
 {{COMPANY_CONTEXT_JSON}}
@@ -61,7 +68,7 @@ not create or imply an image or an approval.
 {{EXECUTION_JSON}}
 </EXECUTION_DATA>`
 
-export const M2_PROMPT_REFERENCE = 'm2-generate-v3'
+export const M2_PROMPT_REFERENCE = 'm2-generate-v4'
 
 export function promptDigest() {
   return createHash('sha256').update(M2_PROMPT_TEMPLATE, 'utf8').digest('hex')

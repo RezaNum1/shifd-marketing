@@ -23,19 +23,19 @@ describe('AI visual reference concept validation', () => {
     expect(CREATIVE_REFERENCE_MODULE).toBe('M2')
     expect(CREATIVE_REFERENCE_MODULE).not.toBe('M6')
     expect(CREATIVE_REFERENCE_CONCEPT_OPERATION).toBe('creative_reference.concepts')
-    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v6')
-    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v6')
+    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v7')
+    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v7')
     expect(CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION).toBe('m2.creative_reference_concepts.v3')
   })
 
-  it('accepts exactly three distinct structured concepts', () => {
-    expect(parseCreativeReferenceConcepts(JSON.stringify({ carouselOutline: [], concepts: [concept('Workflow'), concept('Before and After'), concept('Product Interface')] }), { format: 'single_image', slideCount: 5, platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'portrait_4_5', additionalInstruction: null })).toHaveLength(3)
+  it('accepts exactly one structured single-image concept', () => {
+    expect(parseCreativeReferenceConcepts(JSON.stringify({ carouselOutline: [], concepts: [concept('Workflow')] }), { format: 'single_image', slideCount: 5, platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'portrait_4_5', additionalInstruction: null })).toHaveLength(1)
   })
 
   it.each([
+    JSON.stringify({ carouselOutline: [], concepts: [] }),
     JSON.stringify({ carouselOutline: [], concepts: [concept('A'), concept('B')] }),
-    JSON.stringify({ carouselOutline: [], concepts: [concept('A'), concept('A'), concept('B')] }),
-    JSON.stringify({ carouselOutline: [], concepts: [concept('A'), { ...concept('B'), imagePrompt: '' }, concept('C')] }),
+    JSON.stringify({ carouselOutline: [], concepts: [{ ...concept('A'), imagePrompt: '' }] }),
     '{not-json}',
   ])('rejects invalid planner output', (value) => {
     expect(() => parseCreativeReferenceConcepts(value, { format: 'single_image', slideCount: 5, platform: 'instagram', style: 'modern_minimal', mood: 'professional', aspectRatio: 'portrait_4_5', additionalInstruction: null })).toThrow()

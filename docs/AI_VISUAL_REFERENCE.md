@@ -14,7 +14,7 @@ Selecting a reference does not create a final Asset, change Content lifecycle, s
 
 ## Two-stage flow
 
-The user chooses `single_image` or `carousel`. Single-image generation performs one concept-planning request and three image requests, returning independent educational, product showcase, and single-slide process insight alternatives. Carousel generation accepts 2–10 slides, plans one content-grounded story from the master and platform copy, and makes one image request per slide. Carousel references share one ordered outline, slide numbering, a common Canva design brief, and consistent visual system instructions; each image prompt focuses on its own slide. Invalid planner output stops the batch before image generation.
+The user chooses `single_image` or `carousel`. Single-image generation performs one concept-planning request and one image request, returning one image direction chosen for the campaign. Carousel generation accepts 2–10 slides, plans one content-grounded story from the master and platform copy, and makes one image request per slide. Carousel references share one ordered outline, slide numbering, a common Canva design brief, and consistent visual system instructions; each image prompt focuses on its own slide. Invalid planner output stops the batch before image generation.
 
 The image stage uses the configured OpenAI image provider and stores only validated private PNG files. A partial batch keeps successful references and records the batch as partial. A failed image is not fabricated and is not retried automatically.
 
@@ -34,7 +34,7 @@ The portrait provider image is placed on a white 1080x1350 (4:5) Canva canvas, p
 
 ## Cost control
 
-No image is generated on page load, route navigation, autosave, Content generation, adaptation, upload, review, approval, scheduling, or publication. The button disables while a batch is running and shows the selected slide count. Single-image mode is bounded to one text call plus three image calls; carousel mode uses one text call plus 2–10 image calls. Regeneration is an explicit new batch and leaves previous batches available. There are no automatic paid retries.
+No image is generated on page load, route navigation, autosave, Content generation, adaptation, upload, review, approval, scheduling, or publication. The button disables while a batch is running and shows the selected slide count. Single-image mode is bounded to one text call plus one image call; carousel mode uses one text call plus 2–10 image calls. Regeneration is an explicit new batch and leaves previous batches available. There are no automatic paid retries.
 
 ## Private storage and retrieval
 
@@ -56,15 +56,15 @@ Provider authentication, rate-limit, timeout, provider, invalid-output, image-de
 
 ## Tests and smoke evidence
 
-Deterministic unit coverage validates exactly-three concept output and the official image-provider boundary with no paid calls. Existing backend and frontend unit suites remain separate from database-backed tests. Database-backed tests must use `TEST_DATABASE_URL` and never the development database.
+Deterministic unit coverage validates format-specific concept output and the official image-provider boundary with no paid calls. Existing backend and frontend unit suites remain separate from database-backed tests. Database-backed tests must use `TEST_DATABASE_URL` and never the development database.
 
-The real paid smoke is intentionally bounded: one single-image provider/storage smoke precedes one full development batch of one planner call and three image calls. Development references are not thesis evaluation evidence and are not copied into a research database.
+The real paid smoke is intentionally bounded: one single-image provider/storage smoke precedes one full development batch of one planner call and one image call. Development references are not thesis evaluation evidence and are not copied into a research database.
 
 Implementation verification attempted one single-image smoke with the configured development server environment. The provider boundary returned a normalized provider failure, so no second paid attempt was made. Development database migration and the authenticated full-batch smoke remain pending until the local PostgreSQL connection is available.
 
 ## Experimental Canva-Ready Design mode
 
-`Canva-Ready Design` is an optional second mode. The existing `Original Design` prompt and image request options remain unchanged. The experimental mode reuses the same concept-planner request and the same number of image requests (three for a single image, one per carousel slide). It asks the configured image model for one transparent PNG illustration per slot, then builds a browser-side composition from native SVG background/decorative layers and editable typography specifications. Its illustration direction follows the same concept and visual metaphor as the planned Original Design, with a clean editorial illustration style, simplified forms, and restrained Shifd colors rather than photorealistic or glossy 3D artwork. The browser composition keeps text clear above a smaller lower-right illustration. It does not segment existing artwork, trace the raster image, call another image service, or make any additional generation request.
+`Canva-Ready Design` is an optional second mode. The existing `Original Design` prompt and image request options remain unchanged. The experimental mode reuses the same concept-planner request and the same number of image requests (one for a single image, one per carousel slide). It asks the configured image model for one transparent PNG illustration per slot, then builds a browser-side composition from native SVG background/decorative layers and editable typography specifications. Its illustration direction follows the same concept and visual metaphor as the planned Original Design, with a clean editorial illustration style, simplified forms, and restrained Shifd colors rather than photorealistic or glossy 3D artwork. The browser composition keeps text clear above a smaller lower-right illustration. It does not segment existing artwork, trace the raster image, call another image service, or make any additional generation request.
 
 The default `gpt-image-2.5-sunburst` supports `background: "transparent"` with PNG output. The generated hero is stored as its original PNG without the Original Design mode's portrait canvas resize. The browser's Canva-ready ZIP contains `assets/hero-object.png`, genuine vector `assets/background.svg` and `assets/decorative-shapes.svg`, `typography.json`, `preview.png`, and `manifest.json`. The text specification uses the current content title/message/CTA, Inter, and the Shifd palette. Layout sliders adjust illustration and text positions and illustration scale.
 

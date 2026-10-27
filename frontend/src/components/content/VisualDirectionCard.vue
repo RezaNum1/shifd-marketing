@@ -46,7 +46,7 @@ defineEmits<{ copy: [] }>()
         <dd>{{ direction.concept }}</dd>
       </div>
       <div>
-        <dt>Slide / Content Structure</dt>
+        <dt>{{ direction.format === 'Single image' ? 'Single-image Layout' : 'Slide / Content Structure' }}</dt>
         <dd>
           <ol class="slide-structure-list">
             <li v-for="(slide, index) in direction.structure" :key="slide">

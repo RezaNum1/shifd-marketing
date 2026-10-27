@@ -27,8 +27,6 @@ class FakePlanner implements AiProvider {
     return {
       text: JSON.stringify({ carouselOutline: [], concepts: [
         { conceptName: 'Workflow map', templateType: 'educational', rationale: 'Clarifies the operating flow.', layoutNotes: 'Three-step horizontal process.', visualFocus: 'Connected workflow nodes.', typographyDirection: 'Short bold labels with generous spacing.', canvaBrief: 'Place the headline above a simple flow.', assetSearchKeywords: ['workflow diagram', 'connected nodes', 'dot grid'], slideNumber: 0, slideCopy: '', imagePrompt: 'A workflow map with three connected stages.' },
-        { conceptName: 'Before and after', templateType: 'product_showcase', rationale: 'Makes the transformation visible.', layoutNotes: 'Split composition with a clear center transition.', visualFocus: 'Contrast between fragmented and aligned work.', typographyDirection: 'Compact labels anchored to each side.', canvaBrief: 'Use a two-column comparison.', assetSearchKeywords: ['flowchart arrows', 'document line icon', 'mesh gradient'], slideNumber: 0, slideCopy: '', imagePrompt: 'A before-and-after workflow transformation.' },
-        { conceptName: 'Interface lens', templateType: 'process_insight', rationale: 'Connects the idea to product behavior.', layoutNotes: 'Product-inspired frame with a focused central panel.', visualFocus: 'A calm interface-like operating view.', typographyDirection: 'Minimal interface labels and one focal heading.', canvaBrief: 'Keep one focal panel with short labels.', assetSearchKeywords: ['dashboard mockup', 'browser window', 'geometric outline'], slideNumber: 0, slideCopy: '', imagePrompt: 'A product interface-inspired workflow composition.' },
       ] }),
       inputTokens: 10,
       outputTokens: 20,
@@ -120,21 +118,21 @@ runIntegration('Creative Reference database integration', () => {
     if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Creative Reference test fixture cleanup failed.')
   })
 
-  it('persists three private references, enforces ownership, selects transactionally, and preserves Content state', async () => {
+  it('persists one private image reference, enforces ownership, selects it, and preserves Content state', async () => {
     const before = await prisma.content.findUniqueOrThrow({ where: { id: contentId! }, select: { editorialStage: true, editorialRevision: true, designStatus: true, currentApprovalId: true } })
     const result = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(), storage, companyId, actorId, contentId!, input, 'batch-one')
     expect(result.status).toBe(201)
     const batch = result.body.data.batch
     expect(batch.status).toBe('completed')
-    expect(batch.references).toHaveLength(3)
+    expect(batch.references).toHaveLength(1)
     const rows = await prisma.creativeReference.findMany({ where: { batchId: batch.id }, orderBy: { conceptIndex: 'asc' } })
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(1)
     const persistedBatch = await prisma.creativeReferenceBatch.findUniqueOrThrow({ where: { id: batch.id }, include: { conceptPlannerAiRequest: true } })
     expect(persistedBatch.conceptPlannerAiRequestLogId).toBe(persistedBatch.conceptPlannerAiRequest?.id)
     expect(persistedBatch.conceptPlannerAiRequest).toMatchObject({ module: 'M2', operation: CREATIVE_REFERENCE_CONCEPT_OPERATION, status: 'success' })
     const imageLogIds = rows.map((row) => row.imageAiRequestLogId)
     expect(imageLogIds.every((id): id is string => Boolean(id))).toBe(true)
-    expect(await prisma.aiRequestLog.count({ where: { id: { in: imageLogIds.filter((id): id is string => Boolean(id)) } } })).toBe(3)
+    expect(await prisma.aiRequestLog.count({ where: { id: { in: imageLogIds.filter((id): id is string => Boolean(id)) } } })).toBe(1)
     const prompt = await prisma.promptVersion.findUniqueOrThrow({ where: { module_version: { module: CREATIVE_REFERENCE_MODULE, version: CREATIVE_REFERENCE_PROMPT_VERSION } } })
     expect(prompt).toMatchObject({ module: 'M2', operation: CREATIVE_REFERENCE_CONCEPT_OPERATION, version: CREATIVE_REFERENCE_PROMPT_VERSION, templateReference: CREATIVE_REFERENCE_PROMPT_REFERENCE, status: 'active' })
     expect(prompt.module).not.toBe('M6')
@@ -143,25 +141,22 @@ runIntegration('Creative Reference database integration', () => {
     await expect(openCreativeReference(prisma, storage, otherCompanyId, contentId!, rows[0]!.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
 
     await selectCreativeReference(prisma, companyId, contentId!, rows[0]!.id)
-    await selectCreativeReference(prisma, companyId, contentId!, rows[1]!.id)
     const selected = await prisma.creativeReference.findMany({ where: { batch: { companyId, contentId: contentId!, platform: 'instagram' }, selectedAt: { not: null } } })
     expect(selected).toHaveLength(1)
-    expect(selected[0]!.id).toBe(rows[1]!.id)
+    expect(selected[0]!.id).toBe(rows[0]!.id)
     const after = await prisma.content.findUniqueOrThrow({ where: { id: contentId! }, select: { editorialStage: true, editorialRevision: true, designStatus: true, currentApprovalId: true } })
     expect(after).toEqual(before)
     expect(await prisma.creativeAsset.count({ where: { companyId } })).toBe(0)
   })
 
-  it('keeps regenerated batches, partial batches, and failed batches distinct', async () => {
+  it('keeps regenerated and failed single-image batches distinct', async () => {
     const regenerated = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(), storage, companyId, actorId, contentId!, input, 'batch-two')
     expect(regenerated.status).toBe(201)
-    expect(regenerated.body.data.batch.references).toHaveLength(3)
+    expect(regenerated.body.data.batch.references).toHaveLength(1)
     expect(await prisma.creativeReferenceBatch.count({ where: { contentId: contentId! } })).toBe(2)
     expect(await prisma.promptVersion.count({ where: { module: 'M2', operation: CREATIVE_REFERENCE_CONCEPT_OPERATION, version: CREATIVE_REFERENCE_PROMPT_VERSION } })).toBe(1)
 
-    const partial = await createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(2), storage, companyId, actorId, contentId!, input, 'batch-partial')
-    expect(partial.body.data.batch.status).toBe('partial')
-    expect(partial.body.data.batch.references).toHaveLength(2)
+    await expect(createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(1), storage, companyId, actorId, contentId!, input, 'batch-image-failed')).rejects.toMatchObject({ code: 'AI_PROVIDER_ERROR' })
 
     await expect(createCreativeReferenceBatch(prisma, config, new FakePlanner(), new FakeImageProvider(0), storage, companyId, actorId, contentId!, input, 'batch-failed')).rejects.toMatchObject({ code: 'AI_PROVIDER_ERROR' })
     const failed = await prisma.creativeReferenceBatch.findFirstOrThrow({ where: { contentId: contentId!, status: 'failed' }, orderBy: { createdAt: 'desc' } })

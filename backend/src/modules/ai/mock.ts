@@ -41,7 +41,7 @@ export class MockAiProvider implements AiProvider, AiImageProvider, TopicDiscove
     let output: unknown
     switch (request.outputSchemaVersion) {
       case OUTPUT_SCHEMA_VERSION:
-        output = { master: { title: 'Development draft: a clearer workflow', coreMessage: 'A clear workflow helps teams coordinate their work.', hook: 'Make the next step clear.', body: 'Use this predictable sample to develop and review the content workflow. Replace it with a live model response when needed.', cta: 'Explore a clearer workflow.' }, visualDirection: { format: 'Carousel', concept: 'Show a simple process from challenge to next step.', structure: ['Challenge', 'Approach', 'Next step'], notes: 'Development mock response. Review and replace before publication.' } }
+        output = { master: { title: 'Development draft: a clearer workflow', coreMessage: 'A clear workflow helps teams coordinate their work.', hook: 'Make the next step clear.', body: 'Use this predictable sample to develop and review the content workflow. Replace it with a live model response when needed.', cta: 'Explore a clearer workflow.' }, visualDirection: { format: 'Single image', concept: 'Show the main workflow benefit with one clear focal point.', structure: ['Headline, central visual, and CTA in one composition'], notes: 'Development mock response. Review and replace before publication.' } }
         break
       case M3_OUTPUT_SCHEMA_VERSION:
         output = { copy: 'Development mock adaptation for this platform.', cta: 'Explore the next step.', hashtags: '#Development #Workflow', visualRecommendation: 'Use a clear, readable visual that supports the main message.' }
@@ -96,13 +96,12 @@ export class MockAiProvider implements AiProvider, AiImageProvider, TopicDiscove
 function mockConcepts(prompt: string) {
   const carousel = prompt.startsWith('Create exactly ') && prompt.includes('ordered slide concepts for one coherent carousel storyboard')
   const requestedCount = Number(prompt.match(/exactly (\d+) ordered slide concepts/)?.[1] ?? 0)
-  const count = carousel && requestedCount >= 2 && requestedCount <= 10 ? requestedCount : 3
-  const templates = ['educational', 'product_showcase', 'process_insight'] as const
+  const count = carousel && requestedCount >= 2 && requestedCount <= 10 ? requestedCount : 1
   return {
     carouselOutline: carousel ? Array.from({ length: count }, (_, index) => `Development mock slide ${index + 1}`) : [],
     concepts: Array.from({ length: count }, (_, index) => ({
-      conceptName: carousel ? `Development mock slide ${index + 1}` : `Development mock ${templates[index]}`,
-      templateType: carousel ? 'process_carousel' : templates[index],
+      conceptName: carousel ? `Development mock slide ${index + 1}` : 'Development mock single image',
+      templateType: carousel ? 'process_carousel' : 'educational',
       rationale: 'Development fixture for the creative reference workflow.',
       layoutNotes: `Development mock layout ${index + 1}, clear headline and whitespace.`,
       visualFocus: `Development mock visual focus ${index + 1}, a simple process illustration.`,

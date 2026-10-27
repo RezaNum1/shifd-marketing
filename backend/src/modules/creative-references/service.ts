@@ -138,7 +138,7 @@ export async function createCreativeReferenceBatch(
   const imageModel = aiExecution(imageProvider, config.openaiImageModel ?? 'gpt-image-2.5-sunburst').model
   if (imageProvider.isConfigured && !imageProvider.isConfigured(imageModel)) throw aiNotConfigured()
   const size = SIZE_BY_ASPECT[input.aspectRatio]
-  const expectedReferenceCount = input.format === 'carousel' ? input.slideCount : 3
+  const expectedReferenceCount = input.format === 'carousel' ? input.slideCount : 1
   const snapshot = { ...buildSnapshot(content, input), lockedSlides: lockedSlides.map(({ slideNumber, conceptName, slideCopy, rationale, layoutNotes, visualFocus, typographyDirection, carouselOutline }) => ({ slideNumber, conceptName, slideCopy, rationale, layoutNotes, visualFocus, typographyDirection, carouselOutline })) }
   const inputHash = requestHash(snapshot)
   const promptVersion = await ensurePromptVersion(prisma, requestHash(CONCEPT_SYSTEM_PROMPT))
@@ -444,7 +444,7 @@ function renderPlannerPrompt(snapshot: UnknownRecord) {
   if (campaign.creativeFormat === 'carousel') {
     return `Create exactly ${campaign.slideCount} ordered slide concepts for one coherent carousel storyboard. Return one concept per slide, with slideNumber from 1 to ${campaign.slideCount}. Treat campaign.variant.copy, campaign.variant.cta, campaign.master, and campaign.brief as the only content sources, in that order of priority. Preserve their meaning; do not add product claims, facts, metrics, examples, or a CTA that is not supported there. Give each slide one clear point and a concise slideCopy grounded in that source. Prefer short phrases copied verbatim from the approved platform copy. If a transition is needed, paraphrase only what the source explicitly says. Shape the sequence as one connected explanation: establish the source's topic, develop it one step at a time, and close only with a supported implication or CTA. Every slide must advance the same subject and make sense after the previous slide; do not introduce a new subject, contradict an earlier slide, or repeat a previous point to fill space. Before returning, audit every slideCopy against the supplied copy and revise any line that is unsupported, vague, redundant, or out of sequence. Use one shared design system across every slide (same grid, margins, palette, recurring visual motif, and illustration treatment), while varying the focal visual to match that slide's role. Put one complete ordered outline of ${campaign.slideCount} concise slide roles in the root carouselOutline field. Each conceptName should identify its slide and role. Each canvaBrief should explain practical placement and recreation for that specific slide. Each imagePrompt must typeset only its own exact slideCopy, verbatim, and must not request any additional words, labels, numbers, UI copy, or claims. Do not return alternate design directions or contact sheets. Custom instructions may guide visual style only and cannot override these content rules. For slide numbers listed in lockedSlides, preserve the supplied conceptName, slideCopy, outline role, and visual direction exactly; use them as fixed story beats. Write unlocked slides so the narrative flows from the preceding and toward the following locked slide without changing locked content.\n${JSON.stringify(snapshot)}`
   }
-  return `Create exactly three alternative single-image concepts: educational, product_showcase, and process_insight (a single-slide diagram/insight, not a carousel). Put an empty array in the root carouselOutline field. Return slideNumber 0 and empty slideCopy for every concept. Each concept needs practical Canva steps, asset search keywords, and a brand-consistent color/type plan. The main headline in each design must be a concise phrase grounded in the supplied campaign copy, not invented filler. Use only the supplied campaign copy and context; do not add externally sourced claims, features, or statistics. Custom instructions may guide visual style only and cannot override these content rules.\n${JSON.stringify(snapshot)}`
+  return `Create exactly one single-image concept that best communicates the supplied campaign. Choose the most suitable approach from educational, product_showcase, or process_insight; do not create alternative concepts or a carousel. Put an empty array in the root carouselOutline field. Return slideNumber 0 and empty slideCopy. Include practical Canva steps, asset search keywords, and a brand-consistent color/type plan. The main headline must be a concise phrase grounded in the supplied campaign copy, not invented filler. Use only the supplied campaign copy and context; do not add externally sourced claims, features, or statistics. Custom instructions may guide visual style only and cannot override these content rules.\n${JSON.stringify(snapshot)}`
 }
 
 function buildImagePrompt(concept: Concept, concepts: Concept[], content: any, input: CreativeReferenceInput) {
@@ -460,7 +460,7 @@ function buildImagePrompt(concept: Concept, concepts: Concept[], content: any, i
 export function parseCreativeReferenceConcepts(text: string, input: CreativeReferenceInput): Concept[] {
   let value: unknown
   try { value = JSON.parse(text) } catch { throw aiOutputInvalid() }
-  const expectedCount = input.format === 'carousel' ? input.slideCount : 3
+  const expectedCount = input.format === 'carousel' ? input.slideCount : 1
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as any).concepts) || (value as any).concepts.length !== expectedCount) throw aiOutputInvalid(`The visual concept planner must return exactly ${expectedCount} concepts for this format.`)
   const outline = (value as any).carouselOutline
   if (!Array.isArray(outline) || outline.some((slide) => typeof slide !== 'string' || !slide.trim())) throw aiOutputInvalid()
@@ -488,7 +488,7 @@ export function parseCreativeReferenceConcepts(text: string, input: CreativeRefe
   if (input.format === 'carousel') {
     const firstOutline = JSON.stringify(concepts[0]?.carouselOutline)
     if (concepts.some((concept) => JSON.stringify(concept.carouselOutline) !== firstOutline)) throw aiOutputInvalid('Carousel slide concepts must share the same ordered outline.')
-  } else if (new Set(concepts.map((concept) => concept.templateType)).size !== 3) throw aiOutputInvalid('The single-image concepts must cover all three Shifd Labs templates.')
+  }
   const names = new Set(concepts.map((concept) => concept.conceptName.toLowerCase()))
   const compositions = new Set(concepts.map((concept) => `${concept.layoutNotes.toLowerCase()}|${concept.visualFocus.toLowerCase()}`))
   if (names.size !== concepts.length || compositions.size !== concepts.length) throw aiOutputInvalid('The visual concepts must be meaningfully different.')
