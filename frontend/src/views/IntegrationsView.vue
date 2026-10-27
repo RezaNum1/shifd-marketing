@@ -43,6 +43,10 @@ onMounted(() => { void integrations.load() })
           </dl>
           <p v-if="integrations.instagramSyncState === 'success'" class="integration-feedback is-success" role="status"><AppIcon name="check" :size="15" />Synced successfully</p>
           <p v-else-if="integrations.instagramSyncState === 'syncing'" class="integration-feedback" role="status"><span class="ui-spinner" aria-hidden="true" />Syncing…</p>
+          <InlineAlert v-if="integrations.instagramSyncSummary" :title="`${integrations.instagramSyncSummary.matchedPublications} Instagram posts updated`" :tone="integrations.instagramSyncSummary.needsSelectionCount ? 'warning' : 'info'">
+            <p v-if="integrations.instagramSyncSummary.needsSelectionCount">{{ integrations.instagramSyncSummary.needsSelectionCount }} published item(s) could not be matched to an Instagram post. Add the Instagram post URL when recording publication, then sync again.</p>
+            <p v-else>Published post metrics are up to date.</p>
+          </InlineAlert>
           <div class="integration-actions">
             <BaseButton v-if="instagram.status === 'connected'" variant="secondary" :disabled="integrations.instagramSyncState === 'syncing'" @click="integrations.syncInstagram"><AppIcon name="chart" :size="16" />{{ integrations.instagramSyncState === 'syncing' ? 'Syncing…' : 'Sync Now' }}</BaseButton>
             <BaseButton v-if="instagram.status === 'connected'" variant="ghost" @click="disconnectOpen = true">Disconnect</BaseButton>

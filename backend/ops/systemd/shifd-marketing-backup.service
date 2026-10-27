@@ -1,0 +1,16 @@
+[Unit]
+Description=Encrypted Shifd Marketing production backup
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/shifd-marketing-backup.env
+ExecStart=/var/www/shifd-marketing/backend/ops/backup-production.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectHome=true
+NoNewPrivileges=true

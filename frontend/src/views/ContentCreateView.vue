@@ -140,6 +140,20 @@ onBeforeUnmount(() => {
 const selectedProduct = computed(() =>
   productsStore.getProduct(brief.product),
 );
+const productContextMissingFields = computed(() => {
+  if (brief.context !== "product" || !brief.product) return [];
+  const profile = productsStore.getProfile(brief.product);
+  if (!profile) return ["Product profile"];
+  const requiredFields: Array<[string, boolean]> = [
+    ["Target users", profile.targetUsers.length > 0],
+    ["Problems addressed", profile.problemsAddressed.length > 0],
+    ["Value proposition", Boolean(profile.valueProposition.trim())],
+    ["Key features", profile.features.length > 0],
+    ["Key benefits", profile.benefits.length > 0],
+    ["Proof points", profile.proofPoints.length > 0],
+  ];
+  return requiredFields.filter(([, complete]) => !complete).map(([label]) => label);
+});
 const topicLength = computed(() => brief.topic.length);
 const INSTAGRAM_CAPTION_MAX_LENGTH = 2200;
 const instagramCaptionCharacterCount = computed(() =>
@@ -1070,6 +1084,17 @@ async function continueToGenerate() {
     ui.notify("Complete the required Brief fields before generating content.", "warning");
     return;
   }
+  if (brief.context === "product") {
+    const product = await productsStore.loadProduct(brief.product, true);
+    if (!product) {
+      ui.notify("Unable to load the selected Product Context. Please try again.", "warning");
+      return;
+    }
+    if (productContextMissingFields.value.length > 0) {
+      ui.notify("Complete the selected product's Product Context before generating content.", "warning");
+      return;
+    }
+  }
   const created = await workflow.createFromBrief();
   if (!created) return;
   if (workflow.sourceIdeaId) await ideas.load(true);
@@ -1329,13 +1354,13 @@ onMounted(() => {
           <BaseSelect v-model="creativeReferenceStyle" label="Style" :options="creativeReferenceStyleOptions" />
           <BaseSelect v-model="creativeReferenceMood" label="Mood" :options="creativeReferenceMoodOptions" />
           <BaseSelect v-model="creativeReferenceAspectRatio" label="Image ratio" :options="creativeReferenceAspectRatioOptions" />
-          <BaseTextarea v-model="creativeReferenceInstruction" label="Custom design concerns and visual direction (optional)" hint="Add any specific visual concerns, elements to include or avoid, layout preferences, or brand details." :rows="5" maxlength="1500" placeholder="Example: Use a clean white background, vary the visual metaphor across slides, keep numbering consistent, and reserve space for the Shifd Labs logo on the final slide." />
+          <BaseTextarea v-model="creativeReferenceInstruction" label="Custom design concerns and visual direction (optional)" hint="Use this for layout and visual details. Text on generated images follows the approved post content and carousel slide copy." :rows="5" maxlength="1500" placeholder="Example: Use a clean white background, keep the visual motif consistent, and place the headline in the upper third." />
         </div>
         <div class="creative-reference-actions">
           <div>
             <strong>{{ creativeReferenceFormat === 'carousel' ? 'One connected storyboard' : 'Three independent design options' }}</strong>
-            <p v-if="creativeReferenceFormat === 'carousel'">Generate one image per slide using the content copy as the narrative source. Lock finished slides to keep their image and copy when regenerating. Remaining slides follow the locked storyboard. This uses {{ Number(creativeReferenceSlideCount) - (lockedCreativeSourceBatchId === latestCreativeReferenceBatch?.id ? lockedCreativeSlideNumbers.length : 0) }} image requests.</p>
-            <p v-else>Generate three single-image directions: educational, product showcase, and process insight. Each includes Shifd Labs brand guidance and Canva asset search terms. This uses three image requests.</p>
+            <p v-if="creativeReferenceFormat === 'carousel'"><span>Generate one connected storyboard from the approved content. Keep each slide's message tied to the post and the slides before and after it.</span> <span>Lock finished slides to keep their image and copy when regenerating. Remaining slides follow the locked storyboard.</span> <span>This uses</span> {{ Number(creativeReferenceSlideCount) - (lockedCreativeSourceBatchId === latestCreativeReferenceBatch?.id ? lockedCreativeSlideNumbers.length : 0) }} <span>image requests.</span></p>
+            <p v-else>Generate three single-image directions: educational, product showcase, and process insight. Keep headlines grounded in the approved post content. Each includes Shifd Labs brand guidance and Canva asset search terms. This uses three image requests.</p>
           </div>
           <BaseButton class="creative-reference-generate-button" size="comfortable" :loading="creativeReferenceLoading" :disabled="creativeReferenceLoading || !workflow.contentId || isApproved" @click="generateCreativeReferences">
             <AppIcon name="sparkles" :size="17" />{{ creativeReferenceActionLabel }}
@@ -1800,6 +1825,14 @@ onMounted(() => {
                     :options="productOptions"
                     :disabled="brief.context !== 'product'"
                   />
+                  <InlineAlert
+                    v-if="brief.context === 'product' && brief.product && productContextMissingFields.length"
+                    title="Product Context needs more information"
+                    tone="warning"
+                  >
+                    <p>Complete these fields for {{ selectedProductName }} before generating content: {{ productContextMissingFields.join(", ") }}.</p>
+                    <BaseButton variant="secondary" size="compact" @click="router.push(`/context/products/${brief.product}`)">Complete Product Context</BaseButton>
+                  </InlineAlert>
                 </div>
               </div>
             </div>

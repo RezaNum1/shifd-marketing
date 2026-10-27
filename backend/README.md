@@ -160,6 +160,45 @@ Asset attachment and reuse commands use the parent Content ETag/`If-Match`, incr
 
 `GET /api/assets/:id` and the authenticated content endpoint are Company scoped. `DELETE /api/assets/:id` is allowed only for unreferenced Assets, marks pending deletion before removing private bytes, and does not detach anything automatically. Failed physical deletion remains retryable as `pending_delete` and is not reported as successful. `npm run assets:cleanup` is the bounded operator maintenance command; it lock/rechecks references, respects the seven-day grace period, supports `--dry-run`, and removes only expired unattached Assets. It also cleans stale temporary upload files and expired UUID-named final files left by a process crash before database commit, after comparing them with all known metadata keys. Local storage is persistent only while `ASSET_STORAGE_ROOT` is preserved; deployments should mount that directory as a private volume.
 
+## Production backups (Biznet GIO VPS)
+
+The production database and private uploaded assets must be backed up together. The operator backup job creates a PostgreSQL custom-format dump, archives `ASSET_STORAGE_ROOT`, verifies both archives, uploads them encrypted to a Restic repository, applies retention (30 daily, 8 weekly, 12 monthly), then checks a sample of repository data. Keep the Restic repository off the production VPS (for example, an S3-compatible bucket in another account/region). A backup stored only on the VPS does not protect against VPS or disk loss.
+
+Install `postgresql-client`, `restic`, and `tar` on the VPS. Create `/etc/shifd-marketing-backup.env` with mode `0600`, owned by root, containing values copied from the production environment and your Restic provider:
+
+```sh
+DATABASE_URL='postgresql://...'
+ASSET_STORAGE_ROOT='/var/www/shifd-marketing/backend/data/assets'
+RESTIC_REPOSITORY='s3:https://<provider-endpoint>/<bucket>/<prefix>'
+RESTIC_PASSWORD='<unique-long-secret>'
+AWS_ACCESS_KEY_ID='<backup-only-access-key>'
+AWS_SECRET_ACCESS_KEY='<backup-only-secret-key>'
+# Add provider-specific values such as AWS_DEFAULT_REGION if required.
+```
+
+Use a dedicated bucket/prefix and backup-only credentials. Keep the Restic password separately from the bucket credentials. Initialize the repository once by loading the file and running the script with `RESTIC_INIT=1`:
+
+```sh
+set -a
+. /etc/shifd-marketing-backup.env
+set +a
+RESTIC_INIT=1 /var/www/shifd-marketing/backend/ops/backup-production.sh
+```
+
+Then install and enable the supplied daily systemd timer:
+
+```sh
+chmod 600 /etc/shifd-marketing-backup.env
+install -m 0644 /var/www/shifd-marketing/backend/ops/systemd/shifd-marketing-backup.{service,timer} /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now shifd-marketing-backup.timer
+systemctl start shifd-marketing-backup.service
+systemctl status shifd-marketing-backup.service
+restic snapshots
+```
+
+The script needs root access to read the PM2 user's private asset directory; systemd provides it. It writes temporary plaintext archives only in `/var/lib/shifd-marketing-backup` with restrictive permissions and removes them on exit. Monitor failures with `systemctl status shifd-marketing-backup.service` and `journalctl -u shifd-marketing-backup.service`. A repository check is run after each upload. Perform a restore drill periodically: `restic restore latest --target /var/tmp/shifd-restore`, restore `database.dump` to a separate empty PostgreSQL database with `pg_restore --no-owner --no-privileges --dbname="$RESTORE_DATABASE_URL" ...`, and compare restored asset bytes. Never restore over the live database as a test. The GitHub deploy workflow does not read the production VPS or bucket setup automatically; complete these server-side installation steps once before relying on the schedule.
+
 Phase 5 completes the approved D-03 compatibility gate without inventing Human Review: when `designStatus` is not `ready`, asset absence does not block `ready_for_review`; when it is `ready`, each enabled Variant needs at least one effective creative Asset, and reuse counts. Master and current enabled Variant adaptations remain required. Approval, assessment, and asset-specific future workflow remain deferred.
 
 ## M2 generation (current provider: OpenAI)

@@ -317,7 +317,10 @@ async function syncInstagramForPerformance() {
   instagramAutoSyncing.value = true
   try {
     const synced = await integrations.syncInstagram()
-    if (synced) await performance.loadSupportingData()
+    if (synced) await Promise.all([
+      performance.loadReport(periodWeeks.value, platform.value),
+      performance.loadSupportingData(),
+    ])
     else instagramAutoSyncError.value = integrations.error || 'Instagram metrics could not be synchronized.'
   } finally { instagramAutoSyncing.value = false }
 }

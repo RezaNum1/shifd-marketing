@@ -15,6 +15,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
   const telegramLink = ref<{ telegramDeepLink: string; expiresAt: string } | null>(null)
   const etags = ref<Record<string, string>>({})
   const instagramSyncState = ref<'idle' | 'syncing' | 'success'>('idle')
+  const instagramSyncSummary = ref<{ matchedPublications: number; needsSelectionCount: number } | null>(null)
   const loading = ref(false)
   const loaded = ref(false)
   const error = ref('')
@@ -56,11 +57,16 @@ export const useIntegrationsStore = defineStore('integrations', () => {
   async function syncInstagram() {
     if (!instagram.value || instagram.value.status !== 'connected' || instagramSyncState.value === 'syncing') return false
     instagramSyncState.value = 'syncing'
+    instagramSyncSummary.value = null
     error.value = ''
     try {
       const result = await integrationsApi.syncInstagram(etagFor('instagram'))
       instagram.value = toInstagram(result.data.integration)
       etags.value.instagram = result.etag ?? `"${result.data.integration.version}"`
+      instagramSyncSummary.value = {
+        matchedPublications: result.data.matchedPublications,
+        needsSelectionCount: result.data.needsSelection.length,
+      }
       instagramSyncState.value = 'success'
       return true
     } catch (reason: unknown) {
@@ -93,7 +99,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
 
   function etagFor(platform: string) { return etags.value[platform] ?? `"${instagram.value?.version ?? 1}"` }
 
-  return { instagram, linkedin, whatsapp, telegram, telegramLink, etags, instagramSyncState, loading, loaded, error, load, syncInstagram, connectInstagram, disconnectInstagram, connectTelegram, disconnectTelegram }
+  return { instagram, linkedin, whatsapp, telegram, telegramLink, etags, instagramSyncState, instagramSyncSummary, loading, loaded, error, load, syncInstagram, connectInstagram, disconnectInstagram, connectTelegram, disconnectTelegram }
 })
 
 function toInstagram(value: BackendIntegration): InstagramIntegration {

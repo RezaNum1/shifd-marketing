@@ -58,7 +58,7 @@ export async function syncInstagram(
   const publications = await prisma.publicationRecord.findMany({
     where: { variant: { platform: 'instagram', content: { companyId } } },
     include: {
-      variant: { select: { platform: true } },
+      variant: { select: { platform: true, copy: true, cta: true, hashtags: true } },
       metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
     },
     orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -191,6 +191,7 @@ async function lockInstagramAccount(tx: Db, companyId: string, expectedVersion: 
 function matchPublications(publications: Array<{
   id: string
   postUrl: string | null
+  variant: { copy: string | null; cta: string | null; hashtags: string | null }
   metrics: Array<{ externalMediaId: string }>
 }>, media: InstagramMedia[]) {
   const byId = new Map(media.map((item) => [item.id, item]))
@@ -217,11 +218,32 @@ function matchPublications(publications: Array<{
     if (candidates.length === 1 && !claimed.has(candidates[0]!.id)) {
       matched.push({ publicationRecordId: publication.id, media: candidates[0]! })
       claimed.add(candidates[0]!.id)
-    } else if (candidates.length !== 0 || !storedMediaId) {
+      continue
+    }
+    if (candidates.length !== 0) {
+      needsSelection.push(publication.id)
+      continue
+    }
+    const copy = normalizeCaption(publication.variant.copy)
+    const captionCandidates = copy.length >= 40
+      ? media.filter((item) => {
+        if (claimed.has(item.id) || !item.caption) return false
+        const caption = normalizeCaption(item.caption)
+        return caption === copy || caption.startsWith(copy)
+      })
+      : []
+    if (captionCandidates.length === 1) {
+      matched.push({ publicationRecordId: publication.id, media: captionCandidates[0]! })
+      claimed.add(captionCandidates[0]!.id)
+    } else if (candidates.length !== 0 || !storedMediaId || captionCandidates.length > 1) {
       needsSelection.push(publication.id)
     }
   }
   return { matched, needsSelection }
+}
+
+function normalizeCaption(value: string | null) {
+  return value?.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim() ?? ''
 }
 
 function normalizePermalink(value: string | null) {

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Shifd Marketing production backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=shifd-marketing-backup.service
+
+[Install]
+WantedBy=timers.target

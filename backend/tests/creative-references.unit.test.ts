@@ -23,8 +23,8 @@ describe('AI visual reference concept validation', () => {
     expect(CREATIVE_REFERENCE_MODULE).toBe('M2')
     expect(CREATIVE_REFERENCE_MODULE).not.toBe('M6')
     expect(CREATIVE_REFERENCE_CONCEPT_OPERATION).toBe('creative_reference.concepts')
-    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v4')
-    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v4')
+    expect(CREATIVE_REFERENCE_PROMPT_VERSION).toBe('creative-reference-v6')
+    expect(CREATIVE_REFERENCE_PROMPT_REFERENCE).toBe('m2.creative_reference_concepts.v6')
     expect(CREATIVE_REFERENCE_OUTPUT_SCHEMA_VERSION).toBe('m2.creative_reference_concepts.v3')
   })
 
