@@ -7,6 +7,7 @@ export interface AiSettings {
   provider: string
   model: string
   generationLanguage: 'English' | 'Indonesian'
+  weeklyContentTarget: number
   mode?: 'real' | 'demo'
   status?: string
   systemStatus?: {

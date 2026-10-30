@@ -2,6 +2,7 @@ import { request, type ApiResult } from './client'
 import type { Prospect, ProspectInput, ProspectImportField, ProspectImportPreview, ProspectResearchRun, ProspectResearchHistoryItem, ProspectEmailDraft, ProspectEmailDraftInput, ProspectEmailDraftListItem, ProspectEmailDraftFeedback, ProspectOutreachFact, OutboundActivity, OutboundActivityInput, OutboundSummary } from '../types/prospect'
 
 export function listProspects(query: URLSearchParams): Promise<ApiResult<Prospect[]>> { return request<Prospect[]>('/prospects?' + query.toString()) }
+export function getOutreachPeriodSummary(period: 'week' | 'month') { return request<{ period: 'week' | 'month'; start: string; approached: number; recentProspects: Array<{ id: string; name: string; approachedAt: string | null }> }>(`/outbound-activity-summary?period=${period}`) }
 export function getProspect(id: string) { return request<Prospect>(`/prospects/${id}`) }
 export function createProspect(input: ProspectInput) { return request<Prospect>('/prospects', { method: 'POST', json: input }) }
 export function updateProspect(id: string, input: ProspectInput, version: number) { return request<Prospect>(`/prospects/${id}`, { method: 'PUT', json: input, ifMatch: version }) }

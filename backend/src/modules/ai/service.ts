@@ -554,14 +554,14 @@ export async function readAiSettings(prisma: PrismaClient, config: AppConfig, co
   return mapAiSettings(settings, config, await hasActivePrompt(prisma))
 }
 
-export async function updateAiSettings(prisma: PrismaClient, config: AppConfig, companyId: string, expectedVersion: number, generationLanguage: string) {
+export async function updateAiSettings(prisma: PrismaClient, config: AppConfig, companyId: string, expectedVersion: number, generationLanguage: string, weeklyContentTarget?: number) {
   if (!AI_LANGUAGES.includes(generationLanguage as typeof AI_LANGUAGES[number])) throw validationError('The generation language is invalid.', { generationLanguage: 'Choose English or Indonesian.' })
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<Array<{ version: number }>>`SELECT "version" FROM "ai_settings" WHERE "company_id" = CAST(${companyId} AS UUID) FOR UPDATE`
     const row = rows[0]
     if (!row) throw conflict('AI settings provisioning is incomplete. Run the approved setup path.')
     if (row.version !== expectedVersion) throw revisionConflict()
-    const updated = await tx.aiSettings.update({ where: { companyId }, data: { generationLanguage, version: { increment: 1 } } })
+    const updated = await tx.aiSettings.update({ where: { companyId }, data: { generationLanguage, ...(weeklyContentTarget === undefined ? {} : { weeklyContentTarget }), version: { increment: 1 } } })
     const prompt = await tx.promptVersion.findFirst({ where: { module: AI_MODULE, operation: AI_OPERATION, status: 'active' }, select: { id: true } })
     return mapAiSettings(updated, config, Boolean(prompt))
   })
@@ -571,13 +571,14 @@ async function hasActivePrompt(prisma: PrismaClient) {
   return Boolean(await prisma.promptVersion.findFirst({ where: { module: AI_MODULE, operation: AI_OPERATION, status: 'active' }, select: { id: true } }))
 }
 
-function mapAiSettings(settings: { provider: string; modelId: string | null; modelDisplayName: string; generationLanguage: string; mode: string; version: number }, config: AppConfig, promptConfigured: boolean) {
+function mapAiSettings(settings: { provider: string; modelId: string | null; modelDisplayName: string; generationLanguage: string; weeklyContentTarget: number; mode: string; version: number }, config: AppConfig, promptConfigured: boolean) {
   const usingMock = config.aiProviderMode === 'mock'
   const hasProvider = usingMock || Boolean(config.openaiApiKey && (settings.modelId || config.openaiModel))
   return {
     provider: usingMock ? 'Development mock' : AI_PROVIDER_DISPLAY_NAME,
     model: usingMock ? 'deterministic-fixtures' : settings.modelDisplayName,
     generationLanguage: settings.generationLanguage,
+    weeklyContentTarget: settings.weeklyContentTarget,
     mode: usingMock ? 'demo' : settings.mode,
     status: hasProvider && promptConfigured ? 'configured' : 'not_configured',
     systemStatus: {

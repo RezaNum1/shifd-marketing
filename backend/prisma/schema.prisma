@@ -1097,6 +1097,7 @@ model AiSettings {
   modelId            String?  @map("model_id")
   modelDisplayName   String   @map("model_display_name")
   generationLanguage String   @default("English") @map("generation_language")
+  weeklyContentTarget Int      @default(2) @map("weekly_content_target")
   mode               String   @default("real")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

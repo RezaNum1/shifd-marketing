@@ -437,6 +437,7 @@ export interface BackendAiSettings {
   provider: string
   model: string
   generationLanguage: 'English' | 'Indonesian'
+  weeklyContentTarget: number
   mode: 'real' | 'demo'
   status: string
   systemStatus: {
@@ -447,6 +448,7 @@ export interface BackendAiSettings {
   version: number
   updatedAt?: string
 }
+
 
 export interface BackendAiUsage {
   mode: string

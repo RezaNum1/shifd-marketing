@@ -5,6 +5,7 @@ import PageHeader from '../components/app/PageHeader.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import BaseInput from '../components/ui/BaseInput.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTable from '../components/ui/BaseTable.vue'
@@ -24,7 +25,7 @@ const company = useCompanyContextStore()
 const contentLibrary = useContentLibraryStore()
 const products = useProductsStore()
 const ui = useUiStore()
-const draft = reactive({ generationLanguage: ai.settings.generationLanguage })
+const draft = reactive({ generationLanguage: ai.settings.generationLanguage, weeklyContentTarget: ai.settings.weeklyContentTarget })
 const promptDetailsOpen = ref(false)
 const selectedPrompt = ref<PromptVersion>()
 
@@ -50,7 +51,7 @@ const brandCheckDimensions = [
   { label: 'Platform Appropriateness', criterion: 'Format dan gaya copy sesuai dengan platform tujuan, Instagram atau LinkedIn.' },
   { label: 'Visual Creative Review', criterion: 'Jika aset visual tersedia dan dapat dianalisis, AI menilai relevansi dengan pesan, hierarki dan keterbacaan, serta masalah brand atau layout yang terlihat.' },
 ]
-const dirty = computed(() => draft.generationLanguage !== ai.settings.generationLanguage)
+const dirty = computed(() => draft.generationLanguage !== ai.settings.generationLanguage || draft.weeklyContentTarget !== ai.settings.weeklyContentTarget)
 const activeProduct = computed(() => products.products.find((product) => product.status === 'Active'))
 const totalRequests = computed(() => ai.usage?.requests ?? ai.requestLogs.length)
 const inputTokens = computed(() => ai.usage?.inputTokens ?? ai.requestLogs.reduce((sum, item) => sum + item.inputTokens, 0))
@@ -63,7 +64,7 @@ const estimatedCost = computed(() => {
 const unknownCostRequests = computed(() => ai.usage?.unknownCostRequests ?? ai.requestLogs.filter((item) => item.estimatedCostUsd === null).length)
 
 async function saveChanges() {
-  if (await ai.saveSettings({ ...ai.settings, generationLanguage: draft.generationLanguage as 'English' | 'Indonesian' })) ui.notify('Changes saved', 'success')
+  if (await ai.saveSettings({ ...ai.settings, generationLanguage: draft.generationLanguage as 'English' | 'Indonesian', weeklyContentTarget: Number(draft.weeklyContentTarget) })) ui.notify('Changes saved', 'success')
 }
 function viewPrompt(prompt: PromptVersion) { selectedPrompt.value = prompt; promptDetailsOpen.value = true }
 function contentTitle(contentId?: string) {
@@ -92,6 +93,7 @@ function requestCostTitle(request: AiRequestLog) {
     : 'Fallback estimate using GPT-5.6 Luna rates with uncached input tokens.'
 }
 watch(() => ai.settings.generationLanguage, (value) => { draft.generationLanguage = value })
+watch(() => ai.settings.weeklyContentTarget, (value) => { draft.weeklyContentTarget = value })
 onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.load(), products.load()]) })
 </script>
 
@@ -110,6 +112,8 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
       <BaseCard title="AI Configuration" description="The provider and model currently selected by the backend environment."><dl class="ai-details"><div><dt>Provider</dt><dd>{{ ai.settings.provider || '—' }}</dd></div><div><dt>Model</dt><dd>{{ ai.settings.model || '—' }}</dd></div><div><dt>Mode</dt><dd>{{ ai.settings.mode === 'demo' ? 'Development mock (no external API calls)' : 'Live API' }}</dd></div><div><dt>Status</dt><dd><StatusBadge :tone="ai.settings.status === 'configured' ? 'success' : 'warning'" dot>{{ ai.settings.status === 'configured' ? 'Configured' : 'Not configured' }}</StatusBadge></dd></div></dl><BaseSelect v-model="draft.generationLanguage" label="Generation Language" :options="languageOptions" hint="Applied to future backend generation requests." /></BaseCard>
       <BaseCard title="System Status" description="Readiness indicators supplied by the backend."><div class="system-status-list"><div><span>AI Configuration</span><StatusBadge :tone="ai.settings.systemStatus?.aiConfiguration === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.aiConfiguration ?? 'Unknown' }}</StatusBadge></div><div><span>Context Engine</span><StatusBadge :tone="ai.settings.systemStatus?.contextEngine === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.contextEngine ?? 'Unknown' }}</StatusBadge></div><div><span>Prompt Configuration</span><StatusBadge :tone="ai.settings.systemStatus?.promptConfiguration === 'configured' ? 'success' : 'warning'">{{ ai.settings.systemStatus?.promptConfiguration ?? 'Unknown' }}</StatusBadge></div></div></BaseCard>
     </section>
+
+    <BaseCard title="Content Creation Consistency" description="Set the base number of content items to create each week."><template #actions><BaseButton :disabled="!dirty" @click="saveChanges">Save Changes</BaseButton></template><BaseInput v-model.number="draft.weeklyContentTarget" label="Base weekly content target" type="number" min="1" max="100" step="1" hint="Scheduled and published content items count toward this target." /></BaseCard>
 
     <BaseCard title="Supported AI Operations" description="Only the approved thesis workflow modules use AI assistance."><div class="operation-list"><article v-for="operation in operations" :key="operation.module" class="operation-row"><div class="operation-row__icon"><AppIcon name="sparkles" :size="18" /></div><div class="operation-row__copy"><div><strong>{{ operation.name }}</strong><span>Module {{ operation.module }}</span></div><p>{{ operation.description }}</p><small v-if="operation.module === 'M4'">Assessment is advisory; final approval remains a human decision.</small></div><StatusBadge tone="success" dot>Enabled</StatusBadge></article></div></BaseCard>
 

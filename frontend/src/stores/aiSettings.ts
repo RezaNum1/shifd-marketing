@@ -6,7 +6,7 @@ import type { BackendAiRequest, BackendAiSettings, BackendAiUsage, BackendPrompt
 import type { AiRequestLog, AiSettings, PromptVersion } from '../types/ai'
 
 export const useAiSettingsStore = defineStore('aiSettings', () => {
-  const settings = ref<AiSettings>({ provider: '', model: '', generationLanguage: 'English', mode: 'real', status: 'unknown', systemStatus: { contextEngine: 'unknown', promptConfiguration: 'unknown', aiConfiguration: 'unknown' } })
+  const settings = ref<AiSettings>({ provider: '', model: '', generationLanguage: 'English', weeklyContentTarget: 2, mode: 'real', status: 'unknown', systemStatus: { contextEngine: 'unknown', promptConfiguration: 'unknown', aiConfiguration: 'unknown' } })
   const promptVersions = ref<PromptVersion[]>([])
   const requestLogs = ref<AiRequestLog[]>([])
   const usage = ref<BackendAiUsage | null>(null)
@@ -35,14 +35,14 @@ export const useAiSettingsStore = defineStore('aiSettings', () => {
   async function saveSettings(next: AiSettings) {
     if (!etag.value) { await load(true); if (!etag.value) return false }
     try {
-      const result = await settingsApi.updateAiSettings(next.generationLanguage, etag.value)
+      const result = await settingsApi.updateAiSettings(next.generationLanguage, next.weeklyContentTarget, etag.value)
       replaceSettings(result.data, result.etag)
       return true
     } catch (reason: unknown) { error.value = errorMessage(reason, 'Unable to save AI settings.'); return false }
   }
 
   function replaceSettings(value: BackendAiSettings, nextEtag?: string | null) {
-    settings.value = { provider: value.provider, model: value.model, generationLanguage: value.generationLanguage, mode: value.mode, status: value.status, systemStatus: value.systemStatus, version: value.version }
+    settings.value = { provider: value.provider, model: value.model, generationLanguage: value.generationLanguage, weeklyContentTarget: value.weeklyContentTarget, mode: value.mode, status: value.status, systemStatus: value.systemStatus, version: value.version }
     etag.value = nextEtag ?? `"${value.version}"`
   }
 

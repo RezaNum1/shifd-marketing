@@ -24,9 +24,11 @@ export async function aiRoutes(app: FastifyInstance, options: { config: AppConfi
     await requireCsrf(request)
     const expectedVersion = ifMatch(request)
     const body = object(request.body, 'AI settings request')
-    allowedKeys(body, ['generationLanguage'], 'body')
+    allowedKeys(body, ['generationLanguage', 'weeklyContentTarget'], 'body')
     const generationLanguage = enumValue(body.generationLanguage, AI_LANGUAGES, 'generationLanguage') as string
-    const settings = await updateAiSettings(app.prisma, options.config, auth.user.companyId, expectedVersion, generationLanguage)
+    const weeklyContentTarget = body.weeklyContentTarget
+    if (weeklyContentTarget !== undefined && (!Number.isInteger(weeklyContentTarget) || (weeklyContentTarget as number) < 1 || (weeklyContentTarget as number) > 100)) throw validationError('Weekly content target must be an integer from 1 to 100.')
+    const settings = await updateAiSettings(app.prisma, options.config, auth.user.companyId, expectedVersion, generationLanguage, weeklyContentTarget as number | undefined)
     reply.header('ETag', etag(settings.version))
     return reply.send({ data: settings })
   })

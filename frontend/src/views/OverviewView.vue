@@ -8,21 +8,29 @@ import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import TablePagination from '../components/ui/TablePagination.vue'
-import { useContentWorkflowStore } from '../stores/contentWorkflow'
 import { useOverviewStore } from '../stores/overview'
-import type { ContentCalendarStatus, ContentPlatform } from '../types/content'
-import type { BackendCalendarEntry } from '../types/backend'
-import type { Tone } from '../types/ui'
+import type { ContentPlatform } from '../types/content'
 import InlineAlert from '../components/ui/InlineAlert.vue'
 import { useIntegrationsStore } from '../stores/integrations'
+import { useContentLibraryStore } from '../stores/contentLibrary'
+import { useAiSettingsStore } from '../stores/aiSettings'
+import { useContentIdeasStore } from '../stores/contentIdeas'
+import { getOutreachPeriodSummary } from '../api/prospects'
 
 const router = useRouter()
-const workflow = useContentWorkflowStore()
 const overview = useOverviewStore()
 const integrations = useIntegrationsStore()
+const contentLibrary = useContentLibraryStore()
+const aiSettings = useAiSettingsStore()
+const contentIdeas = useContentIdeasStore()
+const outreachPeriod = ref<'week' | 'month'>('week')
+const approachedProspects = ref(0)
+const recentApproached = ref<Array<{ id: string; name: string; approachedAt: string | null }>>([])
 const refreshing = ref(false)
 const recentPublishedPage = ref(1)
 const recentPublishedPageSize = ref(5)
+const publishedListPage = ref(1)
+const publishedListPageSize = ref(5)
 const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000
 const pageHelp = {
   purpose: 'See the current state of your marketing work in one place, including upcoming posts, items that need attention, and recent performance.',
@@ -33,43 +41,40 @@ const pageHelp = {
   ],
 }
 
-interface CalendarSummaryEntry {
-  contentId: string
-  title: string
-  topic: string
-  platform: ContentPlatform
-  contextName: string
-  pillar: string
-  date: string
-  time: string
-  at: Date
-  status: ContentCalendarStatus
-}
-
 function platformLabel(platform: ContentPlatform) { return platform === 'instagram' ? 'Instagram' : 'LinkedIn' }
 function formatNumber(value: number | null | undefined) { return value === null || value === undefined ? '—' : value.toLocaleString() }
-function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }) {
-  return new Intl.DateTimeFormat(undefined, options).format(new Date(`${value}T00:00:00`))
-}
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
-function toneForStatus(status: ContentCalendarStatus): Tone { return status === 'Published' ? 'success' : status === 'Ready to Publish' ? 'warning' : 'info' }
+function formatShortDate(value: string | null) { return value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value)) : 'Date unavailable' }
 const report = computed(() => overview.report)
-const plannedEntries = computed(() => report.value?.upcoming.filter((entry) => entry.status !== 'published').map(calendarEntry) ?? [])
-const readyToPublishCount = computed(() => report.value?.readyToPublish ?? 0)
-const upcoming = computed(() => plannedEntries.value.slice(0, 5))
-const recentPublished = computed(() => report.value?.recentlyPublished.map((item) => ({ record: { id: item.content.id, title: item.content.title }, platform: item.publication.platform, publication: item.publication })) ?? [])
+const workItems = computed(() => [
+  ...contentLibrary.records.filter((record) => record.status !== 'Published').map((record) => ({ id: record.id, title: record.title, status: record.status, kind: 'Content' as const })),
+  ...contentIdeas.ideas.filter((idea) => idea.status !== 'Used').map((idea) => ({ id: idea.id, title: idea.title, status: idea.status, kind: 'Idea' as const })),
+])
+const recentPublished = computed(() => report.value?.recentlyPublished.map((item) => ({ record: { id: item.content.id, title: item.content.title }, platform: item.publication.platform, publication: item.publication, metrics: item.postMetrics })) ?? [])
 const visibleRecentPublished = computed(() => recentPublished.value.slice((recentPublishedPage.value - 1) * recentPublishedPageSize.value, recentPublishedPage.value * recentPublishedPageSize.value))
+const visiblePublishedList = computed(() => recentPublished.value.slice((publishedListPage.value - 1) * publishedListPageSize.value, publishedListPage.value * publishedListPageSize.value))
 const publishedPosts = computed(() => report.value?.published.effectivePosts ?? 0)
 const needsReview = computed(() => Array.from({ length: report.value?.needsReviewCampaigns ?? 0 }, (_, index) => ({ id: String(index) })))
 const readyIdeasCount = computed(() => report.value?.ideas.readyCount ?? 0)
-const latestIdeas = computed(() => report.value?.ideas.latest ?? [])
-const performanceSnapshot = computed(() => {
-  const snapshot = report.value?.performanceSnapshot
-  return { reach: snapshot?.summary.latestWeeklyReach ?? null, impressions: snapshot?.summary.impressions ?? null, engagementRate: snapshot?.summary.engagementRate ?? null, followers: snapshot?.followers ?? [] }
+const weeklyContent = computed(() => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
+  const end = new Date(start); end.setDate(start.getDate() + 7)
+  return contentLibrary.records.filter((record) => {
+    if (!['Scheduled', 'Published'].includes(record.lifecycle?.status ?? record.status)) return false
+    const lifecycle = record.lifecycle
+    const publicationDate = lifecycle?.publications?.instagram?.publishedAt ?? lifecycle?.publications?.linkedin?.publishedAt ?? record.publishedAt
+    const scheduleDate = lifecycle?.schedules?.instagram?.date ?? lifecycle?.schedules?.linkedin?.date ?? record.scheduleDate
+    const date = (lifecycle?.status ?? record.status) === 'Published' ? publicationDate : scheduleDate
+    const stamp = date ? new Date(date) : new Date(record.updatedAt)
+    return stamp >= start && stamp < end
+  }).length
 })
-const thisWeek = computed(() => report.value?.thisWeek.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
+const weeklyTarget = computed(() => aiSettings.settings.weeklyContentTarget || 2)
+const contentConsistency = computed(() => Math.min(100, weeklyContent.value / weeklyTarget.value * 100))
+const readyToPublishCount = computed(() => report.value?.readyToPublish ?? 0)
 
 const attentionItems = computed(() => {
   const items: { label: string; detail: string; icon: 'alert' | 'calendar' | 'idea' | 'company'; to: string }[] = []
@@ -80,23 +85,7 @@ const attentionItems = computed(() => {
   return items
 })
 
-const contextReadiness = computed(() => ({
-  company: report.value?.context.companyConfigured ?? false,
-  brand: report.value?.context.brandConfigured ?? false,
-  activeProducts: report.value?.context.activeProducts ?? 0,
-}))
-
-function consistencyTone(percent: number): Tone { return percent >= 100 ? 'success' : percent >= 75 ? 'info' : 'warning' }
-function followerGrowthLabel(values: Array<{ platform: ContentPlatform; change: number | null }>) {
-  return values.length ? values.map((item) => `${platformLabel(item.platform)} ${item.change === null ? '—' : `${item.change >= 0 ? '+' : ''}${formatNumber(item.change)}`}`).join(' · ') : '—'
-}
 function openContent(id: string) { router.push(`/content/${id}`) }
-function startNewContent() { workflow.startNewWorkflow(); router.push('/content/create') }
-function calendarEntry(entry: BackendCalendarEntry): CalendarSummaryEntry {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: entry.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(entry.scheduledAt))
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
-  return { contentId: entry.contentId, title: entry.title, topic: entry.title, platform: entry.platform, contextName: entry.product?.name ?? entry.company.name, pillar: entry.pillarCode, date: `${get('year')}-${get('month')}-${get('day')}`, time: new Intl.DateTimeFormat('en-GB', { timeZone: entry.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(entry.scheduledAt)), at: new Date(entry.scheduledAt), status: entry.status === 'published' ? 'Published' : entry.status === 'ready_to_publish' ? 'Ready to Publish' : 'Scheduled' }
-}
 async function refreshOverview() {
   if (refreshing.value) return
   refreshing.value = true
@@ -106,10 +95,17 @@ async function refreshOverview() {
     const lastSyncAt = instagram?.lastSync ? Date.parse(instagram.lastSync) : 0
     const syncIsDue = !Number.isFinite(lastSyncAt) || !lastSyncAt || Date.now() - lastSyncAt >= AUTO_SYNC_INTERVAL_MS
     if (instagram?.status === 'connected' && syncIsDue) await integrations.syncInstagram()
-    await overview.load(true)
+    await Promise.all([overview.load(true), contentLibrary.load(true), contentIdeas.load(true), aiSettings.load(true), loadOutreachSummary()])
   } finally {
     refreshing.value = false
   }
+}
+async function loadOutreachSummary() {
+  try {
+    const result = (await getOutreachPeriodSummary(outreachPeriod.value)).data
+    approachedProspects.value = result.approached
+    recentApproached.value = result.recentProspects
+  } catch { approachedProspects.value = 0; recentApproached.value = [] }
 }
 
 function refreshWhenVisible() {
@@ -130,10 +126,6 @@ onUnmounted(() => {
 <template>
   <div class="page-stack overview-page">
     <PageHeader title="Overview" description="Your marketing execution at a glance." :breadcrumbs="[{ label: 'Platform' }, { label: 'Overview' }]" :help="pageHelp">
-      <template #actions>
-        <BaseButton variant="secondary" @click="router.push('/content/ideas')"><AppIcon name="idea" :size="16" />Add Idea</BaseButton>
-        <BaseButton @click="startNewContent"><AppIcon name="plus" :size="16" />Create Content</BaseButton>
-      </template>
     </PageHeader>
     <InlineAlert v-if="overview.loading" title="Loading overview">Reading the canonical overview report…</InlineAlert>
     <InlineAlert v-else-if="overview.error" title="Overview unavailable" tone="danger">{{ overview.error }}</InlineAlert>
@@ -143,41 +135,59 @@ onUnmounted(() => {
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Planned</span><AppIcon name="calendar" :size="17" /></div><strong>{{ report?.plannedPlatformSchedules ?? 0 }}</strong><small>Platform schedules not yet published</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Published Posts</span><AppIcon name="check" :size="17" /></div><strong>{{ publishedPosts }}</strong><small>Recorded platform publications</small></div></BaseCard>
       <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Needs Review</span><AppIcon name="alert" :size="17" /></div><strong>{{ needsReview.length }}</strong><small>Ready for review or needs revision</small></div></BaseCard>
-      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Posting Consistency</span><AppIcon name="chart" :size="17" /></div><strong class="overview-kpi__consistency"><span v-for="item in thisWeek" :key="item.platform">{{ platformLabel(item.platform) }} {{ item.percent.toFixed(1) }}%</span><span v-if="!thisWeek.length">—</span></strong><small>Backend report by platform</small></div></BaseCard>
+      <BaseCard class="overview-kpi"><div class="overview-kpi__content"><div class="overview-kpi__label"><span>Content Creation Consistency</span><AppIcon name="chart" :size="17" /></div><strong>{{ contentConsistency.toFixed(1) }}%</strong><small>{{ weeklyContent }} of {{ weeklyTarget }} content items this week</small></div></BaseCard>
     </section>
 
-    <section class="overview-two-column">
-      <BaseCard title="Needs Attention" description="Actionable items from your current workspace.">
+    <section class="overview-content-grid">
+      <BaseCard class="overview-list-card" title="Needs Attention" description="Actionable items from your current workspace.">
         <div v-if="attentionItems.length" class="attention-list">
           <button v-for="item in attentionItems" :key="item.label" type="button" class="attention-item" @click="router.push(item.to)"><span class="attention-item__icon"><AppIcon :name="item.icon" :size="16" /></span><span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></span><AppIcon name="arrow-right" :size="15" /></button>
         </div>
         <p v-else class="overview-empty">All caught up.</p>
       </BaseCard>
-      <BaseCard title="This Week" description="Published posts compared with the configured weekly target.">
-        <div class="weekly-execution-list"><div v-for="item in thisWeek" :key="item.platform" class="weekly-execution"><div class="weekly-execution__heading"><strong>{{ platformLabel(item.platform) }}</strong><StatusBadge :tone="consistencyTone(item.percent)">{{ item.percent.toFixed(1) }}%</StatusBadge></div><div class="weekly-execution__meta"><span>{{ item.published }} of {{ item.expected }} published</span><span>Target: {{ item.expected }}</span></div><div class="progress-track"><span :style="{ width: `${Math.min(100, item.percent)}%` }" /></div></div></div>
-      </BaseCard>
-    </section>
 
-    <BaseCard title="Upcoming Content" description="The next platform-specific schedules from the Content Calendar."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/calendar')">View Calendar <AppIcon name="arrow-right" :size="14" /></BaseButton></template>
-      <div v-if="upcoming.length" class="upcoming-list"><button v-for="item in upcoming" :key="`${item.contentId}-${item.platform}`" type="button" class="upcoming-item" @click="openContent(item.contentId)"><span class="upcoming-item__date"><strong>{{ formatDate(item.date) }}</strong><small>{{ item.time }}</small></span><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span><span class="upcoming-item__content"><strong>{{ item.title }}</strong><small>{{ item.contextName }} · {{ item.pillar }}</small></span><StatusBadge :tone="toneForStatus(item.status)">{{ item.status }}</StatusBadge><AppIcon name="chevron-right" :size="15" /></button></div>
-      <EmptyState v-else icon="calendar" title="No upcoming content." description="Approved content will appear here after a publication date and time are selected."><BaseButton @click="startNewContent">Create Content</BaseButton></EmptyState>
+    <BaseCard class="overview-list-card" title="Upcoming Content" description="All content that is not published and ideas that are not used."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content <AppIcon name="arrow-right" :size="14" /></BaseButton></template>
+      <div v-if="workItems.length" class="upcoming-list"><button v-for="item in workItems" :key="`${item.kind}-${item.id}`" type="button" class="upcoming-item" @click="router.push(item.kind === 'Content' ? `/content/${item.id}` : '/content/ideas')"><span class="upcoming-item__content"><strong>{{ item.title }}</strong><small>{{ item.kind }}</small></span><StatusBadge tone="info">{{ item.status }}</StatusBadge><AppIcon name="chevron-right" :size="15" /></button></div>
+      <EmptyState v-else icon="calendar" title="No upcoming content." description="There are no unpublished content items or unused ideas." />
     </BaseCard>
-
-    <section class="overview-two-column">
-      <BaseCard title="Performance Snapshot" description="Backend-calculated metrics from the configured reporting period."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/performance')">View Performance <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="snapshot-grid"><div><span>Weekly Reach</span><strong>{{ formatNumber(performanceSnapshot.reach) }}</strong></div><div><span>Impressions</span><strong>{{ formatNumber(performanceSnapshot.impressions) }}</strong></div><div><span>Engagement Rate</span><strong>{{ performanceSnapshot.engagementRate === null ? '—' : `${performanceSnapshot.engagementRate.toFixed(1)}%` }}</strong></div><div><span>Follower Growth</span><strong>{{ followerGrowthLabel(performanceSnapshot.followers) }}</strong></div></div><p class="helper-text">Values are supplied by the backend performance report.</p></BaseCard>
-      <BaseCard title="Ideas Ready" description="Human-captured ideas available for development."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content/ideas')">View Ideas <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div v-if="readyIdeasCount" class="idea-snapshot"><strong>{{ readyIdeasCount }} ideas ready</strong><button v-for="idea in latestIdeas" :key="idea.id" type="button" @click="router.push('/content/ideas')">{{ idea.title }} <AppIcon name="arrow-right" :size="13" /></button></div><EmptyState v-else icon="idea" title="No ideas ready." description="Capture potential topics in the Idea Bank." /></BaseCard>
     </section>
 
-    <section class="overview-two-column">
-      <BaseCard title="Marketing Context" description="Deterministic readiness from the canonical context stores."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/context/company')">Manage Context <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div class="context-readiness"><div><span>Company Context</span><StatusBadge :tone="contextReadiness.company ? 'success' : 'warning'">{{ contextReadiness.company ? 'Configured' : 'Needs setup' }}</StatusBadge></div><div><span>Products</span><StatusBadge :tone="contextReadiness.activeProducts ? 'success' : 'warning'">{{ contextReadiness.activeProducts }} Active</StatusBadge></div><div><span>Brand Context</span><StatusBadge :tone="contextReadiness.brand ? 'success' : 'warning'">{{ contextReadiness.brand ? 'Configured' : 'Needs setup' }}</StatusBadge></div></div></BaseCard>
-      <BaseCard title="Recent Published" description="The latest manually recorded platform publications."><div v-if="recentPublished.length" class="recent-list"><button v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`" type="button" class="recent-item" @click="openContent(item.record.id)"><span><strong>{{ item.record.title }}</strong><small>{{ platformLabel(item.platform) }}</small></span><span class="recent-item__date">{{ formatDateTime(item.publication.publishedAt) }}</span><StatusBadge tone="success">Published</StatusBadge></button><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" :page-size-options="[5, 10, 25, 50]" /></div><EmptyState v-else icon="library" title="No content published yet." description="Recorded publications will appear here after manual publication is logged." /></BaseCard>
+    <section class="overview-performance">
+      <BaseCard title="Performance Snapshot" description="Recent published content and its platform metrics."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/performance')">View Performance <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div v-if="recentPublished.length" class="performance-snapshot-scroll"><div class="performance-list"><div v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`" class="performance-row"><button type="button" @click="openContent(item.record.id)"><strong>{{ item.record.title }}</strong><small>{{ platformLabel(item.platform) }} · {{ formatDateTime(item.publication.publishedAt) }}</small></button><span>Views <b>{{ formatNumber(item.metrics?.views) }}</b></span><span>Reach <b>{{ formatNumber(item.metrics?.reach) }}</b></span><span>Likes <b>{{ formatNumber(item.metrics?.likes) }}</b></span><span>Comments <b>{{ formatNumber(item.metrics?.comments) }}</b></span></div><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" :page-size-options="[5, 10, 25, 50]" /></div></div><EmptyState v-else icon="chart" title="No published content yet." description="Publication metrics will appear here when available." /></BaseCard>
     </section>
+
+    <section class="overview-bottom-grid">
+      <BaseCard title="Recently Published" description="Published content titles and statuses."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content <AppIcon name="arrow-right" :size="14" /></BaseButton></template><div v-if="recentPublished.length" class="recent-list"><div v-for="item in visiblePublishedList" :key="`${item.record.id}-${item.platform}`" class="recent-item"><button type="button" @click="openContent(item.record.id)"><strong>{{ item.record.title }}</strong></button><StatusBadge tone="success">Published</StatusBadge></div><TablePagination v-model:page="publishedListPage" v-model:page-size="publishedListPageSize" :total="recentPublished.length" :page-size-options="[5, 10, 25, 50]" /></div><EmptyState v-else icon="library" title="No published content yet." description="Published content will appear here." /></BaseCard>
+
+      <section class="outreach-summary" aria-label="Prospect outreach summary">
+        <header class="outreach-summary__header"><div><span class="outreach-summary__label">Prospect Companies Approached</span><strong>{{ approachedProspects }}</strong><small>{{ outreachPeriod === 'week' ? 'Companies with recorded outreach this week' : 'Companies with recorded outreach this month' }}</small></div><label for="outreach-period">Reporting period<select id="outreach-period" v-model="outreachPeriod" @change="loadOutreachSummary"><option value="week">This week</option><option value="month">This month</option></select></label></header>
+        <div class="outreach-recent"><h3>Recently approached companies</h3><ul v-if="recentApproached.length"><li v-for="prospect in recentApproached" :key="prospect.id"><span>{{ prospect.name }}</span><time>{{ formatShortDate(prospect.approachedAt) }}</time></li></ul><p v-else>No companies approached during this period.</p></div>
+      </section>
+    </section>
+
     </template>
   </div>
 </template>
 
 <style scoped>
 .overview-page { max-width: 1280px; }
+.overview-performance { min-width: 0; width: 100%; }
+.overview-bottom-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; gap: 20px; }
+.overview-bottom-grid > * { min-width: 0; }
+.outreach-summary { align-self: start; min-width: 0; padding: 18px 20px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.outreach-summary__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.outreach-summary__header > div { display: grid; gap: 4px; min-width: 0; }
+.outreach-summary__label { color: var(--color-subtle); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.outreach-summary strong { color: var(--color-ink); font-size: 24px; line-height: 1.2; }
+.outreach-summary small { color: var(--color-muted); font-size: 12px; }
+.outreach-summary__header label { display: grid; gap: 6px; color: var(--color-subtle); font-size: 12px; }
+.outreach-summary select { border: 1px solid var(--color-border); border-radius: 6px; padding: 8px 10px; background: var(--color-surface); color: var(--color-ink); font: inherit; font-size: 13px; }
+.outreach-recent { margin-top: 18px; }
+.outreach-recent h3 { margin: 0 0 8px; color: var(--color-ink); font-size: 13px; font-weight: 600; }
+.outreach-recent ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.outreach-recent li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--color-border); color: var(--color-ink); font-size: 12px; }
+.outreach-recent li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outreach-recent time, .outreach-recent p { flex: 0 0 auto; color: var(--color-muted); font-size: 11px; }
 .overview-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .overview-kpi__content { display: grid; gap: 10px; align-content: start; min-height: 108px; }
 .overview-kpi__label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-subtle); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
@@ -187,6 +197,12 @@ onUnmounted(() => {
 .overview-kpi small, .upcoming-item small, .recent-item small { color: var(--color-muted); font-size: 11px; line-height: 1.4; }
 .overview-kpi small { display: block; max-width: 24ch; }
 .overview-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.overview-two-column:has(> :only-child) { grid-template-columns: 1fr; }
+.overview-content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 20px; }
+.overview-content-grid > :deep(.overview-list-card) { min-width: 0; }
+.overview-content-grid > :deep(.ui-card) { display: flex; flex-direction: column; max-height: 420px; }
+.overview-content-grid :deep(.ui-card__body) { min-height: 0; overflow-y: auto; }
+.overview-content-grid .upcoming-list { max-height: 300px; overflow-y: auto; overscroll-behavior-y: contain; }
 .attention-list, .weekly-execution-list, .upcoming-list, .recent-list { display: grid; gap: 10px; }
 .attention-item, .upcoming-item, .recent-item { width: 100%; border: 0; border-radius: var(--radius-control); background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .attention-item { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; padding: 10px; }
@@ -199,10 +215,8 @@ onUnmounted(() => {
 .weekly-execution__meta { color: var(--color-muted); font-size: 12px; }
 .progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--color-well); }
 .progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }
-.upcoming-item { display: grid; grid-template-columns: 92px 100px minmax(0, 1fr) auto 16px; align-items: center; gap: 14px; padding: 12px 10px; border-bottom: 1px solid var(--color-border); }
+.upcoming-item { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 14px; padding: 12px 10px; border-bottom: 1px solid var(--color-border); }
 .upcoming-item:last-child { border-bottom: 0; }
-.upcoming-item__date { display: grid; gap: 3px; }
-.upcoming-item__date strong { font-size: 13px; }
 .upcoming-item__content { min-width: 0; }
 .upcoming-item__content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .upcoming-item__content small { margin-top: 3px; }
@@ -220,12 +234,21 @@ onUnmounted(() => {
 .idea-snapshot button:hover { color: var(--color-primary); }
 .context-readiness { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-border); }
 .context-readiness div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; background: var(--color-surface); }
-.recent-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px; }
+.recent-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px; }
+.recent-item > button { width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.performance-snapshot-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.performance-snapshot-scroll .performance-list { min-width: 900px; display: grid; gap: 10px; }
+.performance-row { display: grid; grid-template-columns: minmax(260px, 1fr) repeat(4, minmax(120px, auto)); align-items: center; gap: 20px; padding: 10px; white-space: nowrap; }
+.performance-row > button { min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.performance-row > button strong, .performance-row > button small { display: block; }
+.performance-row > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.performance-row > button small { margin-top: 3px; color: var(--color-muted); font-size: 11px; }
 .recent-item > span:first-child { min-width: 0; }
 .recent-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .recent-item small { margin-top: 3px; }
 .recent-item__date { color: var(--color-muted); font-size: 11px; white-space: nowrap; }
 .overview-empty { margin: 8px 0; color: var(--color-muted); font-size: 13px; }
-@media (max-width: 900px) { .overview-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-two-column { grid-template-columns: 1fr; } }
-@media (max-width: 620px) { .overview-kpi-grid { grid-template-columns: 1fr; } .upcoming-item { grid-template-columns: 78px 1fr auto; gap: 8px; } .upcoming-item__content { grid-column: 2 / -1; } .upcoming-item > .ui-badge { grid-column: 2; } .recent-item { grid-template-columns: 1fr auto; } .recent-item .ui-badge { grid-column: 2; grid-row: 1; } }
+@media (max-width: 900px) { .overview-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-two-column, .overview-content-grid, .overview-bottom-grid { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .outreach-summary__header { flex-wrap: wrap; } }
+@media (max-width: 620px) { .overview-kpi-grid { grid-template-columns: 1fr; } .upcoming-item { grid-template-columns: minmax(0, 1fr) auto 16px; gap: 8px; } .recent-item { grid-template-columns: 1fr auto; } .recent-item .ui-badge { grid-column: 2; grid-row: 1; } }
 </style>

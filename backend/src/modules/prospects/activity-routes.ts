@@ -5,6 +5,20 @@ import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import { archiveOutboundActivity, changeActivityState, createOutboundActivity, getOutboundSummary, listOutboundActivities, parseActivityTimestamp, readOutboundActivity, updateOutboundActivity, validateActivityInput } from './activities.js'
 
 export async function prospectActivityRoutes(app: FastifyInstance, options: { config: AppConfig }) {
+  app.get('/outbound-activity-summary', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = request.query as Record<string, unknown>
+    if (Object.keys(query).some((key) => key !== 'period')) throw validationError('Unknown summary filter.')
+    const period = query.period ?? 'week'
+    if (period !== 'week' && period !== 'month') throw validationError('Period must be week or month.')
+    const now = new Date()
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    if (period === 'week') start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7))
+    else start.setUTCDate(1)
+    const prospects = await app.prisma.outboundActivity.findMany({ where: { companyId: auth.user.companyId, archivedAt: null, occurredAt: { gte: start }, status: { notIn: ['cancelled', 'scheduled', 'pending'] }, activityType: { not: 'follow_up' } }, distinct: ['prospectId'], orderBy: { occurredAt: 'desc' }, select: { prospectId: true, occurredAt: true, prospect: { select: { name: true } } } })
+    return reply.send({ data: { period, start: start.toISOString(), approached: prospects.length, recentProspects: prospects.slice(0, 10).map((item) => ({ id: item.prospectId, name: item.prospect.name, approachedAt: item.occurredAt?.toISOString() ?? null })) } })
+  })
+
   app.post('/prospects/:id/outbound-activities', async (request, reply) => {
     validateOrigin(request, options.config)
     const auth = await requireAuth(request, reply); await requireCsrf(request)

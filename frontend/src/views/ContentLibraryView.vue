@@ -125,7 +125,7 @@ function startNewContent() {
 }
 
 function canContinueEditing(record: ContentLibraryRecord) {
-  return !['Published', 'Archived'].includes(contentStatus(record))
+  return !['Scheduled', 'Published', 'Archived'].includes(contentStatus(record))
 }
 
 async function duplicateRecord(record: ContentLibraryRecord) {
