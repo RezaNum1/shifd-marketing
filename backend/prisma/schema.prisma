@@ -892,9 +892,21 @@ model ContentReviewShare {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   content   Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
   creator   User      @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  comments  ContentReviewComment[]
 
   @@index([contentId, expiresAt])
   @@map("content_review_shares")
+}
+
+model ContentReviewComment {
+  id        String            @id @default(uuid()) @db.Uuid
+  shareId   String            @map("share_id") @db.Uuid
+  message   String            @db.VarChar(5000)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  share     ContentReviewShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@index([shareId, createdAt])
+  @@map("content_review_comments")
 }
 
 model ContentSchedule {

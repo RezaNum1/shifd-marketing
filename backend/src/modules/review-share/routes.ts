@@ -3,7 +3,7 @@ import type { AppConfig } from '../../config/env.js'
 import { notFound } from '../../shared/errors/AppError.js'
 import { requireAuth, requireCsrf, validateOrigin } from '../auth/protection.js'
 import type { AssetStorage } from '../assets/storage.js'
-import { createReviewShare, openPublicReviewAsset, readPublicReview, revokeReviewShare, reviewShareStatus, validateShareCreateBody } from './service.js'
+import { createPublicReviewComment, createReviewShare, listReviewComments, openPublicReviewAsset, readPublicReview, revokeReviewShare, reviewShareStatus, validatePublicReviewComment, validateShareCreateBody } from './service.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -11,6 +11,11 @@ export async function reviewShareRoutes(app: FastifyInstance, options: { config:
   app.get('/contents/:id/review-share', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     return reply.send({ data: await reviewShareStatus(app.prisma, auth.user.companyId, contentId(request)) })
+  })
+
+  app.get('/contents/:id/review-comments', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    return reply.send({ data: await listReviewComments(app.prisma, auth.user.companyId, contentId(request)) })
   })
 
   app.post('/contents/:id/review-share', async (request, reply) => {
@@ -33,6 +38,13 @@ export async function reviewShareRoutes(app: FastifyInstance, options: { config:
     reply.header('Cache-Control', 'no-store')
     reply.header('X-Robots-Tag', 'noindex, nofollow')
     return reply.send({ data: await readPublicReview(app.prisma, tokenParam(request)) })
+  })
+
+  app.post('/public-review/:token/comments', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store')
+    reply.header('X-Robots-Tag', 'noindex, nofollow')
+    const message = validatePublicReviewComment(request.body)
+    return reply.status(201).send({ data: await createPublicReviewComment(app.prisma, tokenParam(request), message) })
   })
 
   app.get('/public-review/:token/assets/:assetId', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (request, reply) => {

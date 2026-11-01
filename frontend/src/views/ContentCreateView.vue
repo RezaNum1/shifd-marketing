@@ -34,6 +34,7 @@ import { isBriefReady as isBriefReadyValue } from "../utils/contentValidation";
 import * as creativeReferenceApi from "../api/creativeReferences";
 import * as schedulingApi from "../api/scheduling";
 import { createRequestKey, errorMessage } from "../api/client";
+import { createReviewShare, getReviewComments, getReviewShareStatus, type ContentReviewComment, type ContentReviewShareStatus } from "../api/content";
 import type { BackendCreativeReference, BackendCreativeReferenceBatch, CreativeReferenceAspectRatio, CreativeReferenceFormat, CreativeReferenceMood, CreativeReferencePlatform, CreativeReferenceStyle } from "../types/backend";
 
 const ui = useUiStore();
@@ -69,6 +70,14 @@ const approvedBy = toRef(workflow, "approvedBy");
 const approvedAt = toRef(workflow, "approvedAt");
 const reviewValidation = ref("");
 const reviewRecheckLoading = ref(false);
+const reviewShare = ref<ContentReviewShareStatus | null>(null);
+const reviewShareUrl = ref("");
+const reviewShareLoading = ref(false);
+const reviewShareError = ref("");
+const reviewShareNotice = ref("");
+const reviewComments = ref<ContentReviewComment[]>([]);
+const reviewCommentsLoading = ref(false);
+const reviewCommentsError = ref("");
 const contentBusy = computed(() => workflow.loading || reviewRecheckLoading.value);
 const reviewChecklist = workflow.reviewChecklist;
 const reviewEditing = workflow.reviewEditing;
@@ -141,6 +150,71 @@ watch(() => workflow.contentId, () => {
   publicationTimeRecommendations.value = [];
   publicationRecommendationsError.value = "";
 });
+watch([activeStep, () => workflow.contentId], ([step, id], previous) => {
+  if (id !== previous?.[1]) {
+    reviewShare.value = null;
+    reviewShareUrl.value = "";
+    reviewShareError.value = "";
+    reviewShareNotice.value = "";
+    reviewComments.value = [];
+  }
+  if (step === "review" && id) void loadReviewCollaboration();
+  else if (!id) {
+    reviewShare.value = null;
+    reviewShareUrl.value = "";
+    reviewComments.value = [];
+  }
+}, { immediate: true });
+
+async function loadReviewCollaboration() {
+  const id = workflow.contentId;
+  if (!id) return;
+  reviewCommentsLoading.value = true;
+  reviewCommentsError.value = "";
+  const [shareResult, commentsResult] = await Promise.allSettled([getReviewShareStatus(id), getReviewComments(id)]);
+  if (shareResult.status === "fulfilled") reviewShare.value = shareResult.value.data;
+  else reviewShare.value = null;
+  if (commentsResult.status === "fulfilled") reviewComments.value = commentsResult.value.data;
+  else reviewCommentsError.value = "Comments could not be loaded. Refresh to try again.";
+  reviewCommentsLoading.value = false;
+}
+
+async function createAndCopyReviewLink() {
+  if (!workflow.contentId) return;
+  reviewShareLoading.value = true;
+  reviewShareError.value = "";
+  reviewShareNotice.value = "";
+  try {
+    const result = await createReviewShare(workflow.contentId);
+    reviewShareUrl.value = new URL(router.resolve({ name: "public-review", params: { token: result.data.token } }).href, window.location.origin).toString();
+    reviewShare.value = { active: true, expiresAt: result.data.expiresAt, createdAt: new Date().toISOString() };
+    try {
+      await navigator.clipboard.writeText(reviewShareUrl.value);
+      reviewShareNotice.value = "Anonymous review link created and copied. It expires in 7 days.";
+    } catch {
+      reviewShareNotice.value = "Link created. Copy it below; it expires in 7 days.";
+    }
+  } catch {
+    reviewShareError.value = "Could not create the review link. Try again.";
+  } finally {
+    reviewShareLoading.value = false;
+  }
+}
+
+async function copyReviewLink() {
+  if (!reviewShareUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(reviewShareUrl.value);
+    reviewShareNotice.value = "Review link copied.";
+    reviewShareError.value = "";
+  } catch {
+    reviewShareError.value = "Could not copy the link.";
+  }
+}
+
+function formatReviewCommentDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
 
 onBeforeUnmount(() => {
   creativeReferenceAbortController.value?.abort();
@@ -1761,6 +1835,34 @@ onMounted(() => {
       </InlineAlert>
 
       <BaseCard title="Human Final Review" description="Review the actual content, then record your final decision.">
+        <section class="review-collaboration-panel" aria-labelledby="review-collaboration-title">
+          <div class="review-collaboration-heading">
+            <div>
+              <strong class="review-collaboration-eyebrow">External Feedback</strong>
+              <h3 id="review-collaboration-title">Share this review</h3>
+              <p>Create a private link for read-only review and anonymous comments. The shared page has no app sidebar.</p>
+            </div>
+            <StatusBadge :tone="reviewShare?.active ? 'success' : 'neutral'" dot>{{ reviewShare?.active ? 'Link active' : 'No active link' }}</StatusBadge>
+          </div>
+          <div class="review-share-panel">
+            <p v-if="reviewShare?.active && reviewShare.expiresAt">The link is active until {{ formatReviewCommentDate(reviewShare.expiresAt) }}. Creating a replacement link disables the previous one.</p>
+            <p v-else>Share the current content for feedback without requiring reviewers to sign in.</p>
+            <div v-if="reviewShareUrl" class="review-share-url"><span>{{ reviewShareUrl }}</span><BaseButton variant="secondary" size="compact" @click="copyReviewLink"><AppIcon name="copy" :size="14" />Copy link</BaseButton></div>
+            <p v-if="reviewShareNotice" class="review-share-notice" role="status">{{ reviewShareNotice }}</p>
+            <InlineAlert v-if="reviewShareError" title="Review link" tone="warning">{{ reviewShareError }}</InlineAlert>
+            <BaseButton size="compact" :loading="reviewShareLoading" :disabled="reviewShareLoading || !workflow.contentId" @click="createAndCopyReviewLink"><AppIcon name="link" :size="14" />{{ reviewShare?.active ? 'Create replacement link' : 'Create and copy link' }}</BaseButton>
+          </div>
+          <div class="review-comments-section">
+            <div class="review-comments-heading">
+              <div><strong>Anonymous feedback</strong><p>Comments from external reviewers are collected here.</p></div>
+              <BaseButton v-if="!reviewCommentsLoading" variant="ghost" size="compact" @click="loadReviewCollaboration">Refresh comments</BaseButton>
+            </div>
+            <p v-if="reviewCommentsError" class="review-comments-error" role="alert">{{ reviewCommentsError }}</p>
+            <p v-else-if="reviewCommentsLoading" class="review-comments-empty" role="status">Loading external comments…</p>
+            <p v-else-if="!reviewComments.length" class="review-comments-empty">No comments yet. Share the review link to invite feedback.</p>
+            <ul v-else class="review-comments-list"><li v-for="comment in reviewComments" :key="comment.id"><div><strong>Anonymous reviewer</strong><time :datetime="comment.createdAt">{{ formatReviewCommentDate(comment.createdAt) }}</time></div><p>{{ comment.message }}</p></li></ul>
+          </div>
+        </section>
         <div class="human-review-layout">
           <div class="human-review-checklist">
             <div class="review-progress-card">

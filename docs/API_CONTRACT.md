@@ -216,6 +216,20 @@ D-02 defines the approved safe-write policy after approval; D-03 preserves the c
 | POST /api/contents/:id/approve | Final human approval | Session | `{checklist:Checklist}` | 201 `{data:{action:ApprovalAction,content:Content}}` | If-Match; five true checks, >=1 enabled variant, each variant has either a current assessment (with override when Needs Attention) or a current explicitly overridden failed M4 attempt, D-03 creative gate; 409 stale/locked, 422 | Store actor/time/editorial revision and discriminated reviewed-variant evidence; set current approval pointer; derive Approved. |
 | POST /api/contents/:id/request-revision | Return content for revision | Session | `{reason:string}` | 201 `{data:{action:ApprovalAction,content:Content}}` | If-Match; nonblank reason; 409 archived/fully published; published variants immutable | Append decision, clear current approval, cancel unpublished schedules under D-02, stage Needs Revision. Preserve publications/history. |
 
+### Anonymous shared content review
+
+| Method / path | Purpose | Auth | Request body | Success | Validation / important errors | Side effects |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET /api/contents/:id/review-share | Read current link status | Session | none | 200 `{data:{active:boolean,expiresAt:string|null,createdAt:string|null}}` | Content must belong to session company; 404 otherwise | None. |
+| POST /api/contents/:id/review-share | Create a review link | Session + CSRF | `{}` | 201 `{data:{token:string,expiresAt:string}}` | Content must be unarchived and belong to session company; 404 otherwise | Creates a random capability token valid for 7 days; only its hash is stored. Revokes any previous link for this content. |
+| DELETE /api/contents/:id/review-share | Revoke all active review links | Session + CSRF | none | 204 | Content must belong to session company; 404 otherwise | Immediately disables previously issued links. |
+| GET /api/contents/:id/review-comments | Read anonymous feedback in Review | Session | none | 200 `{data:ReviewComment[]}` | Content must belong to session company; 404 otherwise | Returns comments from all review links for this content, oldest first. |
+| GET /api/public-review/:token | Read shared content | Public capability token | none | 200 `{data:PublicReviewContent}` | Invalid, expired, revoked, or archived content link→404; rate limited to 60/minute | Read-only content view; includes feedback submitted through this link. No app session is created. |
+| GET /api/public-review/:token/assets/:assetId | Read an attached creative asset | Public capability token | none | 200 binary asset | Link must be active and asset attached to an enabled variant; otherwise 404; rate limited to 120/minute | Read-only asset stream. |
+| POST /api/public-review/:token/comments | Submit anonymous feedback | Public capability token | `{message:string}` | 201 `{data:ReviewComment}` | Trimmed nonblank message, maximum 5,000 characters; invalid/expired/revoked token→404; rate limited to 10/minute | Stores comment without reviewer identity. Comment: `{id:string,message:string,createdAt:string}`. |
+
+Shared links allow read-only access to the current content and creative assets. Anonymous reviewers can submit comments only; they cannot edit content or access the app shell. Comments remain available to the authenticated content owner in the Review step after the public link expires or is revoked.
+
 ```json
 {
   "checklist": {

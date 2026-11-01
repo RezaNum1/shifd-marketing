@@ -7,12 +7,19 @@ export interface ContentReviewShareStatus {
   createdAt: string | null
 }
 
+export interface ContentReviewComment {
+  id: string
+  message: string
+  createdAt: string
+}
+
 export interface PublicReviewContent {
   title: string
   brief: { contextType: string; pillarCode: string; objective: string; targetAudience: string; topic: string; angle: string | null; additionalInstructions: string | null }
   master: { title: string; coreMessage: string; hook: string; body: string; cta: string } | null
   visualDirection: { format: string; concept: string; structure: string[]; notes: string } | null
   designStatus: string
+  comments: ContentReviewComment[]
   variants: Array<{
     platform: BackendPlatform
     copy: string | null
@@ -87,6 +94,8 @@ export function deleteContent(id: string, etag: string | number) {
 export function listContentEvents(id: string) { return request<BackendEvent[]>(`/contents/${id}/events?limit=100`) }
 export function listReviewActions(id: string) { return request<BackendApprovalAction[]>(`/contents/${id}/review-actions?limit=100`) }
 export function getReviewShareStatus(id: string) { return request<ContentReviewShareStatus>(`/contents/${id}/review-share`) }
+export function getReviewComments(id: string) { return request<ContentReviewComment[]>(`/contents/${id}/review-comments`) }
 export function createReviewShare(id: string) { return request<{ token: string; expiresAt: string }>(`/contents/${id}/review-share`, { method: 'POST', json: {} }) }
 export function revokeReviewShare(id: string) { return request<void>(`/contents/${id}/review-share`, { method: 'DELETE', json: {} }) }
 export function getPublicReview(token: string) { return request<PublicReviewContent>(`/public-review/${encodeURIComponent(token)}`) }
+export function submitPublicReviewComment(token: string, message: string) { return request<ContentReviewComment>(`/public-review/${encodeURIComponent(token)}/comments`, { method: 'POST', json: { message }, skipCsrf: true }) }
