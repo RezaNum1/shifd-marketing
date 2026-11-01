@@ -32,6 +32,7 @@ const importOpen = ref(false)
 const saving = ref(false)
 const importBusy = ref(false)
 const file = ref<File | null>(null)
+const importFileInput = ref<HTMLInputElement | null>(null)
 const preview = ref<ProspectImportPreview | null>(null)
 const previewPage = ref(1)
 const previewPageSize = ref(10)
@@ -58,6 +59,21 @@ const statusDescriptions = [
 const form = ref<ProspectForm>(blank())
 function blank(): ProspectForm { return { name: '', industry: '', website: '', address: '', employeeCount: '', employeeSize: '', contactName: '', contactEmail: '', contactPhone: '', notes: '', status: 'lead' } }
 function emptyMapping(): Record<ProspectImportField, string> { return Object.fromEntries(importFields.map((field) => [field.key, ''])) as Record<ProspectImportField, string> }
+function resetImportForm() {
+  file.value = null
+  if (importFileInput.value) importFileInput.value.value = ''
+  preview.value = null
+  previewPage.value = 1
+  previewToken.value = ''
+  headers.value = []
+  selectedRows.value = new Set()
+  importDone.value = false
+  columnMapping.value = emptyMapping()
+  importResult.value = ''
+  error.value = ''
+}
+function openImport() { resetImportForm(); importOpen.value = true }
+watch(importOpen, (isOpen) => { if (!isOpen) resetImportForm() })
 
 async function load() {
   loading.value = true; error.value = ''
@@ -112,7 +128,7 @@ async function archive(item: Prospect, event: Event) {
   <section class="prospects-page">
     <header class="page-heading">
       <div><p class="eyebrow">Prospect Management</p><div class="prospect-title-row"><h1>Target organizations</h1><PageHeaderHelp :help="pageHelp" /></div><p>Keep company and contact details ready for future outbound work.</p></div>
-      <div class="prospect-actions"><BaseButton variant="secondary" @click="importOpen = true">Import Excel</BaseButton><BaseButton @click="form = blank(); editorOpen = true">Add Prospect</BaseButton></div>
+      <div class="prospect-actions"><BaseButton variant="secondary" @click="openImport">Import Excel</BaseButton><BaseButton @click="form = blank(); editorOpen = true">Add Prospect</BaseButton></div>
     </header>
     <p v-if="notice" class="prospect-notice" role="status">{{ notice }}</p>
     <p v-if="error" class="prospect-error" role="alert">{{ error }}</p>
@@ -134,16 +150,16 @@ async function archive(item: Prospect, event: Event) {
         <div class="prospect-form__wide prospect-modal-footer"><BaseButton variant="secondary" @click="editorOpen = false">Cancel</BaseButton><BaseButton type="submit" :loading="saving">Save prospect</BaseButton></div>
       </form>
     </BaseModal>
-    <BaseModal v-model="importOpen" title="Import prospects from Excel" description="Upload an .xlsx workbook, review its column mapping and rows, then confirm the selected entries." size="wide">
+    <BaseModal v-model="importOpen" title="Import prospects from Excel" description="Upload an .xlsx workbook, review its column mapping and rows, then confirm the selected entries." size="large">
       <div class="prospect-import">
-        <label class="file-field">Excel workbook (.xlsx)<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="selectFile"></label>
+        <div class="file-field"><span>Excel workbook (.xlsx)</span><div class="file-picker"><input ref="importFileInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden @change="selectFile"><BaseButton variant="secondary" type="button" @click="importFileInput?.click()">Choose file</BaseButton><span class="file-picker__name">{{ file?.name || 'No file chosen' }}</span></div></div>
         <BaseButton variant="secondary" :disabled="!file" :loading="importBusy" @click="makePreview()">Preview workbook</BaseButton>
         <template v-if="preview">
           <p class="import-summary">{{ preview.summary.valid }} valid · {{ preview.summary.duplicates }} duplicates · {{ preview.summary.ambiguous }} ambiguous · {{ preview.summary.invalid }} invalid · {{ preview.summary.total }} rows</p>
           <p class="import-expiry">Preview expires {{ new Date(preview.expiresAt).toLocaleTimeString() }}. Select valid rows and explicitly approve any ambiguous row you want to add separately.</p>
           <fieldset class="mapping-panel"><legend>Review column mapping</legend><label v-for="field in importFields" :key="field.key">{{ field.label }}
             <select v-model="columnMapping[field.key]" :aria-label="`Map ${field.label}`"><option value="">Not mapped</option><option v-for="header in headers" :key="header.column" :value="String(header.column)">{{ header.label }} (column {{ header.column }})</option></select>
-          </label><BaseButton variant="secondary" :disabled="!file || !columnMapping.name" :loading="importBusy" @click="makePreview(true)">Re-preview with this mapping</BaseButton></fieldset>
+          </label><p v-if="!columnMapping.name" class="prospect-error import-map-warning">Map the worksheet column containing each company name, then preview again.</p><BaseButton variant="secondary" :disabled="!file || !columnMapping.name" :loading="importBusy" @click="makePreview(true)">Re-preview with this mapping</BaseButton></fieldset>
           <div v-if="preview.rows.length" class="import-preview"><table class="prospect-table"><thead><tr><th>Select</th><th>Row</th><th>Company</th><th>Review</th></tr></thead><tbody>
             <tr v-for="row in visiblePreviewRows" :key="row.rowNumber"><td><input v-if="row.status === 'valid' || row.status === 'ambiguous'" type="checkbox" :aria-label="row.status === 'ambiguous' ? `Import row ${row.rowNumber} as a separate organization` : `Select row ${row.rowNumber}`" :checked="selectedRows.has(row.rowNumber)" @change="selectImportRow(row.rowNumber, ($event.target as HTMLInputElement).checked)"><span v-else>—</span></td><td>{{ row.rowNumber }}</td><td>{{ row.data?.name || '—' }}</td><td>
               <span v-if="row.status === 'invalid'" class="prospect-error">{{ row.errors.join(' ') }}</span>
@@ -162,6 +178,6 @@ async function archive(item: Prospect, event: Event) {
 </template>
 
 <style scoped>
-.prospects-page{display:grid;gap:24px}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.page-heading h1{margin:4px 0 8px;font-size:32px}.prospect-title-row{display:flex;align-items:center;gap:10px}.page-heading p{margin:0;color:#687581}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#60716e}.prospect-actions,.prospect-modal-footer{display:flex;gap:10px;justify-content:flex-end}.prospect-filters{display:grid;grid-template-columns:minmax(240px,2fr) 1fr 1fr;gap:16px}.prospect-table-wrap,.import-preview{overflow:auto;border:1px solid #e1e7e5;border-radius:14px;background:white}.prospect-table{width:100%;border-collapse:collapse;text-align:left;min-width:720px}.prospect-table th,.prospect-table td{padding:14px 16px;border-bottom:1px solid #edf0ef;font-size:14px}.prospect-table th{color:#687581;font-weight:600;background:#fafcfb}.prospect-table tbody tr[tabindex]{cursor:pointer}.prospect-table tbody tr[tabindex]:hover{background:#f7faf8}.prospect-table small{display:block;color:#77827f;margin-top:4px}.prospect-status{padding:4px 9px;border-radius:99px;background:#edf4f0;font-size:12px}.prospect-empty{text-align:center;color:#697672;padding:36px!important}.prospect-notice{color:#186149}.prospect-error{color:#a13c36}.prospect-total{margin:0 0 -16px;color:#687581;font-size:13px}.prospect-form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.prospect-form__wide{grid-column:1/-1}.prospect-status-help{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0;padding:14px 16px;border:1px solid #e1e7e5;border-radius:12px;background:#fafcfb}.prospect-status-help div{display:grid;gap:3px}.prospect-status-help dt{font-size:13px;font-weight:600;color:#34423d}.prospect-status-help dd{margin:0;color:#687581;font-size:12px;line-height:1.45}.prospect-import{display:grid;gap:16px}.file-field{display:grid;gap:8px;font-size:13px;font-weight:600}.duplicate-warning{color:#8b5a11}.import-summary{margin:0;color:#3e5a4e}@media(max-width:760px){.page-heading{align-items:flex-start;flex-direction:column}.prospect-filters,.prospect-form{grid-template-columns:1fr}.prospect-form__wide{grid-column:auto}.prospect-status-help{grid-template-columns:1fr}.prospect-actions{width:100%}}
+.prospects-page{display:grid;gap:24px}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.page-heading h1{margin:4px 0 8px;font-size:32px}.prospect-title-row{display:flex;align-items:center;gap:10px}.page-heading p{margin:0;color:#687581}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#60716e}.prospect-actions,.prospect-modal-footer{display:flex;gap:10px;justify-content:flex-end}.prospect-filters{display:grid;grid-template-columns:minmax(240px,2fr) 1fr 1fr;gap:16px}.prospect-table-wrap,.import-preview{overflow:auto;border:1px solid #e1e7e5;border-radius:14px;background:white}.prospect-table{width:100%;border-collapse:collapse;text-align:left;min-width:720px}.prospect-table th,.prospect-table td{padding:14px 16px;border-bottom:1px solid #edf0ef;font-size:14px}.prospect-table th{color:#687581;font-weight:600;background:#fafcfb}.prospect-table tbody tr[tabindex]{cursor:pointer}.prospect-table tbody tr[tabindex]:hover{background:#f7faf8}.prospect-table small{display:block;color:#77827f;margin-top:4px}.prospect-status{padding:4px 9px;border-radius:99px;background:#edf4f0;font-size:12px}.prospect-empty{text-align:center;color:#697672;padding:36px!important}.prospect-notice{color:#186149}.prospect-error{color:#a13c36}.prospect-total{margin:0 0 -16px;color:#687581;font-size:13px}.prospect-form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.prospect-form__wide{grid-column:1/-1}.prospect-status-help{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0;padding:14px 16px;border:1px solid #e1e7e5;border-radius:12px;background:#fafcfb}.prospect-status-help div{display:grid;gap:3px}.prospect-status-help dt{font-size:13px;font-weight:600;color:#34423d}.prospect-status-help dd{margin:0;color:#687581;font-size:12px;line-height:1.45}.prospect-import{display:grid;gap:16px}.file-field{display:grid;gap:8px;font-size:13px;font-weight:600}.file-picker{display:flex;align-items:center;gap:12px;min-height:42px}.file-picker__name{overflow:hidden;color:#687581;font-size:13px;font-weight:400;text-overflow:ellipsis;white-space:nowrap}.duplicate-warning{color:#8b5a11}.import-summary{margin:0;color:#3e5a4e}.import-map-warning{margin:0;font-size:13px}.mapping-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 16px;min-width:0;margin:0;padding:18px;border:1px solid #e1e7e5;border-radius:12px;background:#fafcfb}.mapping-panel legend{padding:0 6px;color:#34423d;font-size:14px;font-weight:600}.mapping-panel>label{display:grid;align-content:start;gap:6px;min-width:0;color:#4e5c56;font-size:12px;font-weight:600}.mapping-panel select{width:100%;min-width:0;min-height:40px;padding:8px 10px;border:1px solid #d5dfda;border-radius:8px;background:white;color:#26352f;font:inherit;font-weight:400}.mapping-panel>button,.mapping-panel>.import-map-warning{grid-column:1/-1;justify-self:start}.mapping-panel>.import-map-warning{margin:0;font-size:13px}@media(max-width:760px){.page-heading{align-items:flex-start;flex-direction:column}.prospect-filters,.prospect-form,.mapping-panel{grid-template-columns:1fr}.prospect-form__wide{grid-column:auto}.prospect-status-help{grid-template-columns:1fr}.prospect-actions{width:100%}}
 .row-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}.row-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:6px 11px;border:1px solid #d8e4dc;border-radius:8px;background:#f2f7f4;color:#2f614b;font:inherit;font-size:13px;font-weight:600;line-height:1.2;text-decoration:none;cursor:pointer;transition:background-color .15s ease,border-color .15s ease,transform .15s ease}.row-action-view:hover{border-color:#b8cebf;background:#e8f1eb}.row-actions .row-action-archive{border-color:#ead8d6;background:#fff;color:#93453f}.row-actions .row-action-archive:hover{border-color:#d9b9b5;background:#fff4f2}.row-actions button:active{transform:translateY(1px)}.row-actions button:focus-visible{outline:2px solid #3c765a;outline-offset:2px}
 </style>

@@ -35,7 +35,7 @@ export const prospectImportLabels: Record<ImportField, string> = {
   contactName: 'Contact name', contactEmail: 'Contact email', contactPhone: 'Contact phone', notes: 'Notes',
 }
 const aliases: Record<ImportField, string[]> = {
-  name: ['company', 'company name', 'organization', 'organisation', 'business name', 'prospect', 'name', 'nama perusahaan', 'nama usaha', 'perusahaan'],
+  name: ['company', 'company name', 'company organization', 'company organisation', 'organization', 'organisation', 'organization name', 'organisation name', 'business', 'business name', 'legal name', 'client', 'client name', 'account name', 'prospect', 'prospect name', 'target company', 'name', 'nama perusahaan', 'nama usaha', 'nama badan usaha', 'nama bisnis', 'nama organisasi', 'nama klien', 'target perusahaan', 'perusahaan'],
   industry: ['industry', 'sector', 'business sector', 'vertical', 'industri', 'sektor industri', 'bidang usaha', 'sektor'],
   website: ['website', 'web site', 'url', 'company website', 'domain', 'situs web', 'laman web', 'website perusahaan'],
   address: ['address', 'company address', 'location', 'street address', 'alamat', 'alamat perusahaan', 'lokasi'],
@@ -48,7 +48,7 @@ const aliases: Record<ImportField, string[]> = {
 }
 
 function normalizedHeader(value: string) {
-  return value.toLowerCase().trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+  return value.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim().replace(/\s+(required|optional)$/, '')
 }
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -106,12 +106,26 @@ export async function parseProspectWorkbook(buffer: Buffer, customMapping?: Reco
   const sheet = workbook.worksheets[0]
   if (!sheet) throw badRequest('The workbook does not contain a worksheet.')
   if (sheet.rowCount > 5001 || sheet.columnCount > 100) throw badRequest('The workbook exceeds the limit of 5,000 data rows or 100 columns.')
-  const headerRow = sheet.getRow(1)
+  let headerRowNumber = 1
+  let headerRow = sheet.getRow(headerRowNumber)
   const suggested: Partial<Record<ImportField, number>> = {}
-  for (let column = 1; column <= sheet.columnCount; column += 1) {
-    const header = normalizedHeader(cellText(headerRow.getCell(column).value))
-    for (const field of prospectImportFields) {
-      if (aliases[field].includes(header) && suggested[field] === undefined) suggested[field] = column
+  let bestHeaderScore = 0
+  for (let candidateRow = 1; candidateRow <= Math.min(sheet.rowCount, 10); candidateRow += 1) {
+    const candidateMapping: Partial<Record<ImportField, number>> = {}
+    const row = sheet.getRow(candidateRow)
+    for (let column = 1; column <= sheet.columnCount; column += 1) {
+      const header = normalizedHeader(cellText(row.getCell(column).value))
+      for (const field of prospectImportFields) {
+        if (aliases[field].includes(header) && candidateMapping[field] === undefined) candidateMapping[field] = column
+      }
+    }
+    const score = Object.keys(candidateMapping).length
+    if (score > bestHeaderScore) {
+      bestHeaderScore = score
+      headerRowNumber = candidateRow
+      headerRow = row
+      for (const field of prospectImportFields) delete suggested[field]
+      Object.assign(suggested, candidateMapping)
     }
   }
   const headers = Array.from({ length: sheet.columnCount }, (_, index) => ({ column: index + 1, label: cellText(headerRow.getCell(index + 1).value) })).filter((header) => header.label)
@@ -128,7 +142,7 @@ export async function parseProspectWorkbook(buffer: Buffer, customMapping?: Reco
   }
 
   const rows: ParsedImportRow[] = []
-  for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber += 1) {
+  for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber)
     if ((row.values as ExcelJS.CellValue[]).slice(1).every((value) => value === null || value === undefined || value === '')) continue
     const errors: string[] = []
@@ -144,7 +158,7 @@ export async function parseProspectWorkbook(buffer: Buffer, customMapping?: Reco
       } else Object.assign(values, { [field]: value })
     }
     if (!mapping.name) errors.push('Map a worksheet column to Company name to import this row.')
-    if (!values.name?.trim()) errors.push('Company name is required.')
+    else if (!values.name?.trim()) errors.push('Company name is required.')
     if (values.name && values.name.length > 240) errors.push('Company name must be 240 characters or fewer.')
     if (values.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.contactEmail)) errors.push('Contact email is not valid.')
     if (values.website && !/^https?:\/\//i.test(values.website)) values.website = `https://${values.website}`

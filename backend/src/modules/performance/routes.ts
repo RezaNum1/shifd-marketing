@@ -25,7 +25,7 @@ import type { InstagramInsightsProvider } from './instagram/provider.js'
 import type { InstagramSyncResult } from './instagram/sync.js'
 import { createBusinessInquiry, createProductionTimeLog, readEvaluation, readEvaluationRange, saveEvaluation, saveEvaluationSnapshot } from './evaluation.js'
 
-const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'likes', 'comments', 'saves', 'publishedPosts', 'nativeEngagementRate', 'evidenceAssetId', 'notes'] as const
+const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'engagements', 'likes', 'comments', 'saves', 'publishedPosts', 'nativeEngagementRate', 'evidenceAssetId', 'notes'] as const
 const evaluationKeys = ['startDate', 'timezone', 'definitions'] as const
 const snapshotKeys = ['stage', 'capturedAt', 'measurements', 'source', 'notes'] as const
 const businessInquiryKeys = ['receivedAt', 'channel', 'companyName', 'prospectId', 'summary', 'relevance', 'source', 'sourceReference', 'followUpNotes'] as const
@@ -254,6 +254,9 @@ function parseWeeklyMetric(value: unknown): WeeklyMetricInput {
     likes: body.likes === undefined ? 0 : assertSafeCount(body.likes, 'likes'),
     comments: body.comments === undefined ? 0 : assertSafeCount(body.comments, 'comments'),
     saves: body.saves === undefined ? 0 : assertSafeCount(body.saves, 'saves'),
+    engagements: body.engagements === undefined
+      ? (body.likes === undefined ? 0 : assertSafeCount(body.likes, 'likes')) + (body.comments === undefined ? 0 : assertSafeCount(body.comments, 'comments')) + (body.saves === undefined ? 0 : assertSafeCount(body.saves, 'saves'))
+      : assertSafeCount(body.engagements, 'engagements'),
     publishedPosts: assertSafeCount(body.publishedPosts, 'publishedPosts', 2_147_483_647),
     nativeEngagementRate: assertOptionalRate(body.nativeEngagementRate, 'nativeEngagementRate'),
     evidenceAssetId: parseNullableUuid(body.evidenceAssetId, 'evidenceAssetId'),

@@ -7,12 +7,29 @@ import { errorMessage, isApiError } from '../api/client'
 import { beginCommand, clearCommandKeys, completeCommand, discardCommand } from '../api/idempotency'
 import type { BackendApprovalAction, BackendContent, BackendPlatform } from '../types/backend'
 import type { ContentIdea } from '../types/contentIdea'
-import type { BrandAssessment, ContentBrief, ContentAssetRecord, ContentLibraryRecord, ContentSchedule, ContentLifecycleStatus, CreativeAsset, InstagramVariant, LinkedInVariant, MasterContent, VisualDirection, WorkflowStep } from '../types/content'
+import type { BrandAssessment, BrandCheckFailure, BrandCheckFailureOverride, ContentBrief, ContentAssetRecord, ContentLibraryRecord, ContentSchedule, ContentLifecycleStatus, CreativeAsset, InstagramVariant, LinkedInVariant, MasterContent, VisualDirection, WorkflowStep } from '../types/content'
 import { releaseWorkflowAssets, retainWorkflowAsset } from '../utils/creativeAssetRegistry'
 import { contentSchedules, contentStatus } from '../utils/contentRecords'
 
 type PlatformKey = BackendPlatform
 type DesignStatus = 'not-started' | 'in-progress' | 'ready'
+type VariantCopyDraft = { copy: string; cta: string; hashtags: string; visualRecommendation: string }
+type FailureObserver = (reason: unknown, message: string) => void
+
+function brandCheckFailure(reason: unknown, message: string): BrandCheckFailure {
+  if (!isApiError(reason)) {
+    return { code: 'BRAND_CHECK_FAILED', message, requestId: null, aiRequestId: null, missingInputs: [], canOverride: false }
+  }
+  const aiRequestId = reason.fields.aiRequestId?.trim() || null
+  return {
+    code: reason.code,
+    message,
+    requestId: reason.requestId,
+    aiRequestId,
+    missingInputs: reason.fields.missing?.split(',').map((item) => item.trim()).filter(Boolean) ?? [],
+    canOverride: Boolean(aiRequestId && reason.fields.canOverride === 'true'),
+  }
+}
 
 const blankBrief = (): ContentBrief => ({ context: 'company', product: '', pillar: 'educational', objective: 'awareness', audience: '', topic: '', thesis: '', constraints: '' })
 const blankMaster = (): MasterContent => ({ id: 'master', label: 'Master Content', title: '', coreMessage: '', hook: '', body: '', cta: '' })
@@ -94,6 +111,8 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   const reviewEditing = reactive({ instagram: false, linkedin: false })
   const reviewAssessments = reactive({ instagram: blankAssessment(), linkedin: blankAssessment() })
   const reviewOverrides = reactive({ instagram: '', linkedin: '' })
+  const reviewCheckErrors = reactive<Record<PlatformKey, BrandCheckFailure | null>>({ instagram: null, linkedin: null })
+  const reviewFailureOverrides = reactive<Record<PlatformKey, BrandCheckFailureOverride | null>>({ instagram: null, linkedin: null })
   const isScheduled = ref(false)
   const useSameSchedule = ref(true)
   const instagramSchedule = reactive({ date: '', time: '' })
@@ -106,6 +125,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   watch([contentId, activeStep], ([id, step]) => persistWorkflowResume(id, step), { flush: 'sync' })
 
   function applyCanonical(value: BackendContent, responseEtag?: string | null, preserveStep = false) {
+    const preserveReviewEvidence = canonical.value?.id === value.id && canonical.value.editorialRevision === value.editorialRevision
     canonical.value = value
     contentId.value = value.id
     sourceIdeaId.value = value.sourceIdeaId ?? undefined
@@ -131,8 +151,15 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     approvedBy.value = value.approval?.action === 'approve' ? value.approval.actor.name : null
     approvedAt.value = value.approval?.action === 'approve' ? value.approval.createdAt : null
     if (isApproved.value) Object.assign(reviewChecklist, { copyReviewed: true, creativeReviewed: true, visualCopyConsistent: true, noErrors: true, readyForPublication: true })
-    const overrides = overridesFromApproval(value.approval, value)
-    Object.assign(reviewOverrides, overrides)
+    const approvedOverrides = overridesFromApproval(value.approval, value)
+    if (value.approval?.action === 'approve') {
+      Object.assign(reviewOverrides, approvedOverrides)
+      Object.assign(reviewFailureOverrides, failureOverridesFromApproval(value.approval, value))
+    } else if (!preserveReviewEvidence) {
+      Object.assign(reviewOverrides, { instagram: '', linkedin: '' })
+      Object.assign(reviewFailureOverrides, { instagram: null, linkedin: null })
+      Object.assign(reviewCheckErrors, { instagram: null, linkedin: null })
+    }
     const schedules = { instagram: value.variants.find((item) => item.platform === 'instagram')?.schedule, linkedin: value.variants.find((item) => item.platform === 'linkedin')?.schedule }
     setSchedule('instagram', schedules.instagram)
     setSchedule('linkedin', schedules.linkedin)
@@ -170,6 +197,8 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(reviewEditing, { instagram: false, linkedin: false })
     Object.assign(reviewAssessments, { instagram: blankAssessment(), linkedin: blankAssessment() })
     Object.assign(reviewOverrides, { instagram: '', linkedin: '' })
+    Object.assign(reviewCheckErrors, { instagram: null, linkedin: null })
+    Object.assign(reviewFailureOverrides, { instagram: null, linkedin: null })
     isScheduled.value = false
     useSameSchedule.value = true
     Object.assign(instagramSchedule, { date: '', time: '' })
@@ -238,11 +267,30 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
       // server-recorded justification from the local review form.
       try {
         const actions = await contentApi.listReviewActions(id)
+        const restoredPlatforms = new Set<PlatformKey>()
         actions.data
           .filter((action) => action.action === 'override' && action.editorialRevision === result.data.editorialRevision && action.justification)
           .forEach((action) => {
-            const platform = result.data.variants.find((variant) => variant.id === action.variantId)?.platform
-            if (platform) reviewOverrides[platform] = action.justification ?? ''
+            const variant = result.data.variants.find((candidate) => candidate.id === action.variantId)
+            const platform = variant?.platform
+            if (!variant || !platform || restoredPlatforms.has(platform)) return
+            const assessmentIsCurrent = Boolean(action.assessmentId && variant.assessment?.id === action.assessmentId && variant.assessment.freshness === 'current' && variant.assessment.status === 'needs_attention')
+            const failureWasOverridden = Boolean(action.failedAiRequestId && action.evidenceCurrent === true && !(variant.assessment && variant.assessment.freshness === 'current'))
+            if (!assessmentIsCurrent && !failureWasOverridden) return
+            restoredPlatforms.add(platform)
+            reviewOverrides[platform] = action.justification ?? ''
+            if (action.failedAiRequestId) {
+              const errorCode = action.failedAiRequestErrorCode ?? 'BRAND_CHECK_FAILED'
+              reviewFailureOverrides[platform] = { failedAiRequestId: action.failedAiRequestId, errorCode, justification: action.justification ?? '' }
+              reviewCheckErrors[platform] = {
+                code: errorCode,
+                message: 'The AI Brand Consistency Check failed. A human override was recorded for this attempt.',
+                requestId: null,
+                aiRequestId: action.failedAiRequestId,
+                missingInputs: [],
+                canOverride: true,
+              }
+            }
           })
       } catch {
         // Review history is secondary to the canonical Content read.
@@ -279,11 +327,11 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     }, `Unable to adapt ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'}.`, command.identity)
   }
 
-  async function saveVariant(platform: PlatformKey) {
+  async function saveVariant(platform: PlatformKey, draft?: VariantCopyDraft) {
     return requireCanonical(async () => {
-      const input = platform === 'instagram'
+      const input = draft ?? (platform === 'instagram'
         ? { copy: instagramContent.caption, cta: instagramContent.cta, hashtags: instagramContent.hashtags, visualRecommendation: instagramContent.visualRecommendation }
-        : { copy: linkedInContent.postCopy, cta: linkedInContent.cta, hashtags: linkedInContent.hashtags, visualRecommendation: linkedInContent.visualRecommendation }
+        : { copy: linkedInContent.postCopy, cta: linkedInContent.cta, hashtags: linkedInContent.hashtags, visualRecommendation: linkedInContent.visualRecommendation })
       const result = await contentApi.updateVariant(contentId.value, platform, input, currentEtag())
       applyCanonical(result.data, result.etag, true)
       return result.data
@@ -336,25 +384,66 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     }, 'Unable to update the LinkedIn creative reuse setting.')
   }
 
+  function clearBrandCheckEvidence(platform: PlatformKey) {
+    reviewCheckErrors[platform] = null
+    reviewFailureOverrides[platform] = null
+    reviewOverrides[platform] = ''
+  }
+
+  function setBrandCheckPreparationError(platform: PlatformKey, message: string) {
+    reviewCheckErrors[platform] = {
+      code: 'CONTENT_SAVE_FAILED',
+      message,
+      requestId: null,
+      aiRequestId: null,
+      missingInputs: [],
+      canOverride: false,
+    }
+  }
+
   async function brandCheck(platform: PlatformKey) {
+    clearBrandCheckEvidence(platform)
     const version = currentEtag()
     const command = beginCommand(`content.brand-check:${contentId.value}:${platform}`, version)
     return requireCanonical(async () => {
       const result = await contentApi.brandCheckContent(contentId.value, platform, version, command.key)
       applyCanonical(result.data.content, result.etag, true)
       return result.data.content
-    }, `Unable to check ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} alignment.`, command.identity)
+    }, `Unable to check ${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} alignment.`, command.identity, (reason, message) => {
+      reviewCheckErrors[platform] = brandCheckFailure(reason, message)
+    })
   }
 
   async function override(platform: PlatformKey, justification: string) {
-    const assessmentId = canonical.value?.variants.find((item) => item.platform === platform)?.assessment?.id
-    if (!assessmentId) { error.value = 'Run the backend brand check before recording an override.'; return undefined }
+    const variant = canonical.value?.variants.find((item) => item.platform === platform)
+    const assessmentId = variant?.assessment?.freshness === 'current' && variant.assessment.status === 'needs_attention'
+      ? variant.assessment.id
+      : null
+    const failedAiRequestId = !assessmentId && reviewCheckErrors[platform]?.canOverride
+      ? reviewCheckErrors[platform]?.aiRequestId
+      : null
+    if (!assessmentId && !failedAiRequestId) {
+      error.value = 'Run Brand Consistency Check first, or choose Override on a current Needs Attention result or failed AI attempt.'
+      return undefined
+    }
+    const normalizedJustification = justification.trim()
     const version = currentEtag()
-    const command = beginCommand(`content.override:${contentId.value}:${platform}`, `${assessmentId}|${justification.trim()}|${version}`)
+    const evidenceId = assessmentId ?? failedAiRequestId!
+    const command = beginCommand(`content.override:${contentId.value}:${platform}`, `${evidenceId}|${normalizedJustification}|${version}`)
     return requireCanonical(async () => {
-      const result = await contentApi.recordOverride(contentId.value, { platform, assessmentId, justification }, version, command.key)
+      const input = assessmentId
+        ? { platform, assessmentId, justification: normalizedJustification }
+        : { platform, failedAiRequestId: failedAiRequestId!, justification: normalizedJustification }
+      const result = await contentApi.recordOverride(contentId.value, input, version, command.key)
       applyCanonical(result.data.content, result.etag, true)
-      reviewOverrides[platform] = result.data.action.justification ?? justification
+      reviewOverrides[platform] = result.data.action.justification ?? normalizedJustification
+      if (result.data.action.failedAiRequestId) {
+        reviewFailureOverrides[platform] = {
+          failedAiRequestId: result.data.action.failedAiRequestId,
+          errorCode: result.data.action.failedAiRequestErrorCode ?? reviewCheckErrors[platform]?.code ?? 'BRAND_CHECK_FAILED',
+          justification: result.data.action.justification ?? normalizedJustification,
+        }
+      }
       return result.data.content
     }, 'Unable to record the override.', command.identity)
   }
@@ -412,7 +501,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     return `${value.date}T${value.time}:00+07:00`
   }
 
-  async function perform<T>(call: () => Promise<T>, fallback: string, commandIdentity?: string): Promise<T | undefined> {
+  async function perform<T>(call: () => Promise<T>, fallback: string, commandIdentity?: string, onFailure?: FailureObserver): Promise<T | undefined> {
     loading.value = true
     error.value = ''
     try {
@@ -420,25 +509,46 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
       if (commandIdentity) completeCommand(commandIdentity)
       return value
     } catch (reason: unknown) {
-      if (isApiError(reason) && reason.status === 412 && contentId.value) {
+      const shouldRefreshCanonical = isApiError(reason) && (reason.status === 412 || reason.code === 'INPUT_CHANGED') && contentId.value
+      if (shouldRefreshCanonical) {
         if (commandIdentity) discardCommand(commandIdentity)
         try {
           const latest = await contentApi.getContent(contentId.value)
           applyCanonical(latest.data, latest.etag, true)
-          error.value = 'This Content changed elsewhere. The latest version was refreshed; review your edits before retrying.'
+          error.value = reason.code === 'INPUT_CHANGED'
+            ? 'The saved AI inputs changed while the request was running. The latest content was refreshed; review it before retrying.'
+            : 'This Content changed elsewhere. The latest version was refreshed; review your edits before retrying.'
+          onFailure?.(reason, error.value)
           return undefined
         } catch {
           // Keep the original concurrency error if the refresh is unavailable.
         }
       }
-      if (commandIdentity && isApiError(reason) && (reason.code === 'INPUT_CHANGED' || reason.code === 'REVIEW_LOCKED' || reason.code === 'REVISION_CONFLICT')) discardCommand(commandIdentity)
+      const requiresNewCommandKey = isApiError(reason) && [
+        'INPUT_CHANGED',
+        'REVIEW_LOCKED',
+        'REVISION_CONFLICT',
+        'RATE_LIMITED',
+        'AI_TIMEOUT',
+        'AI_PROVIDER_ERROR',
+        'AI_OUTPUT_INVALID',
+        'AI_NOT_CONFIGURED',
+        'AI_INTERRUPTED',
+        'IDEMPOTENCY_CONFLICT',
+      ].includes(reason.code)
+      if (commandIdentity && requiresNewCommandKey) discardCommand(commandIdentity)
       error.value = errorMessage(reason, fallback)
+      onFailure?.(reason, error.value)
       return undefined
     } finally { loading.value = false }
   }
-  async function requireCanonical<T>(call: () => Promise<T>, fallback: string, commandIdentity?: string) {
-    if (!canonical.value || !contentId.value) { error.value = 'Create the Content brief before continuing.'; return undefined }
-    return perform(call, fallback, commandIdentity)
+  async function requireCanonical<T>(call: () => Promise<T>, fallback: string, commandIdentity?: string, onFailure?: FailureObserver) {
+    if (!canonical.value || !contentId.value) {
+      error.value = 'Create the Content brief before continuing.'
+      onFailure?.(null, error.value)
+      return undefined
+    }
+    return perform(call, fallback, commandIdentity, onFailure)
   }
 
   function setSchedule(platform: PlatformKey, value: BackendContent['variants'][number]['schedule'] | null | undefined) {
@@ -455,7 +565,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(scheduledRecords[platform], value ?? blankSchedule())
   }
 
-  return { contentId, sourceIdeaId, canonical, etag, activeStep, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, brandCheck, override, approve, requestRevision, schedule }
+  return { contentId, sourceIdeaId, canonical, etag, activeStep, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, reviewCheckErrors, reviewFailureOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, clearBrandCheckEvidence, setBrandCheckPreparationError, brandCheck, override, approve, requestRevision, schedule }
 })
 
 function variantValue(value: BackendContent['variants'][number], platform: PlatformKey) {
@@ -485,6 +595,18 @@ function overridesFromApproval(approval: BackendApprovalAction | null, content: 
     // carries its justification. The UI keeps the field empty until the user
     // opens the current review action; server approval remains authoritative.
     if (variant && item.overrideId) result[variant.platform] = 'Recorded on the server'
+  })
+  return result
+}
+
+function failureOverridesFromApproval(approval: BackendApprovalAction | null, content: BackendContent) {
+  const result: Record<PlatformKey, BrandCheckFailureOverride | null> = { instagram: null, linkedin: null }
+  if (!approval || approval.action !== 'approve' || !Array.isArray(approval.reviewedVariants)) return result
+  const reviewed = approval.reviewedVariants as Array<{ variantId?: unknown; evidenceType?: unknown; failedAiRequestId?: unknown; failureCode?: unknown; overrideId?: unknown }>
+  reviewed.forEach((item) => {
+    if (item.evidenceType !== 'failed_brand_check' || typeof item.failedAiRequestId !== 'string' || typeof item.failureCode !== 'string' || typeof item.overrideId !== 'string') return
+    const variant = content.variants.find((candidate) => candidate.id === item.variantId)
+    if (variant) result[variant.platform] = { failedAiRequestId: item.failedAiRequestId, errorCode: item.failureCode, justification: 'Recorded on the server' }
   })
   return result
 }

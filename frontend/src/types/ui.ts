@@ -56,4 +56,5 @@ export interface TableColumn {
   key: string
   label: string
   align?: 'left' | 'right'
+  ariaSort?: 'ascending' | 'descending' | 'none'
 }

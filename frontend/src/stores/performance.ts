@@ -132,7 +132,7 @@ export const usePerformanceStore = defineStore('performance', () => {
           throw reason
         }
       }
-      const payload = { weekStart: input.weekStart, weekEnd, followers: input.followers, reach: input.reach, impressions: input.impressions, likes: input.likes, comments: input.comments, saves: input.saves, publishedPosts: input.publishedPosts, nativeEngagementRate: input.nativeEngagementRate ?? null, evidenceAssetId, notes: input.notes ?? null }
+      const payload = { weekStart: input.weekStart, weekEnd, followers: input.followers, reach: input.reach, impressions: input.impressions, engagements: input.engagements, likes: input.likes, comments: input.comments, saves: input.saves, publishedPosts: input.publishedPosts, nativeEngagementRate: input.nativeEngagementRate ?? null, evidenceAssetId, notes: input.notes ?? null }
       const result = input.id && metricEtags.value[input.id]
         ? await performanceApi.updateLinkedInMetric(input.id, payload, metricEtags.value[input.id])
         : await performanceApi.createLinkedInMetric(payload)

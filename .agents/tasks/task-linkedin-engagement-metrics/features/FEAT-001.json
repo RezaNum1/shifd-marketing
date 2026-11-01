@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "chore",
+  "description": "Prepare and verify the existing backend and frontend environment without changing source files, using the pinned Node runtime and the configured disposable test database.",
+  "status": "in_progress",
+  "steps": [
+    "Select Node 22.11.0 with source $HOME/.nvm/nvm.sh && nvm use 22.11.0; confirm the pre-existing git worktree changes remain untouched.",
+    "Install backend dependencies with npm install in backend/ and generate Prisma Client with npm run db:generate.",
+    "Install frontend dependencies with npm ci in frontend/.",
+    "Run npx prisma validate in backend/ and apply the currently committed migration set to TEST_DATABASE_URL only, without resetting either database.",
+    "Run the baseline backend npm run test:unit, npm run test:performance, and npm run build commands.",
+    "Run the baseline frontend npm run test and npm run build commands, recording any pre-existing failures in findings."
+  ],
+  "acceptance_criteria": [
+    "Node 22.11.0 is active for all npm commands.",
+    "Prisma Client generation and schema validation complete successfully.",
+    "No source or migration file is changed by environment setup.",
+    "Baseline backend unit tests, performance integration tests, and build pass, or any pre-existing failure is recorded with its exact command and error.",
+    "Baseline frontend unit tests and build pass, or any pre-existing failure is recorded with its exact command and error."
+  ],
+  "verification": [
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd backend && npm run db:generate && npx prisma validate",
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd backend && npm run test:unit && npm run test:performance && npm run build",
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd frontend && npm run test && npm run build",
+    "git status --short"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

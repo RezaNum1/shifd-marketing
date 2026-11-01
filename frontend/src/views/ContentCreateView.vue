@@ -74,10 +74,20 @@ const reviewChecklist = workflow.reviewChecklist;
 const reviewEditing = workflow.reviewEditing;
 const reviewAssessments = workflow.reviewAssessments;
 const reviewOverrides = workflow.reviewOverrides;
+const reviewCheckErrors = workflow.reviewCheckErrors;
+const reviewFailureOverrides = workflow.reviewFailureOverrides;
 const overrideModalOpen = ref(false);
 const overridePlatform = ref<"instagram" | "linkedin">("instagram");
 const overrideJustification = ref("");
 const overrideError = ref("");
+const overrideUsesFailedCheck = computed(() => {
+  const platform = overridePlatform.value;
+  const assessment = reviewAssessments[platform];
+  return Boolean(
+    reviewCheckErrors[platform]?.canOverride &&
+    !(assessment.state === "assessed" && assessment.status === "Needs Attention"),
+  );
+});
 const isScheduled = toRef(workflow, "isScheduled");
 const scheduleValidation = ref("");
 const publicationTimeRecommendations = ref<schedulingApi.PublicationTimeRecommendation[]>([]);
@@ -171,7 +181,14 @@ const instagramCaptionWithinLimit = computed(
   () => !enabledPlatforms.instagram || instagramCaptionCharacterCount.value <= INSTAGRAM_CAPTION_MAX_LENGTH,
 );
 const selectedProductName = computed(
-  () => selectedProduct.value?.name ?? "No product selected",
+  () => productsStore.productOptions.find((option) => option.value === brief.product)?.label ?? selectedProduct.value?.name ?? "No product selected",
+);
+const briefContextSummary = computed(() =>
+  brief.context === "product"
+    ? selectedProductName.value
+    : brief.context === "company"
+      ? companyContext.companyProfile.name || "Company"
+      : "General topic",
 );
 const resolvedProductContext = computed(() => brief.context === "product" ? productsStore.resolveProductContext(brief.product) : undefined);
 const activeContextAudience = computed(() =>
@@ -336,6 +353,10 @@ const enabledReviewPlatforms = computed(() =>
     enabledPlatforms.linkedin ? "linkedin" : null,
   ].filter((platform): platform is "instagram" | "linkedin" => Boolean(platform)),
 );
+const brandCheckButtonLabel = computed(() => {
+  if (enabledReviewPlatforms.value.length === 2) return "Check Instagram & LinkedIn";
+  return enabledReviewPlatforms.value[0] === "linkedin" ? "Check LinkedIn" : "Check Instagram";
+});
 const reviewChecklistComplete = computed(() =>
   Object.values(reviewChecklist).every(Boolean),
 );
@@ -345,14 +366,29 @@ const reviewChecklistCount = computed(() =>
 const reviewChecklistProgress = computed(() =>
   Math.round((reviewChecklistCount.value / Object.keys(reviewChecklist).length) * 100),
 );
+const hasCurrentBrandAssessment = (platform: "instagram" | "linkedin") =>
+  reviewAssessments[platform].state === "assessed" && reviewAssessments[platform].checks.length > 0;
+const hasFailureBypass = (platform: "instagram" | "linkedin") =>
+  Boolean(reviewFailureOverrides[platform]?.failedAiRequestId && reviewOverrides[platform].trim());
+const unresolvedBrandCheckFailures = computed(() =>
+  enabledReviewPlatforms.value.filter(
+    (platform) => Boolean(reviewCheckErrors[platform]) && !hasCurrentBrandAssessment(platform) && !hasFailureBypass(platform),
+  ),
+);
 const reviewNeedsRecheck = computed(() =>
   enabledReviewPlatforms.value.some(
-    (platform) => reviewAssessments[platform].state === "needs-recheck" || reviewAssessments[platform].checks.length === 0,
+    (platform) =>
+      !hasFailureBypass(platform) &&
+      (reviewAssessments[platform].state === "needs-recheck" || reviewAssessments[platform].checks.length === 0),
   ),
 );
 const platformsRequiringOverride = computed(() =>
   enabledReviewPlatforms.value.filter((platform) =>
-    reviewAssessments[platform].status === "Needs Attention",
+    !hasFailureBypass(platform) &&
+    (
+      reviewAssessments[platform].status === "Needs Attention" && reviewAssessments[platform].state === "assessed"
+      || (!hasCurrentBrandAssessment(platform) && Boolean(reviewCheckErrors[platform]?.canOverride))
+    ),
   ),
 );
 const reviewOverridesComplete = computed(() =>
@@ -369,8 +405,10 @@ const canApproveContent = computed(
 );
 const approvalPendingItems = computed(() => [
   ...(!reviewChecklistComplete.value ? [`Human review: ${reviewChecklistCount.value} of 5 checks complete`] : []),
-  ...(reviewNeedsRecheck.value ? ["Re-check edited platform content"] : []),
-  ...(!reviewOverridesComplete.value ? ["Resolve alignment warnings with a justification"] : []),
+  ...(unresolvedBrandCheckFailures.value.length
+    ? [`Resolve the failed Brand Check for ${unresolvedBrandCheckFailures.value.map((platform) => platform === "instagram" ? "Instagram" : "LinkedIn").join(" and ")} by retrying or recording an override`]
+    : reviewNeedsRecheck.value ? ["Run Brand Consistency Check for all edited platform content"] : []),
+  ...(!reviewOverridesComplete.value ? ["Record a justification for every Needs Attention result or failed check being bypassed"] : []),
   ...(!instagramCaptionWithinLimit.value ? ["Keep the Instagram caption and hashtags within 2,200 characters"] : []),
   ...(!canContinueToReview.value ? ["Complete the required creative assets"] : []),
 ]);
@@ -844,7 +882,7 @@ function markAssessmentNeedsRecheck(platform: "instagram" | "linkedin") {
     return;
   }
   reviewAssessments[platform].state = "needs-recheck";
-  reviewOverrides[platform] = "";
+  workflow.clearBrandCheckEvidence(platform);
   reviewValidation.value = "";
 }
 
@@ -862,17 +900,91 @@ function openReviewSection(section: "copy" | "creative" | "brand") {
   document.getElementById(`review-${section}-${platform}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function recheckAlignment(platform: "instagram" | "linkedin") {
+function reviewVariantDraft(platform: "instagram" | "linkedin") {
+  return platform === "instagram"
+    ? {
+        copy: instagramContent.caption,
+        cta: instagramContent.cta,
+        hashtags: instagramContent.hashtags,
+        visualRecommendation: instagramContent.visualRecommendation,
+      }
+    : {
+        copy: linkedInContent.postCopy,
+        cta: linkedInContent.cta,
+        hashtags: linkedInContent.hashtags,
+        visualRecommendation: linkedInContent.visualRecommendation,
+      };
+}
+
+function restoreReviewVariantDraft(platform: "instagram" | "linkedin", draft: ReturnType<typeof reviewVariantDraft>) {
+  if (platform === "instagram") {
+    Object.assign(instagramContent, { caption: draft.copy, cta: draft.cta, hashtags: draft.hashtags, visualRecommendation: draft.visualRecommendation });
+  } else {
+    Object.assign(linkedInContent, { postCopy: draft.copy, cta: draft.cta, hashtags: draft.hashtags, visualRecommendation: draft.visualRecommendation });
+  }
+}
+
+async function recheckAlignment() {
   if (reviewRecheckLoading.value) return;
   if (isApproved.value) {
-    reviewValidation.value = "Approved Content is locked. Request a revision before editing it."
-    return
+    reviewValidation.value = "Approved Content is locked. Request a revision before editing it.";
+    return;
   }
+  const platforms = [...enabledReviewPlatforms.value];
+  if (!platforms.length) {
+    reviewValidation.value = "Enable at least one platform before running Brand Consistency Check.";
+    return;
+  }
+
   reviewRecheckLoading.value = true;
+  reviewValidation.value = "";
+  const drafts = {
+    instagram: reviewVariantDraft("instagram"),
+    linkedin: reviewVariantDraft("linkedin"),
+  };
+  const savedPlatforms: Array<"instagram" | "linkedin"> = [];
+  const saveErrors: Partial<Record<"instagram" | "linkedin", string>> = {};
   try {
-    if (!(await workflow.saveVariant(platform))) return;
-    const assessment = await workflow.brandCheck(platform);
-    if (assessment) ui.notify(`${platform === "instagram" ? "Instagram" : "LinkedIn"} alignment checked by the backend.`, "success");
+    for (const platform of platforms) {
+      workflow.clearBrandCheckEvidence(platform);
+      const saved = await workflow.saveVariant(platform, drafts[platform]);
+      if (saved) savedPlatforms.push(platform);
+      else {
+        saveErrors[platform] = workflow.error || `Unable to save the ${platform === "instagram" ? "Instagram" : "LinkedIn"} copy.`;
+        break;
+      }
+    }
+
+    if (savedPlatforms.length !== platforms.length) {
+      for (const platform of platforms) {
+        restoreReviewVariantDraft(platform, drafts[platform]);
+        workflow.setBrandCheckPreparationError(platform, saveErrors[platform] || "Brand Check was not started because another enabled platform could not be saved.");
+      }
+      reviewValidation.value = "Resolve the platform save errors, then run Brand Consistency Check again.";
+      return;
+    }
+
+    if (workflow.canonical?.editorialStage !== "ready_for_review" && !(await workflow.progress("ready_for_review"))) {
+      for (const platform of platforms) {
+        workflow.setBrandCheckPreparationError(platform, workflow.error || "Unable to return this content to Ready for Review before checking it.");
+      }
+      reviewValidation.value = "The content could not be prepared for review. Fix the reported issue and retry.";
+      return;
+    }
+
+    let successCount = 0;
+    for (const platform of platforms) {
+      const checked = await workflow.brandCheck(platform);
+      if (checked) successCount += 1;
+    }
+
+    if (successCount === platforms.length) {
+      ui.notify(`Brand Consistency Check completed for ${platforms.length === 2 ? "Instagram and LinkedIn" : platforms[0] === "instagram" ? "Instagram" : "LinkedIn"}.`, "success");
+    } else if (successCount > 0) {
+      ui.notify("Brand Check completed partially. Review the platform-specific error below.", "warning");
+    } else {
+      ui.notify("Brand Check failed. Review the error details or record an explicit override.", "warning");
+    }
   } finally {
     reviewRecheckLoading.value = false;
   }
@@ -932,9 +1044,11 @@ async function confirmOverride() {
 
 async function approveContent() {
   if (!canApproveContent.value) {
-    reviewValidation.value = reviewNeedsRecheck.value
-      ? "Re-check each edited or regenerated platform before approving."
-      : !reviewChecklistComplete.value
+    reviewValidation.value = unresolvedBrandCheckFailures.value.length
+      ? "Retry each failed Brand Check or record an explicit override with justification."
+      : reviewNeedsRecheck.value
+        ? "Run Brand Consistency Check for all edited or regenerated platforms before approving."
+        : !reviewChecklistComplete.value
         ? "Complete the Human Final Review checklist before approving."
         : !reviewOverridesComplete.value
           ? "Record a justification for each alignment warning before approving."
@@ -1188,7 +1302,7 @@ onMounted(() => {
       <div class="generate-summary-bar">
         <div>
           <span class="brief-overline">Brief context</span>
-          <strong>{{ selectedProductName }} · {{ selectedPillarLabel }} · {{ selectedObjectiveLabel }}</strong>
+          <strong>{{ briefContextSummary }} · {{ selectedPillarLabel }} · {{ selectedObjectiveLabel }}</strong>
         </div>
         <div>
           <span class="brief-overline">Topic</span>
@@ -1570,6 +1684,22 @@ onMounted(() => {
         <StatusBadge :tone="isApproved ? 'success' : 'info'" dot>{{ isApproved ? "Approved" : "Human review required" }}</StatusBadge>
       </div>
 
+      <section class="brand-check-control-bar" aria-labelledby="brand-check-run-title">
+        <div>
+          <span class="brief-overline">AI assessment · M4</span>
+          <strong id="brand-check-run-title">Brand Consistency Check</strong>
+          <p>One action saves the current drafts, then checks every enabled platform sequentially. Each platform keeps its own score, findings, and error details.</p>
+        </div>
+        <BaseButton
+          size="comfortable"
+          :loading="reviewRecheckLoading"
+          :disabled="isApproved || contentBusy || !enabledReviewPlatforms.length"
+          @click="recheckAlignment"
+        >
+          <AppIcon name="sparkles" :size="17" />{{ brandCheckButtonLabel }}
+        </BaseButton>
+      </section>
+
       <section class="review-platform-grid">
         <BaseCard v-if="enabledPlatforms.instagram" title="Instagram" description="Final carousel copy and authenticated creative preview.">
           <template #actions><StatusBadge tone="info">Instagram</StatusBadge></template>
@@ -1591,8 +1721,9 @@ onMounted(() => {
               id="review-brand-instagram"
               :assessment="reviewAssessments.instagram"
               :override-justification="reviewOverrides.instagram"
+              :error="reviewCheckErrors.instagram"
+              :failure-bypassed="hasFailureBypass('instagram')"
               @regenerate="regenerateReviewPlatform('instagram')"
-              @recheck="recheckAlignment('instagram')"
               @override="openOverride('instagram')"
             />
           </div>
@@ -1616,8 +1747,9 @@ onMounted(() => {
               id="review-brand-linkedin"
               :assessment="reviewAssessments.linkedin"
               :override-justification="reviewOverrides.linkedin"
+              :error="reviewCheckErrors.linkedin"
+              :failure-bypassed="hasFailureBypass('linkedin')"
               @regenerate="regenerateReviewPlatform('linkedin')"
-              @recheck="recheckAlignment('linkedin')"
               @override="openOverride('linkedin')"
             />
           </div>
@@ -1689,8 +1821,20 @@ onMounted(() => {
         <span v-else class="review-footer-hint">Approval unlocks the Schedule step.</span>
       </div>
 
-      <BaseModal v-model="overrideModalOpen" title="Override Brand Check" description="This content has an alignment warning. Please explain why it should proceed." size="default">
-        <BaseTextarea v-model="overrideJustification" label="Justification" :rows="4" :error="overrideError" required :number="1" />
+      <BaseModal
+        v-model="overrideModalOpen"
+        title="Override Brand Check"
+        :description="overrideUsesFailedCheck
+          ? 'The AI check did not produce a score. Record why human review may bypass this failed attempt.'
+          : 'This platform has a Needs Attention result. Explain why it may proceed without changing the AI score.'"
+        size="default"
+      >
+        <InlineAlert :title="overrideUsesFailedCheck ? 'Operational bypass' : 'Assessment override'" tone="warning">
+          {{ overrideUsesFailedCheck
+            ? 'This bypass applies only to the current failed attempt and saved content inputs. It is retained in review history.'
+            : 'The original score and warnings remain unchanged. Your justification becomes the review evidence.' }}
+        </InlineAlert>
+        <BaseTextarea v-model="overrideJustification" label="Justification" :rows="4" :error="overrideError" hint="Required, maximum 4,000 characters." maxlength="4000" required :number="1" />
         <template #footer><BaseButton variant="ghost" @click="overrideModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmOverride">Confirm Override</BaseButton></template>
       </BaseModal>
     </div>
@@ -1837,11 +1981,11 @@ onMounted(() => {
                 <div class="brief-field-heading">
                   <div class="brief-heading-label"><span class="brief-overline">Product Asset Link</span><InfoTooltip label="Product asset information" text="Choose the product whose profile should inform the brief and generated content." /></div>
                   <StatusBadge
-                    :tone="brief.context === 'product' ? 'success' : brief.context === 'general' ? 'neutral' : 'info'"
+                    :tone="brief.context === 'product' ? (brief.product ? 'success' : 'warning') : brief.context === 'general' ? 'neutral' : 'info'"
                     dot
                     >{{
                       brief.context === 'product'
-                        ? 'Context active'
+                        ? (brief.product ? 'Context active' : 'Select a product')
                         : brief.context === 'general' ? 'No linked context' : 'Company context'
                     }}</StatusBadge
                   >
@@ -1850,6 +1994,7 @@ onMounted(() => {
                   <BaseSelect
                     v-model="brief.product"
                     label="Product asset"
+                    placeholder="Select a product"
                     :options="productOptions"
                     :disabled="brief.context !== 'product'"
                   />
@@ -1927,11 +2072,13 @@ onMounted(() => {
 
             <div class="brief-input-grid">
               <div class="brief-field-group">
-                <BaseInput
+                <BaseTextarea
                   v-model="brief.audience"
                   label="Target audience"
+                  :rows="4"
                   :number="1"
                   tooltip="Describe who should find this content relevant, such as a role, team, organization type, or customer group. A specific audience helps shape examples, language, and level of detail."
+                  class="brief-tall-input"
                 />
                 <div class="quick-add-row">
                   <span class="brief-overline">Quick add</span>
@@ -1947,13 +2094,14 @@ onMounted(() => {
                 </div>
               </div>
 
-              <BaseInput
+              <BaseTextarea
                 v-model="brief.topic"
                 label="Topic / Primary Narrative"
+                :rows="4"
                 :number="2"
                 :hint="`${topicLength} characters`"
                 tooltip="State the subject and main message for this piece. Keep it focused: generation uses this as the central topic to develop."
-                class="brief-large-input"
+                class="brief-large-input brief-tall-input"
               />
             </div>
 

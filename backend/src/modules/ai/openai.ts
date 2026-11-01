@@ -94,11 +94,13 @@ const OUTPUT_FORMATS: Record<string, { name: string; schema: JsonSchema }> = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        score: { type: 'integer' },
+        score: { type: 'integer', minimum: 0, maximum: 100 },
         status: { type: 'string', enum: ['aligned', 'needs_attention'] },
         recommendation: { type: 'string' },
         checks: {
           type: 'array',
+          minItems: 1,
+          maxItems: M4_CHECK_LABELS.length,
           items: {
             type: 'object',
             additionalProperties: false,

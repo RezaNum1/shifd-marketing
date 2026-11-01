@@ -543,7 +543,7 @@ async function applyPlanningTarget(db: Db, companyId: string, contentId: string,
 
 async function currentApprovalId(db: Db, companyId: string, content: CompleteContentRow, config: ContentReadConfig) {
   const freshness = await assessmentFreshness(db, companyId, content, config)
-  const approval = await currentApprovalProjection(db, companyId, content, freshness)
+  const approval = await currentApprovalProjection(db, companyId, content, freshness, config)
   if (!approval || !content.currentApprovalId || content.currentApproval?.editorialRevision !== content.editorialRevision) {
     throw conflict('Current valid human approval is required.')
   }

@@ -41,15 +41,30 @@ const operations = [
   { module: 'M3', name: 'Platform Adaptation', description: 'Adapts approved master content for Instagram and LinkedIn.' },
   { module: 'M4', name: 'Brand Consistency Check', description: 'Assesses platform content against the selected business and brand context before human approval.' },
 ]
+const brandCheckInputs = [
+  'Company atau Product Context yang dipilih',
+  'Brand Profile dan resolved brand voice',
+  'Brief: objective, audience, topic, angle, dan instruksi',
+  'Master Content dan Visual Direction',
+  'Copy, CTA, hashtag, serta rekomendasi visual per platform',
+  'Maksimal tiga aset visual efektif pertama per platform',
+]
 const brandCheckDimensions = [
-  { label: 'Tone / Brand Voice', criterion: 'Copy mengikuti karakter dan gaya komunikasi pada profil Brand.' },
-  { label: 'Messaging Alignment', criterion: 'Pesan platform tetap sesuai dengan Master Content dan Visual Direction.' },
-  { label: 'Audience Fit', criterion: 'Bahasa dan manfaat relevan dengan audiens yang dipilih dalam brief.' },
-  { label: 'Claim Grounding', criterion: 'Klaim faktual didukung konteks yang tersedia. Klaim pelanggan, sertifikasi, relasi pemerintah, jaminan keamanan, statistik performa, ROI, pendapatan, pangsa pasar, atau hasil terukur diberi peringatan bila tidak didukung.' },
-  { label: 'CTA Alignment', criterion: 'Ajakan bertindak sesuai dengan tujuan konten dan pesan yang disampaikan.' },
-  { label: 'Company/Product Context Alignment', criterion: 'Penyebutan perusahaan dan produk akurat serta konsisten dengan konteks terpilih. Untuk konteks umum, referensi perusahaan atau produk tidak diwajibkan.' },
-  { label: 'Platform Appropriateness', criterion: 'Format dan gaya copy sesuai dengan platform tujuan, Instagram atau LinkedIn.' },
-  { label: 'Visual Creative Review', criterion: 'Jika aset visual tersedia dan dapat dianalisis, AI menilai relevansi dengan pesan, hierarki dan keterbacaan, serta masalah brand atau layout yang terlihat.' },
+  { label: 'Tone / Brand Voice', criterion: 'Mencocokkan karakter, formalitas, istilah, dan gaya komunikasi dengan profil Brand.', warningWhen: 'Warning jika copy jelas bertentangan dengan brand voice, preferred terms, atau hal yang harus dihindari.' },
+  { label: 'Messaging Alignment', criterion: 'Membandingkan pesan platform dengan core message, hook, body, CTA, dan Visual Direction pada Master Content.', warningWhen: 'Warning jika adaptasi mengubah pesan utama, manfaat, atau arah visual secara material.' },
+  { label: 'Audience Fit', criterion: 'Menilai apakah bahasa, masalah, tingkat detail, dan manfaat relevan bagi target audience pada brief.', warningWhen: 'Warning jika copy diarahkan ke audiens berbeda atau tidak menjawab kebutuhan audiens terpilih.' },
+  { label: 'Claim Grounding', criterion: 'Memeriksa apakah klaim faktual didukung Company atau Product Context yang tersedia.', warningWhen: 'Warning untuk klaim pelanggan, sertifikasi, relasi pemerintah, jaminan keamanan, statistik performa, ROI, pendapatan, pangsa pasar, atau hasil terukur yang tidak didukung.' },
+  { label: 'CTA Alignment', criterion: 'Mencocokkan ajakan bertindak dengan objective, pesan, dan tindakan yang memang relevan.', warningWhen: 'Warning jika CTA terlalu jauh dari objective, bertentangan dengan pesan, atau menjanjikan tindakan yang tidak didukung.' },
+  { label: 'Company/Product Context Alignment', criterion: 'Memeriksa nama, kemampuan, positioning, manfaat, dan referensi perusahaan atau produk.', warningWhen: 'Warning jika informasi salah atau tercampur. Pada konteks general, referensi perusahaan atau produk tidak diwajibkan.' },
+  { label: 'Platform Appropriateness', criterion: 'Menilai struktur dan gaya copy untuk Instagram atau LinkedIn secara terpisah.', warningWhen: 'Warning jika format, panjang, struktur, tone, CTA, atau hashtag jelas tidak sesuai platform tujuan.' },
+  { label: 'Visual Creative Review', criterion: 'Jika gambar dapat dianalisis, memeriksa relevansi pesan, hierarki, keterbacaan, serta masalah brand atau layout.', warningWhen: 'Warning jika visual tidak mendukung pesan atau mempunyai masalah keterbacaan/brand yang material. Aset yang gagal dianalisis menjadi Not assessed dan tidak mengurangi skor.' },
+]
+const brandCheckScoreExamples = [
+  { warnings: 0, score: 100, status: 'Aligned' },
+  { warnings: 1, score: 88, status: 'Aligned, kecuali warning Claim Grounding' },
+  { warnings: 2, score: 76, status: 'Needs Attention' },
+  { warnings: 3, score: 64, status: 'Needs Attention' },
+  { warnings: 8, score: 4, status: 'Needs Attention' },
 ]
 const dirty = computed(() => draft.generationLanguage !== ai.settings.generationLanguage || draft.weeklyContentTarget !== ai.settings.weeklyContentTarget)
 const activeProduct = computed(() => products.products.find((product) => product.status === 'Active'))
@@ -117,17 +132,54 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
 
     <BaseCard title="Supported AI Operations" description="Only the approved thesis workflow modules use AI assistance."><div class="operation-list"><article v-for="operation in operations" :key="operation.module" class="operation-row"><div class="operation-row__icon"><AppIcon name="sparkles" :size="18" /></div><div class="operation-row__copy"><div><strong>{{ operation.name }}</strong><span>Module {{ operation.module }}</span></div><p>{{ operation.description }}</p><small v-if="operation.module === 'M4'">Assessment is advisory; final approval remains a human decision.</small></div><StatusBadge tone="success" dot>Enabled</StatusBadge></article></div></BaseCard>
 
-    <BaseCard title="Brand Consistency Check: What M4 Evaluates" description="M4 membandingkan setiap varian platform dengan konteks perusahaan atau produk jika dipilih, profil Brand, brief, Master Content, Visual Direction, dan data platform.">
+    <BaseCard title="Brand Consistency Check (Guidance)" description="Panduan teknis M4 untuk memahami input, faktor penilaian, perhitungan skor, error, dan keputusan override.">
+      <div class="brand-check-overview-grid">
+        <section>
+          <span class="brand-check-kicker">Input yang dibandingkan</span>
+          <ul><li v-for="input in brandCheckInputs" :key="input">{{ input }}</li></ul>
+        </section>
+        <section>
+          <span class="brand-check-kicker">Cara kerja</span>
+          <ol>
+            <li>Instagram dan LinkedIn dinilai terpisah dari copy terakhir yang sudah disimpan.</li>
+            <li>AI mengembalikan Pass atau Warning untuk dimensi yang relevan.</li>
+            <li>Backend melengkapi check wajib yang hilang sebagai Warning, lalu menghitung ulang skor dan status secara deterministik.</li>
+            <li>Hasil per platform menjadi evidence advisory. Persetujuan akhir tetap keputusan manusia.</li>
+          </ol>
+        </section>
+      </div>
+
+      <div class="brand-check-section-heading">
+        <div><span class="brand-check-kicker">Faktor penilaian</span><h3>Delapan dimensi yang dapat memengaruhi skor</h3></div>
+        <StatusBadge tone="info">7 wajib + 1 visual kondisional</StatusBadge>
+      </div>
       <div class="brand-check-list">
         <article v-for="dimension in brandCheckDimensions" :key="dimension.label" class="brand-check-row">
           <strong>{{ dimension.label }}</strong>
           <p>{{ dimension.criterion }}</p>
+          <small>{{ dimension.warningWhen }}</small>
         </article>
       </div>
+
+      <section class="brand-score-guide">
+        <div class="brand-score-formula">
+          <span class="brand-check-kicker">Formula backend</span>
+          <code>score = max(0, 100 - (12 × jumlah Warning))</code>
+          <p>Semua Warning mengurangi 12 poin dengan bobot yang sama. Status <strong>Not assessed</strong> tidak dihitung sebagai Warning. Skor sementara dari model tidak dipakai sebagai skor akhir.</p>
+        </div>
+        <div class="brand-score-examples" aria-label="Contoh perhitungan skor Brand Check">
+          <div class="brand-score-example brand-score-example--heading"><span>Warning</span><span>Skor</span><span>Status</span></div>
+          <div v-for="example in brandCheckScoreExamples" :key="example.warnings" class="brand-score-example">
+            <span>{{ example.warnings }}</span><strong>{{ example.score }}/100</strong><span>{{ example.status }}</span>
+          </div>
+        </div>
+      </section>
+
       <div class="brand-check-rules">
-        <div><strong>Pass / Warning</strong><p>Pass berarti tidak ditemukan ketidaksesuaian material pada dimensi tersebut. Warning menandai risiko atau ketidaksesuaian yang jelas; preferensi gaya yang ringan tidak otomatis menjadi warning.</p></div>
-        <div><strong>Status dan skor</strong><p>Skor dihitung sebagai 100 dikurangi 12 untuk setiap warning, dengan nilai minimum 0. Status menjadi Needs Attention jika Claim Grounding mendapat warning atau terdapat setidaknya dua warning; selain itu status Aligned. Skor hanya informasi pendukung, bukan ambang persetujuan.</p></div>
-        <div><strong>Pemeriksaan visual dan persetujuan</strong><p>Visual Creative Review hanya berlaku ketika aset visual tersedia. Jika aset tidak dapat dianalisis, hasilnya ditandai belum dinilai. M4 bersifat advisory; pemeriksaan dan persetujuan akhir tetap dilakukan manusia.</p></div>
+        <div><strong>Mengapa skor tersebut diberikan?</strong><p>Alasan kuantitatif berasal dari jumlah dan nama dimensi berstatus Warning. Di kartu hasil Review, sistem menampilkan rumus pengurangan, daftar faktor Warning, dan rekomendasi AI sebagai penjelasan kualitatif.</p></div>
+        <div><strong>Aturan status</strong><p>Satu Warning non-Claim menghasilkan skor 88 tetapi masih Aligned. Claim Grounding yang Warning, atau sedikitnya dua Warning apa pun, menghasilkan Needs Attention. Skor bukan ambang approval otomatis.</p></div>
+        <div><strong>Visual dan batas pemeriksaan</strong><p>M4 menganalisis maksimal tiga aset efektif pertama. Tanpa aset, dimensi visual dihilangkan. Jika satu atau lebih aset terpilih gagal dianalisis, hasil visual menjadi Not assessed tanpa pengurangan skor dan human visual review tetap wajib.</p></div>
+        <div><strong>Error dan Override</strong><p>Request yang gagal tidak diberi skor buatan. UI menampilkan kode error, input yang kurang, serta referensi request bila tersedia. Pengguna dapat retry atau melakukan Override pada kegagalan AI yang tercatat maupun hasil Needs Attention. Justifikasi wajib, berlaku per platform dan input saat itu, tercatat dalam review history, serta tidak mengubah skor atau otomatis menyetujui konten.</p></div>
       </div>
     </BaseCard>
 
@@ -163,12 +215,27 @@ onMounted(() => { void Promise.all([ai.load(), company.load(), contentLibrary.lo
 .operation-row__copy span, .operation-row__copy small { color: var(--color-subtle); font-size: 11px; }
 .operation-row__copy p { margin: 5px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.45; }
 .operation-row__copy small { display: block; margin-top: 5px; color: var(--color-primary); }
+.brand-check-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.brand-check-overview-grid section { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+.brand-check-overview-grid ul, .brand-check-overview-grid ol { display: grid; gap: 6px; margin: 9px 0 0; padding-left: 18px; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.brand-check-kicker { color: var(--color-primary); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.brand-check-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+.brand-check-section-heading h3 { margin: 4px 0 0; color: var(--color-ink); font-size: 15px; line-height: 1.4; }
 .brand-check-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .brand-check-row { padding: 13px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
 .brand-check-row strong, .brand-check-rules strong { color: var(--color-ink); font-size: 13px; }
 .brand-check-row p, .brand-check-rules p { margin: 5px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.brand-check-row small { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-border); color: var(--color-subtle); font-size: 11px; line-height: 1.5; }
+.brand-score-guide { display: grid; grid-template-columns: minmax(0, .9fr) minmax(360px, 1.1fr); gap: 12px; margin-top: 14px; }
+.brand-score-formula, .brand-score-examples { padding: 14px; border: 1px solid #cfdcff; border-radius: var(--radius-control); background: #f5f8ff; }
+.brand-score-formula code { display: block; margin: 10px 0; padding: 10px; border-radius: 6px; background: #17233b; color: #eef4ff; font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
+.brand-score-formula p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.brand-score-example { display: grid; grid-template-columns: .45fr .55fr minmax(0, 1.6fr); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #dce5fb; color: var(--color-muted); font-size: 11px; }
+.brand-score-example:last-child { border-bottom: 0; }
+.brand-score-example strong { color: var(--color-ink); font-variant-numeric: tabular-nums; }
+.brand-score-example--heading { padding-top: 0; color: var(--color-subtle); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .brand-check-rules { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
-@media (max-width: 760px) { .brand-check-list { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .brand-check-list, .brand-check-overview-grid, .brand-score-guide { grid-template-columns: 1fr; } .brand-check-section-heading { align-items: flex-start; flex-direction: column; } }
 .context-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-border); }
 .context-summary > div { display: grid; gap: 5px; padding: 14px; background: var(--color-surface); }
 .context-summary span { color: var(--color-subtle); font-size: 11px; }

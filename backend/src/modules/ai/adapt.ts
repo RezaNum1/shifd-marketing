@@ -399,7 +399,7 @@ async function finalizeAdaptation(
     await lockContent(tx, companyId, prepared.contentId)
     const aggregate = await getContentAggregate(tx, companyId, prepared.contentId)
     const reviewFreshness = await assessmentFreshness(tx, companyId, aggregate, config)
-    const reviewLocked = await approvalIsCurrent(tx, companyId, aggregate, reviewFreshness)
+    const reviewLocked = await approvalIsCurrent(tx, companyId, aggregate, reviewFreshness, config)
     const target = await tx.platformVariant.findFirst({ where: { id: prepared.targetVariantId, contentId: prepared.contentId } })
     const aggregateTarget = aggregate.variants.find((variant) => variant.id === prepared.targetVariantId)
     const currentContent = await tx.content.findFirst({ where: { id: prepared.contentId, companyId }, select: { version: true } })

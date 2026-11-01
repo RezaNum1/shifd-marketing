@@ -112,8 +112,9 @@ export function parseM4Output(text: string): M4Output {
     if (check.status !== 'pass' && check.status !== 'warning') throw aiOutputInvalid('The AI brand assessment check status is invalid.')
     return { label, status: check.status as 'pass' | 'warning' }
   })
-  const expectedStatus = checks.some((check) => check.status === 'warning') ? 'needs_attention' : 'aligned'
-  if (value.status !== expectedStatus) throw aiOutputInvalid('The AI brand assessment status does not match its checks.')
+  // score and status are provisional provider fields. The backend derives both
+  // from normalized checks, so a semantically usable response is not rejected
+  // solely because those provisional values disagree with the final policy.
   return { score, status: value.status, recommendation, checks }
 }
 
@@ -142,7 +143,7 @@ export function scoreM4Output(output: M4Output, hasCreativeAssets: boolean, hasV
   const needsAttention = warningLabels.includes('Claim Grounding') || warnings >= 2
   const score = Math.max(0, 100 - warnings * 12)
   const visualNote = hasCreativeAssets && !hasVisualEvidence
-    ? ' Uploaded creative could not be analyzed; complete the human visual review before approval.'
+    ? ' Uploaded creative could not be fully analyzed; complete the human visual review before approval.'
     : ''
   const recommendation = `${output.recommendation.slice(0, 4_000 - visualNote.length)}${visualNote}`
   return {

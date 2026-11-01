@@ -42,8 +42,9 @@ function cellValue(row: T, key: string) {
             :key="column.key"
             scope="col"
             :class="{ 'ui-table__numeric': column.align === 'right' }"
+            :aria-sort="column.ariaSort"
           >
-            {{ column.label }}
+            <slot :name="`header-${column.key}`" :column="column">{{ column.label }}</slot>
           </th>
         </tr>
       </thead>

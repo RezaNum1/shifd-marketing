@@ -18,6 +18,7 @@ export interface WeeklyMetricInput {
   followers: number
   reach: number | null
   impressions: number
+  engagements: number
   likes: number
   comments: number
   saves: number
@@ -96,6 +97,7 @@ function metricData(input: WeeklyMetricInput, actorId: string, now: Date) {
     followers: BigInt(input.followers),
     reach: input.reach === null ? null : BigInt(input.reach),
     impressions: BigInt(input.impressions),
+    engagements: BigInt(input.engagements),
     likes: BigInt(input.likes),
     comments: BigInt(input.comments),
     saves: BigInt(input.saves),
@@ -273,10 +275,13 @@ export async function updateInquiry(prisma: PrismaClient, companyId: string, act
 }
 
 export function validateWeeklyMetricInput(input: WeeklyMetricInput) {
-  assertCanonicalInterval(input.weekStart, input.weekEnd)
+  if (input.weekEnd < input.weekStart) {
+    throw validationError('The reporting interval is invalid.', { weekEnd: 'Week End cannot be earlier than Week Start.' })
+  }
   assertSafeCount(input.followers, 'followers')
   assertOptionalSafeCount(input.reach, 'reach')
   assertSafeCount(input.impressions, 'impressions')
+  assertSafeCount(input.engagements, 'engagements')
   assertSafeCount(input.likes, 'likes')
   assertSafeCount(input.comments, 'comments')
   assertSafeCount(input.saves, 'saves')
@@ -298,6 +303,7 @@ export function mapWeeklyMetric(row: {
   followers: bigint
   reach: bigint | null
   impressions: bigint | null
+  engagements: bigint | null
   likes: bigint | null
   comments: bigint | null
   saves: bigint | null
@@ -314,7 +320,7 @@ export function mapWeeklyMetric(row: {
   evidenceAsset?: Parameters<typeof mapAsset>[0] | null
   recorder?: { id: string; name: string } | null
 }) {
-  const engagements = row.likes === null || row.comments === null || row.saves === null ? null : Number(row.likes + row.comments + row.saves)
+  const engagements = row.engagements === null ? (row.likes === null || row.comments === null || row.saves === null ? null : Number(row.likes + row.comments + row.saves)) : Number(row.engagements)
   const impressions = row.impressions === null ? null : Number(row.impressions)
   return {
     id: row.id,

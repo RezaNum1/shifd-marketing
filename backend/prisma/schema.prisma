@@ -1162,6 +1162,7 @@ model AiRequestLog {
   promptVersion                   PromptVersion             @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
   idempotency                     RequestIdempotency?       @relation("RequestIdempotencyAiRequest")
   brandAssessment                 BrandAssessment?
+  failureOverrides                ApprovalAction[]          @relation("ApprovalActionFailedAiRequest")
   creativeReferenceConceptBatches CreativeReferenceBatch[]  @relation("CreativeReferenceConceptPlanner")
   creativeReferenceImages         CreativeReference[]       @relation("CreativeReferenceImage")
   topicDiscoveryRuns              TopicDiscoveryRun[]
@@ -1170,6 +1171,7 @@ model AiRequestLog {
   prospectEmailDraft              ProspectEmailDraft?
 
   @@unique([companyId, id])
+  @@unique([contentId, variantId, id])
   @@index([companyId, createdAt, id])
   @@index([contentId, createdAt])
   @@index([status])
@@ -1285,6 +1287,7 @@ model WeeklyMetric {
   followers              BigInt
   reach                  BigInt?
   impressions            BigInt?
+  engagements            BigInt?
   likes                  BigInt?
   comments               BigInt?
   saves                  BigInt?
@@ -1331,6 +1334,7 @@ model ApprovalAction {
   contentId         String            @map("content_id") @db.Uuid
   variantId         String?           @map("variant_id") @db.Uuid
   assessmentId      String?           @map("assessment_id") @db.Uuid
+  failedAiRequestId String?           @map("failed_ai_request_id") @db.Uuid
   editorialRevision Int               @map("editorial_revision")
   action            String
   actorId           String            @map("actor_id") @db.Uuid
@@ -1343,11 +1347,13 @@ model ApprovalAction {
   schedules         ContentSchedule[]
   variant           PlatformVariant?  @relation(fields: [contentId, variantId], references: [contentId, id], onDelete: Restrict)
   assessment        BrandAssessment?  @relation(fields: [variantId, assessmentId], references: [variantId, id], onDelete: Restrict)
+  failedAiRequest   AiRequestLog?      @relation("ApprovalActionFailedAiRequest", fields: [failedAiRequestId], references: [id], onDelete: Restrict)
   actor             User              @relation(fields: [actorId], references: [id], onDelete: Restrict)
 
   @@unique([contentId, id])
   @@index([contentId, createdAt, id])
   @@index([variantId])
   @@index([assessmentId])
+  @@index([failedAiRequestId])
   @@map("approval_actions")
 }

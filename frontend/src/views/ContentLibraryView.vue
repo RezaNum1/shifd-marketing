@@ -30,6 +30,7 @@ const product = ref('all')
 const platform = ref('all')
 const pillar = ref('all')
 const status = ref('all')
+const updatedSortDirection = ref<'ascending' | 'descending'>('descending')
 const openMenu = ref<string | null>(null)
 const archiveTarget = ref<ContentLibraryRecord | null>(null)
 const archiveModalOpen = ref(false)
@@ -53,16 +54,16 @@ const statusOptions: SelectOption[] = [
   { value: 'all', label: 'All Statuses' },
   ...(['Draft', 'Generated', 'Adapted', 'Creative In Progress', 'Ready for Review', 'Needs Revision', 'Approved', 'Scheduled', 'Published', 'Archived'] as ContentLifecycleStatus[]).map((value) => ({ value, label: value })),
 ]
-const columns: TableColumn[] = [
+const columns = computed<TableColumn[]>(() => [
   { key: 'content', label: 'Content' },
   { key: 'context', label: 'Context' },
   { key: 'pillar', label: 'Pillar' },
   { key: 'platforms', label: 'Platforms' },
   { key: 'status', label: 'Status' },
   { key: 'schedule', label: 'Schedule / Published' },
-  { key: 'updated', label: 'Last Updated' },
+  { key: 'updated', label: 'Last Updated', ariaSort: updatedSortDirection.value },
   { key: 'actions', label: 'Actions' },
-]
+])
 
 function contextName(record: ContentLibraryRecord) {
   if (record.context === 'company') return companyContext.companyProfile.name
@@ -82,6 +83,10 @@ const filteredRecords = computed(() => {
       (status.value === 'all' || contentStatus(record) === status.value)
   })
 })
+const sortedRecords = computed(() => [...filteredRecords.value].sort((a, b) => {
+  const difference = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+  return updatedSortDirection.value === 'ascending' ? difference : -difference
+}))
 const summary = computed(() => [
   { label: 'All Content', value: library.records.length },
   { label: 'In Progress', value: library.records.filter((record) => ['Generated', 'Adapted', 'Creative In Progress'].includes(contentStatus(record))).length },
@@ -105,6 +110,10 @@ function clearFilters() {
   platform.value = 'all'
   pillar.value = 'all'
   status.value = 'all'
+}
+
+function toggleUpdatedSort() {
+  updatedSortDirection.value = updatedSortDirection.value === 'ascending' ? 'descending' : 'ascending'
 }
 
 function openRecord(record: ContentLibraryRecord) {
@@ -183,7 +192,8 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 
     <template v-if="library.loaded && hasRecords && filteredRecords.length">
       <div class="library-table-viewport">
-        <BaseTable :columns="columns" :rows="filteredRecords" caption="Content library records">
+        <BaseTable :columns="columns" :rows="sortedRecords" caption="Content library records">
+          <template #header-updated><button type="button" class="library-sort-trigger" :aria-label="`Last Updated, sorted ${updatedSortDirection}; click to sort ${updatedSortDirection === 'ascending' ? 'descending' : 'ascending'}`" @click="toggleUpdatedSort">Last Updated <span aria-hidden="true">{{ updatedSortDirection === 'ascending' ? '↑' : '↓' }}</span></button></template>
           <template #cell-content="{ row }"><button class="library-title-cell" type="button" @click="openRecord(row)"><strong>{{ row.title }}</strong><span>{{ row.topic }}</span></button></template>
           <template #cell-context="{ row }"><div class="library-context-cell"><strong>{{ contextName(row) }}</strong><span>{{ row.context === 'company' ? 'Company' : 'Product' }}</span></div></template>
           <template #cell-pillar="{ row }"><span class="library-muted-cell">{{ row.pillar }}</span></template>
@@ -224,6 +234,10 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 .library-title-cell:hover strong { color: var(--color-primary); }
 .library-context-cell { display: flex; flex-direction: column; gap: 3px; min-width: 110px; }
 .library-context-cell strong { font-size: 13px; font-weight: 500; }
+.library-sort-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.library-sort-trigger:hover { color: var(--color-primary); }
+.library-sort-trigger:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; border-radius: 3px; }
+.library-sort-trigger span { color: var(--color-primary); font-size: 15px; }
 .platform-indicators { display: flex; gap: 4px; }
 .platform-indicator { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 5px; border-radius: 5px; background: var(--color-well); color: var(--color-primary); font-size: 10px; font-weight: 600; }
 .library-row-actions { position: relative; display: flex; justify-content: center; min-width: 44px; }

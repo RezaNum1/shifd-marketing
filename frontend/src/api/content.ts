@@ -66,7 +66,11 @@ export function adaptContent(id: string, platform: BackendPlatform, etag: string
 export function brandCheckContent(id: string, platform: BackendPlatform, etag: string | number, idempotencyKey = createRequestKey(`content.brand-check.${platform}`)) {
   return request<{ content: BackendContent; request: unknown }>(`/contents/${id}/brand-check`, { method: 'POST', json: { platform }, ifMatch: etag, idempotencyKey })
 }
-export function recordOverride(id: string, input: { platform: BackendPlatform; assessmentId: string; justification: string }, etag: string | number, idempotencyKey = createRequestKey(`content.override.${input.platform}`)) {
+export type OverrideBrandCheckInput =
+  | { platform: BackendPlatform; assessmentId: string; failedAiRequestId?: never; justification: string }
+  | { platform: BackendPlatform; assessmentId?: never; failedAiRequestId: string; justification: string }
+
+export function recordOverride(id: string, input: OverrideBrandCheckInput, etag: string | number, idempotencyKey = createRequestKey(`content.override.${input.platform}`)) {
   return request<{ action: BackendApprovalAction; content: BackendContent }>(`/contents/${id}/override`, { method: 'POST', json: input, ifMatch: etag, idempotencyKey })
 }
 export function approveContent(id: string, checklist: BackendApprovalAction['checklist'], etag: string | number, idempotencyKey = createRequestKey('content.approve')) {

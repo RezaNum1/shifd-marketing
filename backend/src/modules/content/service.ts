@@ -6,7 +6,7 @@ import { deriveAdaptationState, deriveLifecycleStatus, deriveResumeStep, hasComp
 import type { ContentStage, DesignStatus, IdeaContextType, IdeaStatus, ObjectiveCode, PlatformCode, ProgressStage } from './constants.js'
 import { readResolvedContextFromDb } from '../context/service.js'
 import { brandRelevantInputHash } from '../ai/brand-hash.js'
-import { M4_MODULE, M4_OPERATION, M4_OUTPUT_SCHEMA_VERSION, AI_PROVIDER } from '../ai/constants.js'
+import { M4_MODULE, M4_OPERATION, M4_OUTPUT_SCHEMA_VERSION, M4_OVERRIDABLE_FAILURE_CODES, AI_PROVIDER } from '../ai/constants.js'
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -393,7 +393,7 @@ export async function readContent(prisma: PrismaClient, companyId: string, conte
 export async function readContentFromDb(db: Db, companyId: string, contentId: string, config?: ContentReadConfig, asOf = config?.asOf ?? new Date()) {
   const aggregate = await getContentAggregate(db, companyId, contentId)
   const freshness = await assessmentFreshness(db, companyId, aggregate, config)
-  const approval = await currentApprovalProjection(db, companyId, aggregate, freshness)
+  const approval = await currentApprovalProjection(db, companyId, aggregate, freshness, config)
   return mapContent(aggregate, freshness, approval, asOf)
 }
 
@@ -438,7 +438,7 @@ export async function listContents(prisma: PrismaClient, companyId: string, opti
   const complete = rows.filter(hasBrief)
   const projected = await Promise.all(complete.map(async (row) => {
     const freshness = await assessmentFreshness(prisma, companyId, row, config)
-    const approval = await currentApprovalProjection(prisma, companyId, row, freshness)
+    const approval = await currentApprovalProjection(prisma, companyId, row, freshness, config)
     const lifecycle = deriveLifecycleStatus({ ...row, ...lifecycleProjection(row) }, Boolean(approval))
     return { row, approvalValid: Boolean(approval), lifecycle }
   }))
@@ -514,6 +514,8 @@ export async function updateVariantCopy(prisma: PrismaClient, companyId: string,
     if (!variant.enabled) throw conflict('Enable the platform before saving its adaptation.')
     if (variant.publication) throw conflict('Published Variants are immutable. Duplicate Content to develop replacement copy.')
     const copyChanged = variant.copy !== input.copy || variant.cta !== input.cta || variant.hashtags !== input.hashtags || variant.visualRecommendation !== input.visualRecommendation
+    const adaptationChanged = variant.adaptedFromMasterRevision !== content.masterRevision
+    if (!copyChanged && !adaptationChanged) return readContentFromDb(tx, companyId, contentId, config)
     await tx.platformVariant.update({
       where: { id: variant.id },
       data: { ...input, revision: { increment: 1 }, adaptedFromMasterRevision: content.masterRevision },
@@ -767,78 +769,114 @@ export async function getContentAggregate(db: Db, companyId: string, contentId: 
 }
 
 /**
+ * Reconstructs the current M4 input hashes from live canonical data. The same
+ * projection validates successful assessments and explicit failure bypasses.
+ */
+async function currentBrandInputHashes(
+  db: Db,
+  companyId: string,
+  content: CompleteContentRow,
+  variants: CompleteContentRow['variants'],
+  config?: ContentReadConfig,
+) {
+  const result = new Map<string, string>()
+  if (variants.length === 0) return result
+  const resolved = await readResolvedContextFromDb(db, companyId, content.productId ?? undefined)
+  const settings = await db.aiSettings.findUnique({ where: { companyId } })
+  const prompt = await db.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
+  if (!settings || !prompt) throw new Error('M4 projection inputs are incomplete.')
+  const usingMock = config?.aiProviderMode === 'mock'
+  const model = usingMock ? 'deterministic-fixtures' : settings.modelId ?? config?.openaiModel ?? settings.modelDisplayName
+  const execution = {
+    provider: usingMock ? 'mock' : AI_PROVIDER,
+    model,
+    mode: usingMock ? 'demo' : settings.mode,
+    generationLanguage: settings.generationLanguage,
+    settingsVersion: settings.version,
+    promptVersion: {
+      id: prompt.id,
+      module: prompt.module,
+      operation: prompt.operation,
+      version: prompt.version,
+      status: prompt.status,
+      templateReference: prompt.templateReference,
+      templateDigest: prompt.templateDigest,
+      outputSchemaVersion: prompt.outputSchemaVersion,
+      createdAt: prompt.createdAt.toISOString(),
+      updatedAt: prompt.updatedAt.toISOString(),
+    },
+    outputSchemaVersion: M4_OUTPUT_SCHEMA_VERSION,
+  }
+  const master = decodeMaster(content.masterContent)
+  const visualDirection = decodeVisualDirection(content.visualDirection)
+  const brief = {
+    contextType: content.contextType,
+    productId: content.productId,
+    pillarCode: content.brief.pillarCode,
+    objective: content.brief.objective,
+    targetAudience: content.brief.targetAudience,
+    topic: content.brief.topic,
+    angle: content.brief.angle,
+    additionalInstructions: content.brief.additionalInstructions,
+  }
+  for (const variant of variants) {
+    const target = {
+      id: variant.id,
+      platform: variant.platform,
+      enabled: variant.enabled,
+      revision: variant.revision,
+      copy: variant.copy,
+      cta: variant.cta,
+      hashtags: variant.hashtags,
+      visualRecommendation: variant.visualRecommendation,
+      adaptedFromMasterRevision: variant.adaptedFromMasterRevision,
+      assets: (variant.assetLinks.length ? variant.assetLinks : variant.reuseCreativeFromVariant?.assetLinks ?? []).map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
+    }
+    result.set(variant.id, brandRelevantInputHash({
+      content: { id: content.id, contextType: content.contextType, productId: content.productId, masterRevision: content.masterRevision, master, visualDirection },
+      brief,
+      variant: target,
+      company: content.contextType === 'general' ? null : resolved.company,
+      product: content.contextType === 'product' ? resolved.product : null,
+      brand: content.contextType === 'general' ? null : resolved.company.brand,
+      resolvedBrand: content.contextType === 'general' ? null : resolved.resolvedBrand,
+      contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
+      ai: execution,
+    }))
+  }
+  return result
+}
+
+export async function currentBrandInputHash(
+  db: Db,
+  companyId: string,
+  content: CompleteContentRow,
+  variantId: string,
+  config?: ContentReadConfig,
+): Promise<string | null> {
+  const variant = content.variants.find((candidate) => candidate.id === variantId)
+  if (!variant || content.archivedAt) return null
+  try {
+    return (await currentBrandInputHashes(db, companyId, content, [variant], config)).get(variantId) ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Assessment freshness is a read projection. It deliberately reconstructs
  * the M4 input hash from live context and never changes the assessment row or
  * the current pointer while serving a Content read.
  */
-export async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: { openaiModel: string | null; aiProviderMode?: 'mock' | 'openai' | undefined }) {
+export async function assessmentFreshness(db: Db, companyId: string, content: CompleteContentRow, config?: ContentReadConfig) {
   const result = new Map<string, 'current' | 'stale'>()
   const assessed = content.variants.filter((variant) => Boolean(variant.currentAssessment))
   if (assessed.length === 0) return result
   try {
-    const resolved = await readResolvedContextFromDb(db, companyId, content.productId ?? undefined)
-    const settings = await db.aiSettings.findUnique({ where: { companyId } })
-    const prompt = await db.promptVersion.findFirst({ where: { module: M4_MODULE, operation: M4_OPERATION, status: 'active' } })
-    if (!settings || !prompt) throw new Error('M4 projection inputs are incomplete.')
-    const usingMock = config?.aiProviderMode === 'mock'
-    const model = usingMock ? 'deterministic-fixtures' : settings.modelId ?? config?.openaiModel ?? settings.modelDisplayName
-    const execution = {
-      provider: usingMock ? 'mock' : AI_PROVIDER,
-      model,
-      mode: usingMock ? 'demo' : settings.mode,
-      generationLanguage: settings.generationLanguage,
-      settingsVersion: settings.version,
-      promptVersion: {
-        id: prompt.id,
-        module: prompt.module,
-        operation: prompt.operation,
-        version: prompt.version,
-        status: prompt.status,
-        templateReference: prompt.templateReference,
-        templateDigest: prompt.templateDigest,
-        outputSchemaVersion: prompt.outputSchemaVersion,
-        createdAt: prompt.createdAt.toISOString(),
-        updatedAt: prompt.updatedAt.toISOString(),
-      },
-      outputSchemaVersion: M4_OUTPUT_SCHEMA_VERSION,
-    }
-    const master = decodeMaster(content.masterContent)
-    const visualDirection = decodeVisualDirection(content.visualDirection)
+    const hashes = await currentBrandInputHashes(db, companyId, content, assessed, config)
     for (const variant of assessed) {
       const assessment = variant.currentAssessment!
-      const brief = {
-        contextType: content.contextType,
-        productId: content.productId,
-        pillarCode: content.brief.pillarCode,
-        objective: content.brief.objective,
-        targetAudience: content.brief.targetAudience,
-        topic: content.brief.topic,
-        angle: content.brief.angle,
-        additionalInstructions: content.brief.additionalInstructions,
-      }
-      const target = {
-        id: variant.id,
-        platform: variant.platform,
-        enabled: variant.enabled,
-        revision: variant.revision,
-        copy: variant.copy,
-        cta: variant.cta,
-        hashtags: variant.hashtags,
-        visualRecommendation: variant.visualRecommendation,
-        adaptedFromMasterRevision: variant.adaptedFromMasterRevision,
-        assets: (variant.assetLinks.length ? variant.assetLinks : variant.reuseCreativeFromVariant?.assetLinks ?? []).map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
-      }
-      const hash = brandRelevantInputHash({
-        content: { id: content.id, contextType: content.contextType, productId: content.productId, masterRevision: content.masterRevision, master, visualDirection },
-        brief,
-        variant: target,
-        company: content.contextType === 'general' ? null : resolved.company,
-        product: content.contextType === 'product' ? resolved.product : null,
-        brand: content.contextType === 'general' ? null : resolved.company.brand,
-        resolvedBrand: content.contextType === 'general' ? null : resolved.resolvedBrand,
-        contextVersions: { company: resolved.versions.company, product: resolved.versions.product },
-        ai: execution,
-      })
+      const hash = hashes.get(variant.id)
       result.set(variant.id, !content.archivedAt && assessment.variantRevision === variant.revision && assessment.inputHash === hash ? 'current' : 'stale')
     }
   } catch {
@@ -849,7 +887,7 @@ export async function assessmentFreshness(db: Db, companyId: string, content: Co
 
 type ApprovalActionRow = NonNullable<ContentRow['currentApproval']>
 
-export async function approvalIsCurrent(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>) {
+export async function approvalIsCurrent(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>, config?: ContentReadConfig) {
   const action = content.currentApproval
   if (!action || action.action !== 'approve' || content.archivedAt || action.editorialRevision !== content.editorialRevision) return false
   const enabled = content.variants.filter((variant) => variant.enabled)
@@ -857,29 +895,66 @@ export async function approvalIsCurrent(db: Db, companyId: string, content: Comp
   if (!evidence || evidence.length !== enabled.length || enabled.length === 0) return false
   const overrideIds = evidence.map((item) => item.overrideId).filter((value): value is string => Boolean(value))
   const overrides = overrideIds.length
-    ? await db.approvalAction.findMany({ where: { id: { in: overrideIds }, contentId: content.id, action: 'override' }, select: { id: true, variantId: true, assessmentId: true, editorialRevision: true, justification: true } })
+    ? await db.approvalAction.findMany({
+        where: { id: { in: overrideIds }, contentId: content.id, action: 'override' },
+        select: { id: true, variantId: true, assessmentId: true, failedAiRequestId: true, editorialRevision: true, justification: true },
+      })
     : []
+  const failedRequestIds = evidence
+    .map((item) => item.failedAiRequestId)
+    .filter((value): value is string => Boolean(value))
+  const failedRequests = failedRequestIds.length
+    ? await db.aiRequestLog.findMany({
+        where: { id: { in: failedRequestIds }, companyId, contentId: content.id },
+        select: {
+          id: true,
+          contentId: true,
+          variantId: true,
+          module: true,
+          operation: true,
+          status: true,
+          errorCode: true,
+          completedAt: true,
+          editorialRevision: true,
+          variantRevision: true,
+          inputHash: true,
+        },
+      })
+    : []
+
   for (const variant of enabled) {
     const reviewed = evidence.find((item) => item.variantId === variant.id)
-    const assessment = variant.currentAssessment
-    if (!reviewed || !assessment || reviewed.platform !== variant.platform || reviewed.variantRevision !== variant.revision || reviewed.assessmentId !== assessment.id || reviewed.assessmentStatus !== assessment.result || assessment.variantRevision !== variant.revision || freshness.get(variant.id) !== 'current') return false
+    if (!reviewed || reviewed.platform !== variant.platform || reviewed.variantRevision !== variant.revision) return false
     const effectiveIds = effectiveAssetLinks(variant, content.variants).map((link) => link.assetId)
     if (!sameStringArray(reviewed.effectiveAssetIds, effectiveIds)) return false
-    if (assessment.result === 'needs_attention') {
-      const override = reviewed.overrideId ? overrides.find((item) => item.id === reviewed.overrideId) : undefined
-      if (!override || override.variantId !== variant.id || override.assessmentId !== assessment.id || override.editorialRevision !== content.editorialRevision || !override.justification?.trim()) return false
-    } else if (assessment.result !== 'aligned' || reviewed.overrideId !== null) return false
+
+    if (reviewed.evidenceType === 'assessment') {
+      const assessment = variant.currentAssessment
+      if (!assessment || reviewed.assessmentId !== assessment.id || reviewed.assessmentStatus !== assessment.result || assessment.variantRevision !== variant.revision || freshness.get(variant.id) !== 'current') return false
+      if (assessment.result === 'needs_attention') {
+        const override = reviewed.overrideId ? overrides.find((item) => item.id === reviewed.overrideId) : undefined
+        if (!override || override.variantId !== variant.id || override.assessmentId !== assessment.id || override.failedAiRequestId !== null || override.editorialRevision !== content.editorialRevision || !override.justification?.trim()) return false
+      } else if (assessment.result !== 'aligned' || reviewed.overrideId !== null) return false
+      continue
+    }
+
+    const override = reviewed.overrideId ? overrides.find((item) => item.id === reviewed.overrideId) : undefined
+    const failedRequest = reviewed.failedAiRequestId ? failedRequests.find((item) => item.id === reviewed.failedAiRequestId) : undefined
+    if (!override || override.variantId !== variant.id || override.assessmentId !== null || override.failedAiRequestId !== reviewed.failedAiRequestId || override.editorialRevision !== content.editorialRevision || !override.justification?.trim()) return false
+    if (!failedRequest || failedRequest.variantId !== variant.id || failedRequest.module !== M4_MODULE || failedRequest.operation !== M4_OPERATION || failedRequest.status !== 'failed' || !failedRequest.completedAt || failedRequest.editorialRevision !== content.editorialRevision || failedRequest.variantRevision !== variant.revision || failedRequest.errorCode !== reviewed.failureCode || !isOverridableBrandCheckFailure(failedRequest.errorCode)) return false
+    const currentInputHash = await currentBrandInputHash(db, companyId, content, variant.id, config)
+    if (!currentInputHash || currentInputHash !== failedRequest.inputHash) return false
   }
   return true
 }
 
-export async function currentApprovalProjection(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>) {
-  return await approvalIsCurrent(db, companyId, content, freshness) ? mapApprovalAction(content.currentApproval!) : null
+export async function currentApprovalProjection(db: Db, companyId: string, content: CompleteContentRow, freshness: Map<string, 'current' | 'stale'>, config?: ContentReadConfig) {
+  return await approvalIsCurrent(db, companyId, content, freshness, config) ? mapApprovalAction(content.currentApproval!) : null
 }
 
 export async function assertReviewUnlockedForContent(db: Db, companyId: string, content: CompleteContentRow, config?: ContentReadConfig) {
   const freshness = await assessmentFreshness(db, companyId, content, config)
-  if (await approvalIsCurrent(db, companyId, content, freshness)) throw reviewLocked()
+  if (await approvalIsCurrent(db, companyId, content, freshness, config)) throw reviewLocked()
 }
 
 export async function assertReviewUnlocked(db: Db, companyId: string, contentId: string, config?: ContentReadConfig) {
@@ -1138,6 +1213,9 @@ function mapApprovalAction(action: ApprovalActionRow) {
     editorialRevision: action.editorialRevision,
     variantId: action.variantId,
     assessmentId: action.assessmentId,
+    failedAiRequestId: action.failedAiRequestId,
+    failedAiRequestErrorCode: null,
+    evidenceCurrent: null,
     justification: action.justification,
     checklist: action.checklist,
     reviewedVariants: action.reviewedVariants,
@@ -1213,8 +1291,11 @@ interface ReviewedVariantEvidence {
   variantId: string
   platform: string
   variantRevision: number
-  assessmentId: string
-  assessmentStatus: 'aligned' | 'needs_attention'
+  evidenceType: 'assessment' | 'failed_brand_check'
+  assessmentId: string | null
+  assessmentStatus: 'aligned' | 'needs_attention' | null
+  failedAiRequestId: string | null
+  failureCode: string | null
   overrideId: string | null
   effectiveAssetIds: string[]
 }
@@ -1225,18 +1306,46 @@ function parseReviewedVariants(value: Prisma.JsonValue | null): ReviewedVariantE
   for (const item of value) {
     if (!isRecord(item)) return null
     const row = item as Record<string, unknown>
-    if (typeof row.variantId !== 'string' || typeof row.platform !== 'string' || !Number.isInteger(row.variantRevision) || (row.variantRevision as number) < 1 || typeof row.assessmentId !== 'string' || (row.assessmentStatus !== 'aligned' && row.assessmentStatus !== 'needs_attention') || (row.overrideId !== null && typeof row.overrideId !== 'string') || !Array.isArray(row.effectiveAssetIds) || row.effectiveAssetIds.some((assetId) => typeof assetId !== 'string')) return null
+    if (typeof row.variantId !== 'string' || typeof row.platform !== 'string' || !Number.isInteger(row.variantRevision) || (row.variantRevision as number) < 1 || (row.overrideId !== null && typeof row.overrideId !== 'string') || !Array.isArray(row.effectiveAssetIds) || row.effectiveAssetIds.some((assetId) => typeof assetId !== 'string')) return null
+    const evidenceType = row.evidenceType === undefined ? 'assessment' : row.evidenceType
+    if (evidenceType !== 'assessment' && evidenceType !== 'failed_brand_check') return null
+
+    if (evidenceType === 'assessment') {
+      if (typeof row.assessmentId !== 'string' || (row.assessmentStatus !== 'aligned' && row.assessmentStatus !== 'needs_attention') || (row.failedAiRequestId !== undefined && row.failedAiRequestId !== null) || (row.failureCode !== undefined && row.failureCode !== null)) return null
+      result.push({
+        variantId: row.variantId,
+        platform: row.platform,
+        variantRevision: row.variantRevision as number,
+        evidenceType,
+        assessmentId: row.assessmentId,
+        assessmentStatus: row.assessmentStatus,
+        failedAiRequestId: null,
+        failureCode: null,
+        overrideId: row.overrideId as string | null,
+        effectiveAssetIds: row.effectiveAssetIds as string[],
+      })
+      continue
+    }
+
+    if (row.assessmentId !== null || row.assessmentStatus !== null || typeof row.failedAiRequestId !== 'string' || typeof row.failureCode !== 'string' || typeof row.overrideId !== 'string' || !isOverridableBrandCheckFailure(row.failureCode)) return null
     result.push({
       variantId: row.variantId,
       platform: row.platform,
       variantRevision: row.variantRevision as number,
-      assessmentId: row.assessmentId,
-      assessmentStatus: row.assessmentStatus as 'aligned' | 'needs_attention',
-      overrideId: row.overrideId as string | null,
+      evidenceType,
+      assessmentId: null,
+      assessmentStatus: null,
+      failedAiRequestId: row.failedAiRequestId,
+      failureCode: row.failureCode,
+      overrideId: row.overrideId,
       effectiveAssetIds: row.effectiveAssetIds as string[],
     })
   }
   return result
+}
+
+function isOverridableBrandCheckFailure(code: string | null): code is (typeof M4_OVERRIDABLE_FAILURE_CODES)[number] {
+  return Boolean(code && M4_OVERRIDABLE_FAILURE_CODES.includes(code as (typeof M4_OVERRIDABLE_FAILURE_CODES)[number]))
 }
 
 function sameStringArray(first: string[], second: string[]) {

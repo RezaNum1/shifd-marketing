@@ -212,6 +212,21 @@ export interface BrandAssessmentCheck {
   status: 'pass' | 'warning' | 'not_assessed'
 }
 
+export interface BrandCheckFailure {
+  code: string
+  message: string
+  requestId: string | null
+  aiRequestId: string | null
+  missingInputs: string[]
+  canOverride: boolean
+}
+
+export interface BrandCheckFailureOverride {
+  failedAiRequestId: string
+  errorCode: string
+  justification: string
+}
+
 export interface BrandAssessment {
   score: number
   status: 'Aligned' | 'Needs Attention'

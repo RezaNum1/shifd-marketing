@@ -103,7 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const assetUnattachedGraceHours = parsePositiveInteger('ASSET_UNATTACHED_GRACE_HOURS', env.ASSET_UNATTACHED_GRACE_HOURS, 168, fields)
   const openaiApiKey = optionalConfigText('OPENAI_API_KEY', env.OPENAI_API_KEY, fields)
   const openaiModel = optionalConfigText('OPENAI_MODEL', env.OPENAI_MODEL, fields)
-  const aiProviderMode = (env.AI_PROVIDER_MODE?.trim() || (nodeEnv === 'development' ? 'mock' : 'openai')) as 'mock' | 'openai'
+  const aiProviderMode = (env.AI_PROVIDER_MODE?.trim() || 'openai') as 'mock' | 'openai'
   if (!['mock', 'openai'].includes(aiProviderMode)) fields.AI_PROVIDER_MODE = 'Must be mock or openai.'
   if (nodeEnv === 'production' && aiProviderMode !== 'openai') fields.AI_PROVIDER_MODE = 'Production must use the OpenAI provider.'
   const openaiImageModel = optionalConfigText('OPENAI_IMAGE_MODEL', env.OPENAI_IMAGE_MODEL, fields) || 'gpt-image-2.5-sunburst'

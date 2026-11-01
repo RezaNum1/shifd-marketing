@@ -1,0 +1,7 @@
+{
+  "task_id": "task-linkedin-engagement-metrics",
+  "task_description": "Add a persisted Total Engagement input to LinkedIn weekly metrics and automatically calculate the disabled LinkedIn Native Engagement Rate field from total engagement and impressions.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

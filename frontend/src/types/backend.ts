@@ -319,6 +319,9 @@ export interface BackendApprovalAction {
   editorialRevision: number
   variantId: string | null
   assessmentId: string | null
+  failedAiRequestId: string | null
+  failedAiRequestErrorCode: string | null
+  evidenceCurrent: boolean | null
   justification: string | null
   checklist: {
     copyReviewed: boolean

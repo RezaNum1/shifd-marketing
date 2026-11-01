@@ -1,0 +1,40 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Persist independently entered LinkedIn total engagement, calculate the native engagement rate from total engagement and impressions, and expose the behavior through the Add Weekly Metrics form, API, reports, documentation, and focused tests.",
+  "status": "pending",
+  "steps": [
+    "Add a nullable Prisma BigInt engagements field mapped to weekly_metrics.engagements in backend/prisma/schema.prisma without disturbing the existing uncommitted ApprovalAction and AiRequestLog edits.",
+    "Create backend/prisma/migrations/20261101100000_linkedin_total_engagement/migration.sql as an additive migration. Add the nullable BIGINT engagements column, backfill rows with non-null likes/comments/saves from their sum to preserve the previous displayed total, and add a non-negative-or-null CHECK. Do not edit historical migration files or drop the existing native_engagement_rate data.",
+    "Update backend/src/modules/performance/routes.ts and backend/src/modules/performance/metrics.ts so engagements is a required non-negative integer for LinkedIn manual create/update requests, nativeEngagementRate is no longer a writable request field, and the server calculates rate as engagements / impressions * 100 with null for zero impressions. Persist the engagement total and the server-calculated compatibility rate, and map responses from the persisted total rather than recomputing total from likes/comments/saves.",
+    "Update backend/src/modules/performance/reporting.ts and backend/src/modules/performance/evaluation.ts to use the persisted engagement total and server-owned calculated rate for LinkedIn summaries, weekly rows, recent publication account-week context, and evaluation comparisons. Preserve null semantics for Instagram and zero impressions. Update backend/src/modules/performance/instagram/sync.ts if explicit null assignment is needed for the provider-neutral nullable column.",
+    "Extend backend/tests/performance.test.ts fixtures and integration cases. Prove that a total engagement value different from likes + comments + saves survives create, list/reload, update, and reporting; prove the returned rate uses total engagement and impressions; prove zero impressions returns null; prove negative or missing engagements and client-supplied nativeEngagementRate are rejected; preserve ETag and overlap behavior.",
+    "Update frontend/src/types/backend.ts, frontend/src/types/performance.ts, frontend/src/stores/performance.ts, frontend/src/utils/performanceMetrics.ts, and relevant store tests so engagements is sent and normalized as canonical data while nativeEngagementRate is treated as a derived response compatibility field, not a writable value.",
+    "Update frontend/src/views/LinkedInMetricsView.vue to add an editable numeric Total Engagement field, hydrate it during edit, and render LinkedIn Native Engagement Rate (%) as a disabled BaseInput that updates automatically from Total Engagement / Impressions * 100. Show a caption that states the formula and explains the zero-impressions case. Remove editable native-rate validation and request submission, and update stale page guidance and the engagement note.",
+    "Add frontend/src/views/LinkedInMetricsView.spec.ts following existing @vue/test-utils view-test patterns. Verify the new field, disabled rate control, formula caption, live calculation, zero-impressions behavior, edit hydration, and submission of engagements without a writable native rate.",
+    "Update frontend/src/views/PerformanceView.vue where its explanatory copy still calls the rate entered/stored, and add Indonesian translations for the new or changed labels and explanations in frontend/src/i18n/dictionary.ts.",
+    "Update docs/API_CONTRACT.md, docs/DATABASE_SCHEMA.md, docs/BACKEND_ARCHITECTURE.md, docs/BACKEND_PHASE_11.md, docs/FOUR_WEEK_EVALUATION_PROTOCOL.md, and docs/DESIGN_DECISIONS.md so total engagement is an explicit manual input and the LinkedIn native rate is derived from engagements / impressions * 100, with null for zero impressions. Preserve unrelated existing documentation edits."
+  ],
+  "acceptance_criteria": [
+    "The Add Weekly Metrics modal contains an editable Total Engagement numeric field and a disabled LinkedIn Native Engagement Rate (%) field.",
+    "The modal visibly states Formula: Total Engagement ÷ Impressions × 100 and explains that no rate is available when impressions is zero.",
+    "Changing Total Engagement or Impressions updates the disabled rate immediately and formats the displayed result consistently; blank inputs or zero impressions do not produce Infinity or NaN.",
+    "Creating and editing a LinkedIn weekly metric sends engagements but never sends a user-controlled nativeEngagementRate.",
+    "The backend rejects missing, negative, fractional, or unsafe LinkedIn engagement totals and rejects nativeEngagementRate as an unknown writable field.",
+    "A valid engagement total is persisted independently from likes, comments, and saves, survives reload and correction, and is returned as engagements.",
+    "LinkedIn engagementRate and nativeEngagementRate response compatibility values equal engagements / impressions * 100, or null when impressions is zero.",
+    "Performance and evaluation reporting use persisted engagement totals rather than likes + comments + saves.",
+    "The additive migration backfills existing component-complete rows, preserves existing native_engagement_rate data, permits null for provider rows without a total, and prevents negative persisted totals.",
+    "Focused frontend tests, backend performance integration tests, complete unit suites, Prisma validation, and both production builds pass.",
+    "No pre-existing uncommitted work is reverted or overwritten."
+  ],
+  "verification": [
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd backend && npm run db:generate && npx prisma validate",
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd backend && DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy && npm run test:performance",
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd backend && npm run test:unit && npm run build",
+    "source $HOME/.nvm/nvm.sh && nvm use 22.11.0 && cd frontend && npm run test && npm run build",
+    "Review frontend/src/views/LinkedInMetricsView.spec.ts and backend/tests/performance.test.ts to confirm assertions execute the changed form, transport, persistence, reload, and reporting paths."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

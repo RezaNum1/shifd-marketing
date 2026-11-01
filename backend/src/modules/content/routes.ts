@@ -203,7 +203,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
       routeId(request),
       ifMatch(request),
       input.platform,
-      input.assessmentId,
+      { assessmentId: input.assessmentId, failedAiRequestId: input.failedAiRequestId },
       input.justification,
       idempotencyKey(request),
       request.id,
@@ -353,7 +353,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
     const query = queryObject(request)
     allowedKeys(query, ['limit', 'cursor'], 'query')
     const limit = parseLimit(query.limit)
-    const result = await listReviewActions(app.prisma, auth.user.companyId, routeId(request), { limit, ...(query.cursor === undefined ? {} : { cursor: decodeCursor(query.cursor) }) })
+    const result = await listReviewActions(app.prisma, auth.user.companyId, routeId(request), { limit, ...(query.cursor === undefined ? {} : { cursor: decodeCursor(query.cursor) }) }, options.config)
     return reply.send({ data: result.data, page: { limit, nextCursor: result.nextCursor } })
   })
 }
@@ -429,13 +429,18 @@ function parseAdapt(value: unknown): { platform: PlatformCode } {
   return { platform: parsePlatform(input.platform, 'platform') }
 }
 
-function parseOverride(value: unknown): { platform: PlatformCode; assessmentId: string; justification: string } {
+function parseOverride(value: unknown): { platform: PlatformCode; assessmentId: string | null; failedAiRequestId: string | null; justification: string } {
   const input = object(value, 'Override request')
-  allowedKeys(input, ['platform', 'assessmentId', 'justification'], 'body')
-  if (typeof input.assessmentId !== 'string' || !uuid(input.assessmentId)) throw validationError('The Assessment identifier is invalid.', { assessmentId: 'Use a UUID.' })
+  allowedKeys(input, ['platform', 'assessmentId', 'failedAiRequestId', 'justification'], 'body')
+  const assessmentId = optionalResourceId(input.assessmentId, 'assessmentId')
+  const failedAiRequestId = optionalResourceId(input.failedAiRequestId, 'failedAiRequestId')
+  if (Boolean(assessmentId) === Boolean(failedAiRequestId)) {
+    throw validationError('Choose exactly one Brand Check result to override.', { evidence: 'Provide an Assessment ID or a failed AI request ID.' })
+  }
   return {
     platform: parsePlatform(input.platform, 'platform'),
-    assessmentId: input.assessmentId,
+    assessmentId,
+    failedAiRequestId,
     justification: requiredText(input.justification, 'justification'),
   }
 }
