@@ -830,7 +830,9 @@ async function currentBrandInputHashes(
       hashtags: variant.hashtags,
       visualRecommendation: variant.visualRecommendation,
       adaptedFromMasterRevision: variant.adaptedFromMasterRevision,
-      assets: (variant.assetLinks.length ? variant.assetLinks : variant.reuseCreativeFromVariant?.assetLinks ?? []).map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
+      assets: (variant.assetLinks.length ? variant.assetLinks : variant.reuseCreativeFromVariant?.assetLinks ?? [])
+        .filter(({ asset }) => asset.mimeType.startsWith('image/'))
+        .map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
     }
     result.set(variant.id, brandRelevantInputHash({
       content: { id: content.id, contextType: content.contextType, productId: content.productId, masterRevision: content.masterRevision, master, visualDirection },
@@ -897,7 +899,7 @@ export async function approvalIsCurrent(db: Db, companyId: string, content: Comp
   const overrides = overrideIds.length
     ? await db.approvalAction.findMany({
         where: { id: { in: overrideIds }, contentId: content.id, action: 'override' },
-        select: { id: true, variantId: true, assessmentId: true, failedAiRequestId: true, editorialRevision: true, justification: true },
+        select: { id: true, variantId: true, assessmentId: true, failedAiRequestId: true, editorialRevision: true, justification: true, reviewedVariants: true },
       })
     : []
   const failedRequestIds = evidence
@@ -927,6 +929,14 @@ export async function approvalIsCurrent(db: Db, companyId: string, content: Comp
     if (!reviewed || reviewed.platform !== variant.platform || reviewed.variantRevision !== variant.revision) return false
     const effectiveIds = effectiveAssetLinks(variant, content.variants).map((link) => link.assetId)
     if (!sameStringArray(reviewed.effectiveAssetIds, effectiveIds)) return false
+
+    if (reviewed.evidenceType === 'manual_brand_check_override') {
+      const override = reviewed.overrideId ? overrides.find((item) => item.id === reviewed.overrideId) : undefined
+      const manualEvidence = override?.reviewedVariants
+      if (!override || override.variantId !== variant.id || override.assessmentId !== null || override.failedAiRequestId !== null || override.editorialRevision !== content.editorialRevision || !override.justification?.trim() || !isRecord(manualEvidence)) return false
+      if (manualEvidence.evidenceType !== 'manual_brand_check_override' || manualEvidence.variantRevision !== variant.revision || !Array.isArray(manualEvidence.effectiveAssetIds) || !sameStringArray(manualEvidence.effectiveAssetIds as string[], effectiveIds)) return false
+      continue
+    }
 
     if (reviewed.evidenceType === 'assessment') {
       const assessment = variant.currentAssessment
@@ -1291,7 +1301,7 @@ interface ReviewedVariantEvidence {
   variantId: string
   platform: string
   variantRevision: number
-  evidenceType: 'assessment' | 'failed_brand_check'
+  evidenceType: 'assessment' | 'failed_brand_check' | 'manual_brand_check_override'
   assessmentId: string | null
   assessmentStatus: 'aligned' | 'needs_attention' | null
   failedAiRequestId: string | null
@@ -1308,7 +1318,7 @@ function parseReviewedVariants(value: Prisma.JsonValue | null): ReviewedVariantE
     const row = item as Record<string, unknown>
     if (typeof row.variantId !== 'string' || typeof row.platform !== 'string' || !Number.isInteger(row.variantRevision) || (row.variantRevision as number) < 1 || (row.overrideId !== null && typeof row.overrideId !== 'string') || !Array.isArray(row.effectiveAssetIds) || row.effectiveAssetIds.some((assetId) => typeof assetId !== 'string')) return null
     const evidenceType = row.evidenceType === undefined ? 'assessment' : row.evidenceType
-    if (evidenceType !== 'assessment' && evidenceType !== 'failed_brand_check') return null
+    if (evidenceType !== 'assessment' && evidenceType !== 'failed_brand_check' && evidenceType !== 'manual_brand_check_override') return null
 
     if (evidenceType === 'assessment') {
       if (typeof row.assessmentId !== 'string' || (row.assessmentStatus !== 'aligned' && row.assessmentStatus !== 'needs_attention') || (row.failedAiRequestId !== undefined && row.failedAiRequestId !== null) || (row.failureCode !== undefined && row.failureCode !== null)) return null
@@ -1322,6 +1332,23 @@ function parseReviewedVariants(value: Prisma.JsonValue | null): ReviewedVariantE
         failedAiRequestId: null,
         failureCode: null,
         overrideId: row.overrideId as string | null,
+        effectiveAssetIds: row.effectiveAssetIds as string[],
+      })
+      continue
+    }
+
+    if (evidenceType === 'manual_brand_check_override') {
+      if (row.assessmentId !== null || row.assessmentStatus !== null || (row.failedAiRequestId !== null && row.failedAiRequestId !== undefined) || (row.failureCode !== null && row.failureCode !== undefined) || typeof row.overrideId !== 'string' || !Number.isInteger(row.variantRevision) || (row.variantRevision as number) < 1) return null
+      result.push({
+        variantId: row.variantId,
+        platform: row.platform,
+        variantRevision: row.variantRevision as number,
+        evidenceType,
+        assessmentId: null,
+        assessmentStatus: null,
+        failedAiRequestId: null,
+        failureCode: null,
+        overrideId: row.overrideId,
         effectiveAssetIds: row.effectiveAssetIds as string[],
       })
       continue

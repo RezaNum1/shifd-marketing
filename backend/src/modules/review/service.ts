@@ -59,6 +59,7 @@ const REVIEW_ACTIONS = ['approve', 'request_revision', 'override'] as const
 export interface OverrideEvidence {
   assessmentId: string | null
   failedAiRequestId: string | null
+  manualCheck?: boolean
 }
 
 function isOverridableBrandCheckFailure(code: string | null): code is (typeof M4_OVERRIDABLE_FAILURE_CODES)[number] {
@@ -96,18 +97,20 @@ export async function recordOverride(
       if (!normalizedJustification || normalizedJustification.length > 4_000) throw validationError('An override justification is required.', { justification: 'Use a nonblank justification of at most 4000 characters.' })
       const hasAssessmentEvidence = Boolean(evidence.assessmentId)
       const hasFailureEvidence = Boolean(evidence.failedAiRequestId)
-      if (hasAssessmentEvidence === hasFailureEvidence) throw validationError('Choose exactly one Brand Check result to override.', { evidence: 'Provide an Assessment ID or a failed AI request ID.' })
+      const hasManualEvidence = evidence.manualCheck === true
+      if (Number(hasAssessmentEvidence) + Number(hasFailureEvidence) + Number(hasManualEvidence) !== 1) throw validationError('Choose one Brand Check override method.', { evidence: 'Provide an Assessment ID, a failed AI request ID, or a manual check override.' })
 
       let assessmentId: string | null = null
       let failedAiRequestId: string | null = null
       let failureCode: string | null = null
+      let manualEvidence: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull
       if (evidence.assessmentId) {
         const assessment = target.currentAssessment
         if (!assessment || assessment.id !== evidence.assessmentId || assessment.variantId !== target.id) throw conflict('The Assessment is not the current Assessment for this Variant.')
         if (assessment.result !== 'needs_attention') throw conflict('Only a Needs Attention Assessment can be overridden.')
         if (freshness.get(target.id) !== 'current' || assessment.variantRevision !== target.revision) throw conflict('The Assessment is stale and must be rerun.')
         assessmentId = assessment.id
-      } else {
+      } else if (evidence.failedAiRequestId) {
         const currentAssessment = target.currentAssessment
         if (currentAssessment && freshness.get(target.id) === 'current' && currentAssessment.variantRevision === target.revision) {
           throw conflict('A current Brand Assessment exists for this Variant. Override that Assessment only when it Needs Attention.')
@@ -143,6 +146,12 @@ export async function recordOverride(
         }
         failedAiRequestId = failedRequest.id
         failureCode = failedRequest.errorCode
+      } else {
+        manualEvidence = {
+          evidenceType: 'manual_brand_check_override',
+          variantRevision: target.revision,
+          effectiveAssetIds: effectiveAssetIds(target, content.variants),
+        }
       }
 
       const action = await tx.approvalAction.create({
@@ -156,7 +165,7 @@ export async function recordOverride(
           actorId,
           justification: normalizedJustification,
           checklist: Prisma.DbNull,
-          reviewedVariants: Prisma.DbNull,
+          reviewedVariants: manualEvidence,
         },
         include: {
           actor: { select: { id: true, name: true } },
@@ -172,7 +181,7 @@ export async function recordOverride(
         metadata: {
           actionId: action.id,
           platform,
-          evidenceType: failedAiRequestId ? 'failed_brand_check' : 'assessment',
+          evidenceType: evidence.manualCheck ? 'manual_brand_check_override' : failedAiRequestId ? 'failed_brand_check' : 'assessment',
           assessmentId,
           failedAiRequestId,
           failureCode,
@@ -224,6 +233,23 @@ export async function approveContent(
         const assetIds = effectiveAssetIds(variant, content.variants)
         if (content.designStatus === 'ready' && assetIds.length === 0) throw validationError('Every enabled Variant needs effective creative before approval.', { assets: `${variant.platform} requires an effective creative Asset.` })
 
+        const manualOverride = await findCurrentManualOverride(tx, content.id, variant.id, variant.revision, content.editorialRevision, assetIds)
+        if (manualOverride) {
+          reviewedVariants.push({
+            variantId: variant.id,
+            platform: variant.platform,
+            variantRevision: variant.revision,
+            evidenceType: 'manual_brand_check_override',
+            assessmentId: null,
+            assessmentStatus: null,
+            failedAiRequestId: null,
+            failureCode: null,
+            overrideId: manualOverride.id,
+            effectiveAssetIds: assetIds,
+          })
+          continue
+        }
+
         const assessmentIsCurrent = Boolean(
           assessment
           && assessment.variantId === variant.id
@@ -251,9 +277,9 @@ export async function approveContent(
           continue
         }
 
-        const inputHash = await currentBrandInputHash(tx, companyId, content, variant.id, config)
-        const failureOverride = inputHash
-          ? await findCurrentFailureOverride(tx, companyId, content.id, variant.id, variant.revision, content.editorialRevision, inputHash)
+        const currentInputHash = await currentBrandInputHash(tx, companyId, content, variant.id, config)
+        const failureOverride = currentInputHash
+          ? await findCurrentFailureOverride(tx, companyId, content.id, variant.id, variant.revision, content.editorialRevision, currentInputHash)
           : null
         if (!failureOverride?.failedAiRequest) {
           throw conflict('Every enabled Variant needs a current Brand Assessment or an explicit override of its current failed Brand Check.')
@@ -412,6 +438,14 @@ export async function listReviewActions(
     if (action.action !== 'override' || !action.justification?.trim() || action.editorialRevision !== content.editorialRevision || !action.variantId) return null
     const variant = content.variants.find((candidate) => candidate.id === action.variantId)
     if (!variant || !variant.enabled) return false
+    if (!action.assessmentId && !action.failedAiRequestId && isRecord(action.reviewedVariants)) {
+      const evidence = action.reviewedVariants
+      const currentAssets = effectiveAssetIds(variant, content.variants)
+      return evidence.evidenceType === 'manual_brand_check_override'
+        && evidence.variantRevision === variant.revision
+        && Array.isArray(evidence.effectiveAssetIds)
+        && sameStrings(evidence.effectiveAssetIds as string[], currentAssets)
+    }
     if (action.assessmentId) {
       const assessment = variant.currentAssessment
       return Boolean(
@@ -438,6 +472,10 @@ export async function listReviewActions(
     data: pageRows.map((action, index) => mapReviewAction(action, evidenceStates[index] ?? null)),
     nextCursor: rows.length > options.limit && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
   }
+}
+
+function sameStrings(first: string[], second: string[]) {
+  return first.length === second.length && first.every((value, index) => value === second[index])
 }
 
 async function assertEditableReviewState(db: Db, companyId: string, content: CompleteContentRow, config: { openaiModel: string | null; aiProviderMode?: 'mock' | 'openai' | undefined }, allowApproved: boolean) {
@@ -526,6 +564,29 @@ async function findCurrentFailureOverride(
   })
   if (!action?.justification?.trim() || !action.failedAiRequest?.completedAt || !isOverridableBrandCheckFailure(action.failedAiRequest.errorCode)) return null
   return action
+}
+
+async function findCurrentManualOverride(
+  db: Db,
+  contentId: string,
+  variantId: string,
+  variantRevision: number,
+  editorialRevision: number,
+  effectiveAssetIds: string[],
+) {
+  const actions = await db.approvalAction.findMany({
+    where: { contentId, variantId, assessmentId: null, failedAiRequestId: null, editorialRevision, action: 'override' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, justification: true, reviewedVariants: true },
+  })
+  return actions.find((action) => {
+    if (!action.justification?.trim() || !isRecord(action.reviewedVariants)) return false
+    const evidence = action.reviewedVariants
+    return evidence.evidenceType === 'manual_brand_check_override'
+      && evidence.variantRevision === variantRevision
+      && Array.isArray(evidence.effectiveAssetIds)
+      && sameStringArray(evidence.effectiveAssetIds as string[], effectiveAssetIds)
+  }) ?? null
 }
 
 function effectiveAssetIds(variant: CompleteContentRow['variants'][number], variants: CompleteContentRow['variants']) {

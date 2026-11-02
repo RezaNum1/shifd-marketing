@@ -83,12 +83,16 @@ const reviewChecklist = workflow.reviewChecklist;
 const reviewEditing = workflow.reviewEditing;
 const reviewAssessments = workflow.reviewAssessments;
 const reviewOverrides = workflow.reviewOverrides;
+const reviewManualOverrides = workflow.reviewManualOverrides;
 const reviewCheckErrors = workflow.reviewCheckErrors;
 const reviewFailureOverrides = workflow.reviewFailureOverrides;
 const overrideModalOpen = ref(false);
 const overridePlatform = ref<"instagram" | "linkedin">("instagram");
 const overrideJustification = ref("");
 const overrideError = ref("");
+const manualOverrideModalOpen = ref(false);
+const manualOverrideJustification = ref("");
+const manualOverrideError = ref("");
 const overrideUsesFailedCheck = computed(() => {
   const platform = overridePlatform.value;
   const assessment = reviewAssessments[platform];
@@ -146,6 +150,7 @@ function syncLoadingLock(loading: boolean) {
 }
 
 watch(contentBusy, syncLoadingLock);
+watch(reuseInstagramCreative, () => workflow.clearBrandCheckEvidence("linkedin"));
 watch(() => workflow.contentId, () => {
   publicationTimeRecommendations.value = [];
   publicationRecommendationsError.value = "";
@@ -442,23 +447,26 @@ const reviewChecklistProgress = computed(() =>
 );
 const hasCurrentBrandAssessment = (platform: "instagram" | "linkedin") =>
   reviewAssessments[platform].state === "assessed" && reviewAssessments[platform].checks.length > 0;
+const hasReviewBypass = (platform: "instagram" | "linkedin") =>
+  Boolean(reviewManualOverrides[platform]) ||
+  Boolean(reviewFailureOverrides[platform]?.failedAiRequestId && reviewOverrides[platform].trim());
 const hasFailureBypass = (platform: "instagram" | "linkedin") =>
   Boolean(reviewFailureOverrides[platform]?.failedAiRequestId && reviewOverrides[platform].trim());
 const unresolvedBrandCheckFailures = computed(() =>
   enabledReviewPlatforms.value.filter(
-    (platform) => Boolean(reviewCheckErrors[platform]) && !hasCurrentBrandAssessment(platform) && !hasFailureBypass(platform),
+    (platform) => Boolean(reviewCheckErrors[platform]) && !hasCurrentBrandAssessment(platform) && !hasReviewBypass(platform),
   ),
 );
 const reviewNeedsRecheck = computed(() =>
   enabledReviewPlatforms.value.some(
     (platform) =>
-      !hasFailureBypass(platform) &&
+      !hasReviewBypass(platform) &&
       (reviewAssessments[platform].state === "needs-recheck" || reviewAssessments[platform].checks.length === 0),
   ),
 );
 const platformsRequiringOverride = computed(() =>
   enabledReviewPlatforms.value.filter((platform) =>
-    !hasFailureBypass(platform) &&
+    !hasReviewBypass(platform) &&
     (
       reviewAssessments[platform].status === "Needs Attention" && reviewAssessments[platform].state === "assessed"
       || (!hasCurrentBrandAssessment(platform) && Boolean(reviewCheckErrors[platform]?.canOverride))
@@ -584,6 +592,7 @@ async function addCreativeFiles(files: FileList | File[], target: "instagram" | 
     return;
   }
   const selected = Array.from(files).filter(isSupportedCreative);
+  if (selected.length > 0) workflow.clearBrandCheckEvidence(target);
   const assets = (await Promise.all(selected.map((file) => workflow.uploadCreative(file)))).filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
   const rejectedCount = files.length - selected.length;
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
@@ -623,6 +632,7 @@ function removeCreativeAsset(assetId: string, target: "instagram" | "linkedin") 
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
   const index = destination.value.findIndex((asset) => asset.id === assetId);
   if (index < 0) return;
+  workflow.clearBrandCheckEvidence(target);
   destination.value.splice(index, 1);
 }
 
@@ -640,6 +650,7 @@ function moveCreativeAsset(
   const fromIndex = destination.value.findIndex((asset) => asset.id === fromId);
   const toIndex = destination.value.findIndex((asset) => asset.id === toId);
   if (fromIndex < 0 || toIndex < 0) return;
+  workflow.clearBrandCheckEvidence(target);
   const [moved] = destination.value.splice(fromIndex, 1);
   destination.value.splice(toIndex, 0, moved);
 }
@@ -1114,6 +1125,54 @@ async function confirmOverride() {
   overrideError.value = "";
   reviewValidation.value = "";
   ui.notify("Override recorded.", "success");
+}
+
+function openManualBrandOverride() {
+  manualOverrideJustification.value = ""
+  manualOverrideError.value = ""
+  manualOverrideModalOpen.value = true
+}
+
+async function confirmManualBrandOverride() {
+  const justification = manualOverrideJustification.value.trim()
+  if (!justification) {
+    manualOverrideError.value = "Add a short reason before overriding the Brand Check."
+    return
+  }
+  if (!enabledReviewPlatforms.value.length) {
+    manualOverrideError.value = "Enable at least one platform before continuing."
+    return
+  }
+
+  reviewRecheckLoading.value = true
+  manualOverrideError.value = ""
+  try {
+    const platforms = [...enabledReviewPlatforms.value]
+    for (const platform of platforms) {
+      workflow.clearBrandCheckEvidence(platform)
+      const saved = await workflow.saveVariant(platform, reviewVariantDraft(platform))
+      if (!saved) {
+        manualOverrideError.value = workflow.error || `Unable to save ${platform === "instagram" ? "Instagram" : "LinkedIn"} copy before the override.`
+        return
+      }
+    }
+    if (workflow.canonical?.editorialStage !== "ready_for_review" && !(await workflow.progress("ready_for_review"))) {
+      manualOverrideError.value = workflow.error || "Unable to prepare this content for review."
+      return
+    }
+    for (const platform of platforms) {
+      const recorded = await workflow.override(platform, justification, true)
+      if (!recorded) {
+        manualOverrideError.value = workflow.error || `Unable to record the ${platform === "instagram" ? "Instagram" : "LinkedIn"} override.`
+        return
+      }
+    }
+    manualOverrideModalOpen.value = false
+    reviewValidation.value = ""
+    ui.notify("Brand Check skipped by human review. Captions and creative remain in the approval checklist.", "success")
+  } finally {
+    reviewRecheckLoading.value = false
+  }
 }
 
 async function approveContent() {
@@ -1760,18 +1819,23 @@ onMounted(() => {
 
       <section class="brand-check-control-bar" aria-labelledby="brand-check-run-title">
         <div>
-          <span class="brief-overline">AI assessment · M4</span>
+          <span class="brief-overline">Optional AI assessment · M4</span>
           <strong id="brand-check-run-title">Brand Consistency Check</strong>
-          <p>One action saves the current drafts, then checks every enabled platform sequentially. Each platform keeps its own score, findings, and error details.</p>
+          <p>Checks captions and context; image assets receive a visual review. MP4 videos are skipped. You can record a human override and continue without the AI check.</p>
         </div>
-        <BaseButton
-          size="comfortable"
-          :loading="reviewRecheckLoading"
-          :disabled="isApproved || contentBusy || !enabledReviewPlatforms.length"
-          @click="recheckAlignment"
-        >
-          <AppIcon name="sparkles" :size="17" />{{ brandCheckButtonLabel }}
-        </BaseButton>
+        <div class="brand-check-actions">
+          <BaseButton
+            size="comfortable"
+            :loading="reviewRecheckLoading"
+            :disabled="isApproved || contentBusy || !enabledReviewPlatforms.length"
+            @click="recheckAlignment"
+          >
+            <AppIcon name="sparkles" :size="17" />{{ brandCheckButtonLabel }}
+          </BaseButton>
+          <BaseButton variant="secondary" size="comfortable" :disabled="isApproved || contentBusy || !enabledReviewPlatforms.length" @click="openManualBrandOverride">
+            Override Brand Check
+          </BaseButton>
+        </div>
       </section>
 
       <section class="review-platform-grid">
@@ -1797,6 +1861,7 @@ onMounted(() => {
               :override-justification="reviewOverrides.instagram"
               :error="reviewCheckErrors.instagram"
               :failure-bypassed="hasFailureBypass('instagram')"
+              :manual-override="reviewManualOverrides.instagram"
               @regenerate="regenerateReviewPlatform('instagram')"
               @override="openOverride('instagram')"
             />
@@ -1823,6 +1888,7 @@ onMounted(() => {
               :override-justification="reviewOverrides.linkedin"
               :error="reviewCheckErrors.linkedin"
               :failure-bypassed="hasFailureBypass('linkedin')"
+              :manual-override="reviewManualOverrides.linkedin"
               @regenerate="regenerateReviewPlatform('linkedin')"
               @override="openOverride('linkedin')"
             />
@@ -1876,7 +1942,7 @@ onMounted(() => {
             </div>
             <div class="human-review-item">
               <BaseCheckbox v-model="reviewChecklist.creativeReviewed" label="I reviewed the creative" :disabled="isApproved" />
-              <p>Check each image or carousel for legibility, quality, and correct framing.</p>
+              <p>Review each image or carousel, or play the MP4 video, to confirm quality and that it matches the message.</p>
               <BaseButton variant="ghost" size="compact" :disabled="isApproved" @click="openReviewSection('creative')">Open creative <AppIcon name="arrow-right" :size="14" /></BaseButton>
             </div>
             <div class="human-review-item">
@@ -1938,6 +2004,14 @@ onMounted(() => {
         </InlineAlert>
         <BaseTextarea v-model="overrideJustification" label="Justification" :rows="4" :error="overrideError" hint="Required, maximum 4,000 characters." maxlength="4000" required :number="1" />
         <template #footer><BaseButton variant="ghost" @click="overrideModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmOverride">Confirm Override</BaseButton></template>
+      </BaseModal>
+
+      <BaseModal v-model="manualOverrideModalOpen" title="Override Brand Check" description="Skip the AI assessment for every enabled platform and continue with human review." size="default">
+        <InlineAlert title="Human review remains required" tone="warning">
+          This records that you reviewed the captions and creative yourself. MP4 video is not analyzed by the AI check. The override is tied to the current saved copy and assets; editing them clears it.
+        </InlineAlert>
+        <BaseTextarea v-model="manualOverrideJustification" label="Reason for override" :rows="4" :error="manualOverrideError" hint="Required, maximum 4,000 characters." maxlength="4000" required :number="1" />
+        <template #footer><BaseButton variant="ghost" :disabled="reviewRecheckLoading" @click="manualOverrideModalOpen = false">Cancel</BaseButton><BaseButton :loading="reviewRecheckLoading" @click="confirmManualBrandOverride">Override and Continue</BaseButton></template>
       </BaseModal>
     </div>
 

@@ -11,6 +11,7 @@ const props = defineProps<{
   overrideJustification: string
   error?: BrandCheckFailure | null
   failureBypassed?: boolean
+  manualOverride?: boolean
 }>()
 
 defineEmits<{
@@ -22,12 +23,12 @@ const warningChecks = computed(() => props.assessment.checks.filter((check) => c
 const notAssessedChecks = computed(() => props.assessment.checks.filter((check) => check.status === 'not_assessed'))
 const hasCurrentAssessment = computed(() => props.assessment.state === 'assessed' && props.assessment.checks.length > 0)
 const canOverride = computed(() => {
-  if (props.failureBypassed) return false
+  if (props.failureBypassed || props.manualOverride) return false
   if (hasCurrentAssessment.value) return props.assessment.status === 'Needs Attention'
   return Boolean(props.error?.canOverride && props.error.aiRequestId)
 })
 const displayStatus = computed(() => {
-  if (props.failureBypassed) return 'Bypassed'
+  if (props.failureBypassed || props.manualOverride) return 'Bypassed'
   if (props.error && !hasCurrentAssessment.value) return 'Check Failed'
   if (!hasCurrentAssessment.value) return 'Needs Re-check'
   return props.assessment.status
@@ -66,9 +67,16 @@ const scoreExplanation = computed(() => {
         </div>
       </div>
       <InlineAlert title="Recommendation" tone="info">{{ assessment.recommendation }}</InlineAlert>
+      <InlineAlert v-if="manualOverride" title="AI check skipped by human review" tone="info">
+        A reason is recorded for this platform. The saved copy and creative still need human review before approval.
+      </InlineAlert>
     </template>
 
-    <InlineAlert v-else-if="!error" title="Brand Check required" tone="warning">
+    <InlineAlert v-else-if="manualOverride" title="AI check skipped by human review" tone="info">
+      A reason is recorded for this platform. The saved copy and creative still need human review before approval.
+    </InlineAlert>
+
+    <InlineAlert v-else-if="!error" title="Brand Check recommended" tone="warning">
       The platform copy or its supporting context changed. Use the single Brand Consistency Check button above to assess all enabled platforms.
     </InlineAlert>
 

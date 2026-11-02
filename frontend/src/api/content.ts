@@ -76,6 +76,7 @@ export function brandCheckContent(id: string, platform: BackendPlatform, etag: s
 export type OverrideBrandCheckInput =
   | { platform: BackendPlatform; assessmentId: string; failedAiRequestId?: never; justification: string }
   | { platform: BackendPlatform; assessmentId?: never; failedAiRequestId: string; justification: string }
+  | { platform: BackendPlatform; assessmentId?: never; failedAiRequestId?: never; manualCheck: true; justification: string }
 
 export function recordOverride(id: string, input: OverrideBrandCheckInput, etag: string | number, idempotencyKey = createRequestKey(`content.override.${input.platform}`)) {
   return request<{ action: BackendApprovalAction; content: BackendContent }>(`/contents/${id}/override`, { method: 'POST', json: input, ifMatch: etag, idempotencyKey })

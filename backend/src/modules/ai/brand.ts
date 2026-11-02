@@ -372,6 +372,18 @@ async function buildBrandCheckInput(
     mode,
   })
   const rate = await selectRate(tx, model)
+  const userPrompt = comparisonOnly ? '' : renderM4DataPrompt({
+    company: content.contextType === 'general' ? null : resolved.company,
+    product: content.contextType === 'product' ? resolved.product : null,
+    brand: content.contextType === 'general' ? null : resolved.company.brand,
+    brief,
+    master,
+    visualDirection,
+    variant: targetVariant,
+    platform: { code: platform },
+    execution,
+  })
+  const videoOnlyCreative = effectiveAssets.some(({ asset }) => asset.mimeType === 'video/mp4') && visualAssets.length === 0
   return {
     aiRequestId: '',
     contentId,
@@ -394,19 +406,11 @@ async function buildBrandCheckInput(
     snapshot,
     inputHash,
     idempotencyHash,
-    userPrompt: comparisonOnly ? '' : renderM4DataPrompt({
-      company: content.contextType === 'general' ? null : resolved.company,
-      product: content.contextType === 'product' ? resolved.product : null,
-      brand: content.contextType === 'general' ? null : resolved.company.brand,
-      brief,
-      master,
-      visualDirection,
-      variant: targetVariant,
-      platform: { code: platform },
-      execution,
-    }),
+    userPrompt: videoOnlyCreative ? `${userPrompt}\n\nAn MP4 video is attached to this content but is not supplied for visual analysis. Assess the caption, copy, and context only. Do not infer or score the unseen video's visual content.` : userPrompt,
     rate,
-    hasCreativeAssets: effectiveAssets.length > 0,
+    // MP4 files are retained as creative assets, but M4 checks their captions
+    // and context only. The visual review is reserved for image assets.
+    hasCreativeAssets: visualAssets.length > 0,
     creativeAssetStorageKeys: visualAssets.slice(0, 3).map(({ asset }) => asset.storageKey),
   }
 }

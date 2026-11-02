@@ -203,7 +203,7 @@ export async function contentRoutes(app: FastifyInstance, options: { config: App
       routeId(request),
       ifMatch(request),
       input.platform,
-      { assessmentId: input.assessmentId, failedAiRequestId: input.failedAiRequestId },
+      { assessmentId: input.assessmentId, failedAiRequestId: input.failedAiRequestId, manualCheck: input.manualCheck },
       input.justification,
       idempotencyKey(request),
       request.id,
@@ -429,18 +429,19 @@ function parseAdapt(value: unknown): { platform: PlatformCode } {
   return { platform: parsePlatform(input.platform, 'platform') }
 }
 
-function parseOverride(value: unknown): { platform: PlatformCode; assessmentId: string | null; failedAiRequestId: string | null; justification: string } {
+function parseOverride(value: unknown): { platform: PlatformCode; assessmentId: string | null; failedAiRequestId: string | null; manualCheck: boolean; justification: string } {
   const input = object(value, 'Override request')
-  allowedKeys(input, ['platform', 'assessmentId', 'failedAiRequestId', 'justification'], 'body')
+  allowedKeys(input, ['platform', 'assessmentId', 'failedAiRequestId', 'manualCheck', 'justification'], 'body')
   const assessmentId = optionalResourceId(input.assessmentId, 'assessmentId')
   const failedAiRequestId = optionalResourceId(input.failedAiRequestId, 'failedAiRequestId')
-  if (Boolean(assessmentId) === Boolean(failedAiRequestId)) {
-    throw validationError('Choose exactly one Brand Check result to override.', { evidence: 'Provide an Assessment ID or a failed AI request ID.' })
-  }
+  if (input.manualCheck !== undefined && typeof input.manualCheck !== 'boolean') throw validationError('The manual override setting is invalid.', { manualCheck: 'Use true or false.' })
+  const manualCheck = input.manualCheck === true
+  if (Number(Boolean(assessmentId)) + Number(Boolean(failedAiRequestId)) + Number(manualCheck) !== 1) throw validationError('Choose one Brand Check override method.', { evidence: 'Provide an Assessment ID, a failed AI request ID, or a manual check override.' })
   return {
     platform: parsePlatform(input.platform, 'platform'),
     assessmentId,
     failedAiRequestId,
+    manualCheck,
     justification: requiredText(input.justification, 'justification'),
   }
 }

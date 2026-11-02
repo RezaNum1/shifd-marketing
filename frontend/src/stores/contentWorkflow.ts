@@ -111,6 +111,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   const reviewEditing = reactive({ instagram: false, linkedin: false })
   const reviewAssessments = reactive({ instagram: blankAssessment(), linkedin: blankAssessment() })
   const reviewOverrides = reactive({ instagram: '', linkedin: '' })
+  const reviewManualOverrides = reactive({ instagram: false, linkedin: false })
   const reviewCheckErrors = reactive<Record<PlatformKey, BrandCheckFailure | null>>({ instagram: null, linkedin: null })
   const reviewFailureOverrides = reactive<Record<PlatformKey, BrandCheckFailureOverride | null>>({ instagram: null, linkedin: null })
   const isScheduled = ref(false)
@@ -155,8 +156,10 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     if (value.approval?.action === 'approve') {
       Object.assign(reviewOverrides, approvedOverrides)
       Object.assign(reviewFailureOverrides, failureOverridesFromApproval(value.approval, value))
+      Object.assign(reviewManualOverrides, manualOverridesFromApproval(value.approval, value))
     } else if (!preserveReviewEvidence) {
       Object.assign(reviewOverrides, { instagram: '', linkedin: '' })
+      Object.assign(reviewManualOverrides, { instagram: false, linkedin: false })
       Object.assign(reviewFailureOverrides, { instagram: null, linkedin: null })
       Object.assign(reviewCheckErrors, { instagram: null, linkedin: null })
     }
@@ -197,6 +200,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(reviewEditing, { instagram: false, linkedin: false })
     Object.assign(reviewAssessments, { instagram: blankAssessment(), linkedin: blankAssessment() })
     Object.assign(reviewOverrides, { instagram: '', linkedin: '' })
+    Object.assign(reviewManualOverrides, { instagram: false, linkedin: false })
     Object.assign(reviewCheckErrors, { instagram: null, linkedin: null })
     Object.assign(reviewFailureOverrides, { instagram: null, linkedin: null })
     isScheduled.value = false
@@ -276,9 +280,12 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
             if (!variant || !platform || restoredPlatforms.has(platform)) return
             const assessmentIsCurrent = Boolean(action.assessmentId && variant.assessment?.id === action.assessmentId && variant.assessment.freshness === 'current' && variant.assessment.status === 'needs_attention')
             const failureWasOverridden = Boolean(action.failedAiRequestId && action.evidenceCurrent === true && !(variant.assessment && variant.assessment.freshness === 'current'))
-            if (!assessmentIsCurrent && !failureWasOverridden) return
+            const manualEvidence = action.reviewedVariants && typeof action.reviewedVariants === 'object' && !Array.isArray(action.reviewedVariants) ? action.reviewedVariants as Record<string, unknown> : null
+            const manualCheckWasOverridden = Boolean(manualEvidence?.evidenceType === 'manual_brand_check_override' && action.evidenceCurrent === true)
+            if (!assessmentIsCurrent && !failureWasOverridden && !manualCheckWasOverridden) return
             restoredPlatforms.add(platform)
             reviewOverrides[platform] = action.justification ?? ''
+            reviewManualOverrides[platform] = manualCheckWasOverridden
             if (action.failedAiRequestId) {
               const errorCode = action.failedAiRequestErrorCode ?? 'BRAND_CHECK_FAILED'
               reviewFailureOverrides[platform] = { failedAiRequestId: action.failedAiRequestId, errorCode, justification: action.justification ?? '' }
@@ -387,6 +394,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   function clearBrandCheckEvidence(platform: PlatformKey) {
     reviewCheckErrors[platform] = null
     reviewFailureOverrides[platform] = null
+    reviewManualOverrides[platform] = false
     reviewOverrides[platform] = ''
   }
 
@@ -414,15 +422,15 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     })
   }
 
-  async function override(platform: PlatformKey, justification: string) {
+  async function override(platform: PlatformKey, justification: string, manualCheck = false) {
     const variant = canonical.value?.variants.find((item) => item.platform === platform)
-    const assessmentId = variant?.assessment?.freshness === 'current' && variant.assessment.status === 'needs_attention'
+    const assessmentId = !manualCheck && variant?.assessment?.freshness === 'current' && variant.assessment.status === 'needs_attention'
       ? variant.assessment.id
       : null
-    const failedAiRequestId = !assessmentId && reviewCheckErrors[platform]?.canOverride
+    const failedAiRequestId = !manualCheck && !assessmentId && reviewCheckErrors[platform]?.canOverride
       ? reviewCheckErrors[platform]?.aiRequestId
       : null
-    if (!assessmentId && !failedAiRequestId) {
+    if (!manualCheck && !assessmentId && !failedAiRequestId) {
       error.value = 'Run Brand Consistency Check first, or choose Override on a current Needs Attention result or failed AI attempt.'
       return undefined
     }
@@ -431,12 +439,15 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     const evidenceId = assessmentId ?? failedAiRequestId!
     const command = beginCommand(`content.override:${contentId.value}:${platform}`, `${evidenceId}|${normalizedJustification}|${version}`)
     return requireCanonical(async () => {
-      const input = assessmentId
+      const input = manualCheck
+        ? { platform, manualCheck: true as const, justification: normalizedJustification }
+        : assessmentId
         ? { platform, assessmentId, justification: normalizedJustification }
         : { platform, failedAiRequestId: failedAiRequestId!, justification: normalizedJustification }
       const result = await contentApi.recordOverride(contentId.value, input, version, command.key)
       applyCanonical(result.data.content, result.etag, true)
       reviewOverrides[platform] = result.data.action.justification ?? normalizedJustification
+      reviewManualOverrides[platform] = manualCheck
       if (result.data.action.failedAiRequestId) {
         reviewFailureOverrides[platform] = {
           failedAiRequestId: result.data.action.failedAiRequestId,
@@ -565,7 +576,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(scheduledRecords[platform], value ?? blankSchedule())
   }
 
-  return { contentId, sourceIdeaId, canonical, etag, activeStep, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, reviewCheckErrors, reviewFailureOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, clearBrandCheckEvidence, setBrandCheckPreparationError, brandCheck, override, approve, requestRevision, schedule }
+  return { contentId, sourceIdeaId, canonical, etag, activeStep, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, reviewManualOverrides, reviewCheckErrors, reviewFailureOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, clearBrandCheckEvidence, setBrandCheckPreparationError, brandCheck, override, approve, requestRevision, schedule }
 })
 
 function variantValue(value: BackendContent['variants'][number], platform: PlatformKey) {
@@ -607,6 +618,18 @@ function failureOverridesFromApproval(approval: BackendApprovalAction | null, co
     if (item.evidenceType !== 'failed_brand_check' || typeof item.failedAiRequestId !== 'string' || typeof item.failureCode !== 'string' || typeof item.overrideId !== 'string') return
     const variant = content.variants.find((candidate) => candidate.id === item.variantId)
     if (variant) result[variant.platform] = { failedAiRequestId: item.failedAiRequestId, errorCode: item.failureCode, justification: 'Recorded on the server' }
+  })
+  return result
+}
+
+function manualOverridesFromApproval(approval: BackendApprovalAction | null, content: BackendContent) {
+  const result = { instagram: false, linkedin: false }
+  if (!approval || approval.action !== 'approve' || !Array.isArray(approval.reviewedVariants)) return result
+  const reviewed = approval.reviewedVariants as Array<{ variantId?: unknown; evidenceType?: unknown; overrideId?: unknown }>
+  reviewed.forEach((item) => {
+    if (item.evidenceType !== 'manual_brand_check_override' || typeof item.overrideId !== 'string') return
+    const variant = content.variants.find((candidate) => candidate.id === item.variantId)
+    if (variant) result[variant.platform] = true
   })
   return result
 }
