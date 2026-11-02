@@ -38,13 +38,14 @@ export async function assetRoutes(app: FastifyInstance, options: { config: AppCo
         try {
           image = await options.storage.inspectImage(temp.key)
         } catch (error) {
-          if (error instanceof AssetImageUnsupportedError) throw unsupportedMedia('Only PNG and JPEG images are supported.')
-          if (error instanceof AssetImageInvalidError) throw validationError('The uploaded image is invalid or corrupt.', { file: 'Upload a valid PNG or JPEG image.' })
+          if (error instanceof AssetImageUnsupportedError) throw unsupportedMedia('Only PNG, JPEG, and MP4 files are supported.')
+          if (error instanceof AssetImageInvalidError) throw validationError('The uploaded file is invalid or corrupt.', { file: 'Upload a valid PNG, JPEG, or MP4 file.' })
           throw error
         }
       }
-      if (!temp || !image) throw validationError('An image file is required.', { file: 'Provide one PNG or JPEG file.' })
+      if (!temp || !image) throw validationError('A creative file is required.', { file: 'Provide one PNG, JPEG, or MP4 file.' })
       if (purpose !== 'creative' && purpose !== 'metric_evidence') throw validationError('The Asset purpose is invalid.', { purpose: 'Use creative or metric_evidence.' })
+      if (purpose === 'metric_evidence' && image.mimeType === 'video/mp4') throw validationError('Metric evidence must be an image.', { file: 'Upload a PNG or JPEG image.' })
       validateImageForAsset(image, options.config.assetMaxWidth, options.config.assetMaxHeight)
       const result = await createAsset(app.prisma, options.storage, auth.user.companyId, auth.user.id, { purpose, fileName, temp, image }, key)
       handedOff = true

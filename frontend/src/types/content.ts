@@ -43,7 +43,8 @@ export interface ContentCalendarEntry {
 export interface ContentAssetRecord {
   id: string
   name: string
-  type: 'PNG' | 'JPG' | 'JPEG'
+  type: 'PNG' | 'JPG' | 'JPEG' | 'MP4'
+  mimeType?: string
   order: number
   url?: string
   previewLabel?: string
@@ -290,4 +291,5 @@ export interface CreativeAsset {
   file?: File
   name: string
   url: string
+  mimeType?: string
 }

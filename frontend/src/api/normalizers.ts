@@ -217,11 +217,11 @@ export function resumeStep(step: BackendContent['resumeStep'], status: ContentLi
 }
 
 export function contentAsset(value: BackendAsset): ContentAssetRecord {
-  return { id: value.id, name: value.fileName, type: value.mimeType === 'image/png' ? 'PNG' : 'JPG', order: 0, url: value.contentUrl }
+  return { id: value.id, name: value.fileName, type: value.mimeType === 'video/mp4' ? 'MP4' : value.mimeType === 'image/png' ? 'PNG' : 'JPG', mimeType: value.mimeType, order: 0, url: value.contentUrl }
 }
 
 export function creativeAsset(value: BackendAsset): CreativeAsset {
-  return { id: value.id, name: value.fileName, url: value.contentUrl }
+  return { id: value.id, name: value.fileName, url: value.contentUrl, mimeType: value.mimeType }
 }
 
 function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product' | 'general'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {

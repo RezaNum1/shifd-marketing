@@ -372,7 +372,7 @@ watch(() => String(route.params.id), (id, previousId) => {
 
     <BaseModal v-model="archiveModalOpen" title="Archive content" description="The content will remain available in the library under Archived."><p>Archive “{{ record.title }}”?</p><template #footer><div class="detail-modal-actions"><BaseButton variant="ghost" @click="archiveModalOpen = false">Cancel</BaseButton><BaseButton variant="danger" @click="archiveRecord">Archive</BaseButton></div></template></BaseModal>
     <BaseModal v-model="revisionModalOpen" title="Request a revision" description="This unlocks the review workflow and cancels any unpublished schedules. Published variants remain immutable."><BaseTextarea v-model="revisionReason" label="Revision reason" :rows="4" :error="revisionError" required /><template #footer><div class="detail-modal-actions"><BaseButton variant="ghost" @click="revisionModalOpen = false">Cancel</BaseButton><BaseButton @click="requestRevision">Request Revision</BaseButton></div></template></BaseModal>
-    <BaseModal v-model="previewModalOpen" title="Creative preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="large-asset-preview"><img v-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Creative placeholder</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>Preview {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
+    <BaseModal v-model="previewModalOpen" title="Creative preview" :description="previewAsset?.name" size="wide"><div v-if="previewAsset" class="large-asset-preview"><video v-if="previewAsset.url && (previewAsset.type === 'MP4' || previewAsset.mimeType === 'video/mp4')" :src="previewAsset.url" controls autoplay /><img v-else-if="previewAsset.url" :src="previewAsset.url" :alt="previewAsset.name" /><div v-else><small>Creative placeholder</small><strong>{{ previewAsset.previewLabel ?? 'Creative' }}</strong><span>Preview {{ String(previewAsset.order).padStart(2, '0') }}</span></div></div></BaseModal>
   </div>
 
   <div v-else-if="detailLoading || library.loading" class="page-stack"><InlineAlert title="Loading content">Loading the canonical Content record…</InlineAlert></div>
@@ -442,6 +442,7 @@ watch(() => String(route.params.id), (id, previousId) => {
 .detail-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .large-asset-preview { min-height: 440px; overflow: hidden; border-radius: var(--radius-card); background: #eff4ff; }
 .large-asset-preview img { width: 100%; max-height: 70vh; object-fit: contain; }
+.large-asset-preview video { width: 100%; max-height: 70vh; }
 .large-asset-preview > div { display: flex; flex-direction: column; justify-content: flex-end; min-height: 440px; padding: 40px; color: white; background: linear-gradient(145deg, #0b1c30, #153d83); }
 .large-asset-preview small { margin-bottom: auto; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
 .large-asset-preview strong { max-width: 12ch; font-size: clamp(28px, 5vw, 52px); line-height: 1.05; font-weight: 600; }

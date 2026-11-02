@@ -351,7 +351,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     try {
       const result = await assetApi.uploadAsset(file, 'creative', command.key)
       completeCommand(command.identity)
-      const value = { id: result.data.id, name: result.data.fileName, url: result.data.contentUrl, file }
+      const value = { id: result.data.id, name: result.data.fileName, url: result.data.contentUrl, mimeType: result.data.mimeType, file }
       retainWorkflowAsset(value.id, value.url, contentId.value)
       return value
     } catch (reason: unknown) {
@@ -575,7 +575,7 @@ function variantValue(value: BackendContent['variants'][number], platform: Platf
 }
 
 function assetsFromVariant(value: BackendContent['variants'][number] | undefined): CreativeAsset[] {
-  return value?.ownAssets.map((link) => ({ id: link.asset.id, name: link.asset.fileName, url: link.asset.contentUrl })) ?? []
+  return value?.ownAssets.map((link) => ({ id: link.asset.id, name: link.asset.fileName, url: link.asset.contentUrl, mimeType: link.asset.mimeType })) ?? []
 }
 
 function assetFromLegacy(value: ContentAssetRecord): CreativeAsset { return { id: value.id, name: value.name, url: value.url ?? '' } }

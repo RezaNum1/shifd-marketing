@@ -573,9 +573,9 @@ function beginEditingLinkedIn() {
 }
 
 function isSupportedCreative(file: File) {
-  const allowedTypes = ["image/png", "image/jpeg"];
+  const allowedTypes = ["image/png", "image/jpeg", "video/mp4"];
   const extension = file.name.split(".").pop()?.toLowerCase();
-  return allowedTypes.includes(file.type) || ["png", "jpg", "jpeg"].includes(extension ?? "");
+  return allowedTypes.includes(file.type) || ["png", "jpg", "jpeg", "mp4"].includes(extension ?? "");
 }
 
 async function addCreativeFiles(files: FileList | File[], target: "instagram" | "linkedin") {
@@ -589,7 +589,7 @@ async function addCreativeFiles(files: FileList | File[], target: "instagram" | 
   const destination = target === "instagram" ? instagramAssets : linkedInAssets;
   destination.value.push(...assets);
   if (rejectedCount > 0) {
-    creativeValidation.value = "Only PNG, JPG, and JPEG files can be added.";
+    creativeValidation.value = "Only PNG, JPG, JPEG, and MP4 files can be added.";
   } else {
     creativeValidation.value = "";
   }
@@ -1535,7 +1535,7 @@ onMounted(() => {
           description="The direction generated from your master content."
           copyable
           helper-title="External design tool"
-          helper-text="Create your final visual using your preferred design tool, such as Canva, then upload the exported PNG/JPG files below."
+          helper-text="Create your final visual using your preferred design tool, such as Canva, then upload PNG/JPG images or an MP4 video below."
           @copy="copyVisualBrief"
         />
 
@@ -1649,7 +1649,7 @@ onMounted(() => {
               </div>
             </article>
           </div>
-          <InlineAlert title="Keep the final creative separate" tone="info">Use this as inspiration in Canva. Upload your finished PNG/JPG design below; selecting a reference does not satisfy the final creative requirement.</InlineAlert>
+          <InlineAlert title="Keep the final creative separate" tone="info">Use this as inspiration in Canva. Upload your finished PNG/JPG design or MP4 video below; selecting a reference does not satisfy the final creative requirement.</InlineAlert>
           <p v-if="selectedCreativeReference && selectedCreativeReferenceBatch" class="creative-reference-selected-note">{{ selectedCreativeReferenceBatch.creativeFormat === 'carousel' ? `Selected storyboard: ${selectedCreativeReferenceBatch.references.length} of ${selectedCreativeReferenceBatch.expectedReferenceCount} ordered slides` : `Selected reference: ${selectedCreativeReference.conceptName}` }}. The final uploaded creative remains the source used by Review.</p>
         </div>
       </BaseCard>
@@ -1663,16 +1663,16 @@ onMounted(() => {
       />
 
       <div class="creative-platform-grid">
-        <BaseCard title="Instagram Creative" description="Upload one or more PNG/JPG files for the carousel.">
+        <BaseCard title="Instagram Creative" description="Upload PNG/JPG images for a carousel or an MP4 video.">
           <template #actions><StatusBadge tone="info">{{ instagramAssets.length }} {{ instagramAssets.length === 1 ? "asset" : "assets" }}</StatusBadge></template>
           <div class="creative-upload-stack">
             <div class="creative-dropzone" @dragover.prevent @drop="handleCreativeDrop($event, 'instagram')">
               <AppIcon name="upload" :size="22" />
-              <strong>Drop PNG/JPG files here</strong>
+              <strong>Drop PNG/JPG or MP4 files here</strong>
               <span>or</span>
               <button type="button" class="brief-text-action" @click="openCreativePicker('instagram')">Browse files</button>
-              <small>Multiple files supported for carousel content.</small>
-              <input id="instagram-file-input" class="sr-only" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple @change="handleCreativeInput($event, 'instagram')" />
+              <small>Multiple images supported for carousel content; MP4 video is also supported.</small>
+              <input id="instagram-file-input" class="sr-only" type="file" accept=".png,.jpg,.jpeg,.mp4,image/png,image/jpeg,video/mp4" multiple @change="handleCreativeInput($event, 'instagram')" />
             </div>
             <div v-if="instagramAssets.length" class="creative-asset-grid" aria-label="Instagram creative order">
               <CreativeThumbnail
@@ -1712,11 +1712,11 @@ onMounted(() => {
           <div v-else class="creative-upload-stack">
             <div class="creative-dropzone" @dragover.prevent @drop="handleCreativeDrop($event, 'linkedin')">
               <AppIcon name="upload" :size="22" />
-              <strong>Drop a LinkedIn PNG/JPG here</strong>
+              <strong>Drop PNG/JPG or MP4 files here</strong>
               <span>or</span>
               <button type="button" class="brief-text-action" @click="openCreativePicker('linkedin')">Browse files</button>
               <small>Separate platform creative is stored as a private backend asset.</small>
-              <input id="linkedin-file-input" class="sr-only" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple @change="handleCreativeInput($event, 'linkedin')" />
+              <input id="linkedin-file-input" class="sr-only" type="file" accept=".png,.jpg,.jpeg,.mp4,image/png,image/jpeg,video/mp4" multiple @change="handleCreativeInput($event, 'linkedin')" />
             </div>
             <div v-if="linkedInAssets.length" class="creative-asset-grid" aria-label="LinkedIn creative order">
               <CreativeThumbnail
@@ -1787,7 +1787,7 @@ onMounted(() => {
             <div id="review-creative-instagram" class="review-asset-preview-panel">
               <div class="review-section-heading"><span class="brief-overline">Uploaded Creative</span><span class="review-muted">{{ instagramAssets.length }} assets</span></div>
               <div v-if="instagramAssets.length" class="review-asset-strip">
-                <div v-for="(asset, index) in instagramAssets" :key="asset.id" class="review-asset-thumb"><img :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div>
+                <div v-for="(asset, index) in instagramAssets" :key="asset.id" class="review-asset-thumb"><video v-if="asset.mimeType === 'video/mp4'" :src="asset.url" controls preload="metadata" /><img v-else :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div>
               </div>
               <p v-else class="creative-empty-note">No Instagram creative uploaded.</p>
             </div>
@@ -1814,7 +1814,7 @@ onMounted(() => {
             </div>
             <div id="review-creative-linkedin" class="review-asset-preview-panel">
               <div class="review-section-heading"><span class="brief-overline">Uploaded Creative</span><span class="review-muted">{{ reuseInstagramCreative ? "Inherited from Instagram" : `${linkedInAssets.length} assets` }}</span></div>
-              <div v-if="inheritedLinkedInAssets.length" class="review-asset-strip"><div v-for="(asset, index) in inheritedLinkedInAssets" :key="asset.id" class="review-asset-thumb"><img :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div></div>
+              <div v-if="inheritedLinkedInAssets.length" class="review-asset-strip"><div v-for="(asset, index) in inheritedLinkedInAssets" :key="asset.id" class="review-asset-thumb"><video v-if="asset.mimeType === 'video/mp4'" :src="asset.url" controls preload="metadata" /><img v-else :src="asset.url" :alt="asset.name" /><span>{{ String(index + 1).padStart(2, "0") }}</span></div></div>
               <p v-else class="creative-empty-note">No LinkedIn creative uploaded.</p>
             </div>
             <BrandAssessmentCard
@@ -2005,7 +2005,7 @@ onMounted(() => {
                 </div>
                 <div class="schedule-preview-grid">
                   <div><span class="brief-overline">Final copy preview</span><p>{{ row.copy }}</p></div>
-                  <div><span class="brief-overline">Creative preview</span><div v-if="row.assets.length" class="schedule-asset-strip"><img v-for="asset in row.assets.slice(0, 3)" :key="asset.id" :src="asset.url" :alt="asset.name" /><span v-if="row.assets.length > 3">+{{ row.assets.length - 3 }}</span></div><p v-else class="creative-empty-note">No creative preview</p></div>
+                  <div><span class="brief-overline">Creative preview</span><div v-if="row.assets.length" class="schedule-asset-strip"><template v-for="asset in row.assets.slice(0, 3)" :key="asset.id"><video v-if="asset.mimeType === 'video/mp4'" :src="asset.url" preload="metadata" /><img v-else :src="asset.url" :alt="asset.name" /></template><span v-if="row.assets.length > 3">+{{ row.assets.length - 3 }}</span></div><p v-else class="creative-empty-note">No creative preview</p></div>
                 </div>
               </section>
             </template>

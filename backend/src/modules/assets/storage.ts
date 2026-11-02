@@ -15,13 +15,14 @@ export interface StoredTempFile {
 }
 
 export interface InspectedImage {
-  mimeType: 'image/png' | 'image/jpeg'
+  mimeType: 'image/png' | 'image/jpeg' | 'video/mp4'
   width: number
   height: number
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
+const MP4_FTYP = Buffer.from('ftyp')
 
 // Asset validation only loads the two formats accepted by the domain. Sharp's
 // documented libvips operation controls provide a process-wide decoder
@@ -115,6 +116,7 @@ export class LocalAssetStorage implements AssetStorage {
     const path = this.tempPath(tempKey)
     try {
       const signature = await this.imageSignature(path)
+      if (signature === 'mp4') return { mimeType: 'video/mp4', width: 0, height: 0 }
       if (!signature) throw new AssetImageUnsupportedError()
       const metadata = await sharp(path, { failOn: 'error' }).metadata()
       const width = metadata.width
@@ -130,7 +132,7 @@ export class LocalAssetStorage implements AssetStorage {
     }
   }
 
-  private async imageSignature(path: string): Promise<'png' | 'jpeg' | null> {
+  private async imageSignature(path: string): Promise<'png' | 'jpeg' | 'mp4' | null> {
     let file
     try {
       file = await open(path, 'r')
@@ -138,6 +140,12 @@ export class LocalAssetStorage implements AssetStorage {
       const { bytesRead } = await file.read(header, 0, header.length, 0)
       if (bytesRead >= PNG_SIGNATURE.length && header.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) return 'png'
       if (bytesRead >= JPEG_SIGNATURE.length && header.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)) return 'jpeg'
+      const mp4Header = Buffer.alloc(12)
+      const mp4Read = await file.read(mp4Header, 0, mp4Header.length, 0)
+      if (mp4Read.bytesRead === mp4Header.length && mp4Header.subarray(4, 8).equals(MP4_FTYP)) {
+        const boxSize = mp4Header.readUInt32BE(0)
+        if (boxSize >= 12 && ['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V ', 'M4VP', 'MSNV'].includes(mp4Header.toString('ascii', 8, 12))) return 'mp4'
+      }
       return null
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new AssetStorageMissingError()

@@ -17,7 +17,8 @@ defineEmits<{ preview: [asset: ContentAssetRecord] }>()
     @click="$emit('preview', asset)"
   >
     <span class="record-asset__visual">
-      <img v-if="asset.url" :src="asset.url" :alt="asset.name" />
+      <video v-if="asset.url && (asset.type === 'MP4' || asset.mimeType === 'video/mp4')" :src="asset.url" :aria-label="asset.name" controls preload="metadata" />
+      <img v-else-if="asset.url" :src="asset.url" :alt="asset.name" />
       <span v-else class="record-asset__placeholder">
         <small>Creative placeholder</small>
         <strong>{{ asset.previewLabel ?? 'Creative' }}</strong>
@@ -36,6 +37,7 @@ defineEmits<{ preview: [asset: ContentAssetRecord] }>()
 .record-asset { display: flex; flex-direction: column; gap: 8px; min-width: 0; text-align: left; color: var(--color-text); }
 .record-asset__visual { position: relative; display: block; overflow: hidden; aspect-ratio: 4 / 5; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: #eff4ff; }
 .record-asset__visual img { width: 100%; height: 100%; object-fit: cover; }
+.record-asset__visual video { width: 100%; height: 100%; object-fit: cover; }
 .record-asset__placeholder { display: flex; flex-direction: column; justify-content: flex-end; width: 100%; height: 100%; padding: 14px; color: white; background: var(--color-well); }
 .record-asset__placeholder small { margin-bottom: auto; color: var(--color-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
 .record-asset__placeholder strong { max-width: 10ch; color: var(--color-ink); font-size: 14px; line-height: 1.25; font-weight: 600; }

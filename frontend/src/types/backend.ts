@@ -230,7 +230,7 @@ export interface BackendCreativeReferenceBatch {
 export interface BackendAsset {
   id: string
   fileName: string
-  mimeType: 'image/png' | 'image/jpeg'
+  mimeType: 'image/png' | 'image/jpeg' | 'video/mp4'
   sizeBytes: number
   width: number | null
   height: number | null

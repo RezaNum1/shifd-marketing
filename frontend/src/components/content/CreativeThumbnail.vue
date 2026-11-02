@@ -31,7 +31,8 @@ defineEmits<{
     @drop="$emit('drop', asset.id)"
   >
     <div class="creative-asset-preview">
-      <img :src="asset.url" :alt="asset.name" />
+      <video v-if="asset.mimeType === 'video/mp4' || asset.name.toLowerCase().endsWith('.mp4')" :src="asset.url" :aria-label="asset.name" controls preload="metadata" />
+      <img v-else :src="asset.url" :alt="asset.name" />
       <span>{{ String(index + 1).padStart(2, '0') }}</span>
     </div>
     <div class="creative-asset-meta">
@@ -49,3 +50,8 @@ defineEmits<{
     </div>
   </article>
 </template>
+
+<style scoped>
+.creative-asset-preview img,
+.creative-asset-preview video { width: 100%; height: 100%; object-fit: cover; }
+</style>

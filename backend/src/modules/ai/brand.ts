@@ -293,6 +293,7 @@ async function buildBrandCheckInput(
     additionalInstructions: content.brief.additionalInstructions,
   }
   const effectiveAssets = target.assetLinks.length ? target.assetLinks : target.reuseCreativeFromVariant?.assetLinks ?? []
+  const visualAssets = effectiveAssets.filter(({ asset }) => asset.mimeType.startsWith('image/'))
   const targetVariant = {
     id: target.id,
     platform: target.platform,
@@ -303,7 +304,7 @@ async function buildBrandCheckInput(
     hashtags: target.hashtags,
     visualRecommendation: target.visualRecommendation,
     adaptedFromMasterRevision: target.adaptedFromMasterRevision,
-    assets: effectiveAssets.map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
+    assets: visualAssets.map(({ asset }) => ({ id: asset.id, mimeType: asset.mimeType, width: asset.width, height: asset.height })),
   }
   const execution = {
     provider: runtime.provider,
@@ -406,7 +407,7 @@ async function buildBrandCheckInput(
     }),
     rate,
     hasCreativeAssets: effectiveAssets.length > 0,
-    creativeAssetStorageKeys: effectiveAssets.slice(0, 3).map(({ asset }) => asset.storageKey),
+    creativeAssetStorageKeys: visualAssets.slice(0, 3).map(({ asset }) => asset.storageKey),
   }
 }
 

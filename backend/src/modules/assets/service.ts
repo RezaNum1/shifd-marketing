@@ -297,6 +297,7 @@ export function sanitizeFileName(value: string) {
 }
 
 export function validateImageForAsset(image: InspectedImage, maxWidth: number, maxHeight: number) {
+  if (image.mimeType === 'video/mp4') return
   if (image.width > maxWidth || image.height > maxHeight) throw validationError('The image dimensions exceed the configured limit.', { file: `Maximum dimensions are ${maxWidth}x${maxHeight}.` })
 }
 

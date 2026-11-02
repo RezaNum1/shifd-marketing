@@ -132,7 +132,7 @@ watch(() => String(route.params.token), (token) => { void load(token) })
           <section v-for="variant in content.variants" :key="variant.platform" class="public-review-card">
             <header><div><span class="public-review-eyebrow">04 · Platform version</span><h2>{{ platformName(variant.platform) }}</h2></div><StatusBadge v-if="variant.assessment" :tone="variant.assessment.status === 'Aligned' ? 'success' : 'warning'">{{ variant.assessment.status }} · {{ variant.assessment.score }}/100</StatusBadge></header>
             <dl class="public-review-copy public-review-variant-copy"><div><dt>Final copy</dt><dd class="public-review-preserve">{{ variant.copy || 'No copy added yet.' }}</dd></div><div v-if="variant.cta"><dt>Call to action</dt><dd>{{ variant.cta }}</dd></div><div v-if="variant.hashtags"><dt>Hashtags</dt><dd>{{ variant.hashtags }}</dd></div><div v-if="variant.visualRecommendation"><dt>Visual recommendation</dt><dd>{{ variant.visualRecommendation }}</dd></div></dl>
-            <div v-if="variant.assets.length" class="public-review-assets"><figure v-for="(asset, index) in variant.assets" :key="asset.id"><button type="button" class="public-review-asset-button" :aria-label="`Preview ${asset.fileName}`" @click="openAssetPreview(asset)"><img :src="asset.contentUrl" :alt="`${platformName(variant.platform)} creative ${index + 1}`" /><span class="public-review-zoom-hint"><AppIcon name="search" :size="15" /> Preview</span></button><figcaption>{{ asset.fileName }}</figcaption></figure></div>
+            <div v-if="variant.assets.length" class="public-review-assets"><figure v-for="(asset, index) in variant.assets" :key="asset.id"><button type="button" class="public-review-asset-button" :aria-label="`Preview ${asset.fileName}`" @click="openAssetPreview(asset)"><video v-if="asset.mimeType === 'video/mp4'" :src="asset.contentUrl" preload="metadata" /><img v-else :src="asset.contentUrl" :alt="`${platformName(variant.platform)} creative ${index + 1}`" /><span class="public-review-zoom-hint"><AppIcon name="search" :size="15" /> Preview</span></button><figcaption>{{ asset.fileName }}</figcaption></figure></div>
             <p v-else class="public-review-notes">No creative asset is attached yet.</p>
             <div v-if="variant.assessment" class="public-review-assessment"><strong>AI brand check <small>Advisory</small></strong><p>{{ variant.assessment.recommendation }}</p><ul><li v-for="check in variant.assessment.checks" :key="check.label"><span>{{ check.label }}</span><StatusBadge :tone="check.status === 'pass' ? 'success' : check.status === 'warning' ? 'warning' : 'info'">{{ check.status === 'pass' ? 'Pass' : check.status === 'warning' ? 'Warning' : 'Not analyzed' }}</StatusBadge></li></ul></div>
           </section>
@@ -147,7 +147,7 @@ watch(() => String(route.params.token), (token) => { void load(token) })
       </div>
       <footer class="public-review-footer"><AppIcon name="lock" :size="15" /> This page is for anonymous feedback only. The content owner retains control of the content and approval.</footer>
       <BaseModal v-model="previewOpen" :title="previewAsset?.fileName ?? 'Creative preview'" description="Full-size view · Read only" size="fullscreen">
-        <div v-if="previewAsset" class="public-review-large-preview"><img :src="previewAsset.contentUrl" :alt="previewAsset.fileName" /><span>{{ previewAsset.width }} × {{ previewAsset.height }}</span></div>
+        <div v-if="previewAsset" class="public-review-large-preview"><video v-if="previewAsset.mimeType === 'video/mp4'" :src="previewAsset.contentUrl" controls autoplay /><img v-else :src="previewAsset.contentUrl" :alt="previewAsset.fileName" /><span v-if="previewAsset.mimeType !== 'video/mp4'">{{ previewAsset.width }} × {{ previewAsset.height }}</span></div>
       </BaseModal>
     </template>
   </main>
@@ -208,11 +208,13 @@ watch(() => String(route.params.token), (token) => { void load(token) })
 .public-review-assets figure { min-width: 0; margin: 0; }
 .public-review-asset-button { position: relative; display: block; width: 100%; overflow: hidden; padding: 0; border: 1px solid #e5eaf2; border-radius: 10px; background: #f2f5fa; cursor: zoom-in; }
 .public-review-assets img { display: block; width: 100%; max-height: 400px; aspect-ratio: 4 / 5; object-fit: contain; }
+.public-review-assets video { display: block; width: 100%; max-height: 400px; aspect-ratio: 4 / 5; object-fit: contain; }
 .public-review-zoom-hint { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px; background: rgb(20 36 59 / .82); color: white; font-size: 10px; opacity: 0; transition: opacity 120ms ease; }
 .public-review-asset-button:hover .public-review-zoom-hint, .public-review-asset-button:focus-visible .public-review-zoom-hint { opacity: 1; }
 .public-review-asset-button:focus-visible { outline: 3px solid #8aaeff; outline-offset: 2px; }
 .public-review-large-preview { position: relative; display: flex; width: 100%; height: 100%; min-height: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px; background: #f1f4f9; }
 .public-review-large-preview img { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100dvh - 190px); object-fit: contain; image-rendering: auto; }
+.public-review-large-preview video { display: block; max-width: 100%; max-height: calc(100dvh - 190px); }
 .public-review-large-preview > span { position: absolute; right: 10px; bottom: 10px; padding: 5px 8px; border-radius: 6px; background: rgb(20 36 59 / .78); color: white; font-size: 10px; }
 .public-review-assets figcaption { overflow: hidden; margin-top: 6px; color: #748197; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .public-review-assessment { margin-top: 18px; padding: 14px; border-radius: 10px; background: #f6f8fc; }
