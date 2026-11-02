@@ -478,6 +478,10 @@ function sameStrings(first: string[], second: string[]) {
   return first.length === second.length && first.every((value, index) => value === second[index])
 }
 
+function isRecord(value: Prisma.JsonValue | null | undefined): value is Prisma.JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
 async function assertEditableReviewState(db: Db, companyId: string, content: CompleteContentRow, config: { openaiModel: string | null; aiProviderMode?: 'mock' | 'openai' | undefined }, allowApproved: boolean) {
   if (content.archivedAt) throw conflict('Archived Content cannot be changed.')
   const freshness = await assessmentFreshness(db, companyId, content, config)
@@ -585,7 +589,7 @@ async function findCurrentManualOverride(
     return evidence.evidenceType === 'manual_brand_check_override'
       && evidence.variantRevision === variantRevision
       && Array.isArray(evidence.effectiveAssetIds)
-      && sameStringArray(evidence.effectiveAssetIds as string[], effectiveAssetIds)
+      && sameStrings(evidence.effectiveAssetIds as string[], effectiveAssetIds)
   }) ?? null
 }
 

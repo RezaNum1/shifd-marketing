@@ -1293,7 +1293,7 @@ function decodeVisualDirection(value: Prisma.JsonValue | null): VisualDirectionI
   throw conflict('Content persistence is invalid: Visual Direction has an unsupported shape.')
 }
 
-function isRecord(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
+function isRecord(value: Prisma.JsonValue | null | undefined): value is Prisma.JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
