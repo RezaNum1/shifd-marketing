@@ -9,6 +9,7 @@ export type NavigationKey =
   | 'performance'
   | 'performance-evaluation'
   | 'performance-linkedin'
+  | 'performance-inquiries'
   | 'company'
   | 'products'
   | 'integrations'

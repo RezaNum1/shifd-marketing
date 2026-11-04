@@ -11,6 +11,14 @@ const workspace = useWorkspaceStore()
   <header class="app-header">
     <div class="app-header__workspace">
       <IconButton
+        class="app-header__sidebar-toggle"
+        icon="menu"
+        :label="workspace.sidebarPinned ? 'Hide sidebar' : workspace.sidebarVisible ? 'Pin sidebar' : 'Show sidebar'"
+        :aria-expanded="workspace.sidebarVisible"
+        aria-controls="workspace-sidebar"
+        @click="workspace.toggleSidebar()"
+      />
+      <IconButton
         class="app-header__menu"
         icon="menu"
         label="Open navigation"

@@ -33,6 +33,7 @@ const paths: Record<IconName, string[]> = {
   ],
   settings: ['M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6'],
   menu: ['M4 6h16 M4 12h16 M4 18h16'],
+  pin: ['m16 3 5 5-4 1-4 4v4l-2 2-3-5-5-3 2-2h4l4-4z M8 16l-5 5'],
   close: ['m6 6 12 12 M6 18 18 6'],
   'chevron-right': ['m9 5 7 7-7 7'],
   'arrow-left': ['M20 12H4 m7-7-7 7 7 7'],

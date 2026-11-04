@@ -15,6 +15,7 @@ export type IconName =
   | 'help'
   | 'settings'
   | 'menu'
+  | 'pin'
   | 'close'
   | 'chevron-right'
   | 'arrow-left'

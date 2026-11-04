@@ -4,6 +4,9 @@ export type Language = 'en' | 'id'
 export const dictionary: Record<string, string> = {
   'Skip to main content': 'Lewati ke konten utama',
   'Open navigation': 'Buka navigasi',
+  'Hide sidebar': 'Sembunyikan sidebar',
+  'Show sidebar': 'Tampilkan sidebar',
+  'Pin sidebar': 'Sematkan sidebar',
   Navigation: 'Navigasi',
   'Sign Out': 'Keluar',
   'Sign out': 'Keluar',

@@ -535,6 +535,22 @@ export interface BackendInquiryMetric {
   version: number
 }
 
+export interface BackendBusinessInquiry {
+  id: string
+  receivedAt: string
+  channel: 'whatsapp' | 'instagram' | 'linkedin' | 'website' | 'email' | 'phone' | 'other'
+  companyName: string | null
+  prospectId: string | null
+  summary: string
+  relevance: 'relevant' | 'unrelated' | 'unreviewed'
+  source: string
+  sourceReference: string | null
+  followUpNotes: string | null
+  prospect: { id: string; name: string; industry: string | null } | null
+  recorder: { id: string; name: string }
+  createdAt: string
+}
+
 export interface BackendPerformanceSummary {
   latestWeeklyReach: number | null
   impressions: number | null
@@ -631,8 +647,9 @@ export interface BackendPublicationFeedItem {
 }
 
 export interface BackendPublicationMetrics {
+  id: string
   scope: 'publication'
-  source: 'instagram_api'
+  source: 'instagram_api' | 'linkedin_manual'
   externalMediaId: string
   views: number | null
   reach: number | null

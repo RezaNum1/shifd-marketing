@@ -95,7 +95,7 @@ export async function readEvaluationRange(prisma: PrismaClient, companyId: strin
       select: {
         id: true, publishedAt: true,
         variant: { select: { platform: true, contentId: true, content: { select: { targetIndustry: true, targetProspectId: true, brief: { select: { topic: true } } } } } },
-        metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
+        metrics: { where: { source: { in: ['instagram_api', 'linkedin_manual'] } }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
         metricSnapshots: { orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 100 },
       },
       orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],

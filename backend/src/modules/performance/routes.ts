@@ -20,6 +20,7 @@ import {
   type WeeklyMetricInput,
 } from './metrics.js'
 import { buildOverviewReport, buildPerformanceReport, listRecentPublications, loadReportingSnapshot, type ReportPlatform } from './reporting.js'
+import { saveLinkedInPublicationMetric, type LinkedInPublicationMetricInput } from './publication-metrics.js'
 import type { Clock } from '../../shared/time/clock.js'
 import type { InstagramInsightsProvider } from './instagram/provider.js'
 import type { InstagramSyncResult } from './instagram/sync.js'
@@ -31,6 +32,7 @@ const snapshotKeys = ['stage', 'capturedAt', 'measurements', 'source', 'notes'] 
 const businessInquiryKeys = ['receivedAt', 'channel', 'companyName', 'prospectId', 'summary', 'relevance', 'source', 'sourceReference', 'followUpNotes'] as const
 const productionTimeKeys = ['contentId', 'minutes', 'occurredAt', 'notes'] as const
 const inquiryKeys = ['weekStart', 'weekEnd', 'count'] as const
+const publicationMetricKeys = ['views', 'reach', 'likes', 'comments', 'saves', 'shares', 'totalInteractions'] as const
 const reportPlatforms = ['combined', 'instagram', 'linkedin'] as const
 const metricPlatforms = ['instagram', 'linkedin'] as const
 
@@ -203,6 +205,18 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
     return reply.send({ data: result.data, page: { limit: query.limit, nextCursor: result.nextCursor ? encodeCursor(result.nextCursor) : null } })
   })
 
+  app.put('/publications/:id/metrics/linkedin', async (request, reply) => {
+    validateOrigin(request, options.config)
+    const auth = await requireAuth(request, reply)
+    await requireCsrf(request)
+    const body = object(request.body, 'LinkedIn publication metric')
+    allowedKeys(body, publicationMetricKeys, 'body')
+    const input = parsePublicationMetric(body)
+    const result = await saveLinkedInPublicationMetric(app.prisma, auth.user.companyId, routeId(request), optionalIfMatch(request), input, options.clock.now())
+    reply.header('ETag', result.etag)
+    return reply.status(result.status).send({ data: result.data })
+  })
+
   app.get('/performance', async (request, reply) => {
     const auth = await requireAuth(request, reply)
     const query = parsePerformanceQuery(request)
@@ -261,6 +275,18 @@ function parseWeeklyMetric(value: unknown): WeeklyMetricInput {
     nativeEngagementRate: assertOptionalRate(body.nativeEngagementRate, 'nativeEngagementRate'),
     evidenceAssetId: parseNullableUuid(body.evidenceAssetId, 'evidenceAssetId'),
     notes: optionalText(body.notes, 'notes'),
+  }
+}
+
+function parsePublicationMetric(value: Record<string, unknown>): LinkedInPublicationMetricInput {
+  return {
+    views: assertOptionalSafeCount(value.views, 'views'),
+    reach: assertOptionalSafeCount(value.reach, 'reach'),
+    likes: assertOptionalSafeCount(value.likes, 'likes'),
+    comments: assertOptionalSafeCount(value.comments, 'comments'),
+    saves: assertOptionalSafeCount(value.saves, 'saves'),
+    shares: assertOptionalSafeCount(value.shares, 'shares'),
+    totalInteractions: assertOptionalSafeCount(value.totalInteractions, 'totalInteractions'),
   }
 }
 
@@ -376,6 +402,10 @@ function ifMatch(request: FastifyRequest) {
   const version = Number(match[1])
   if (!Number.isSafeInteger(version)) throw preconditionRequired('If-Match must contain the resource ETag.')
   return version
+}
+
+function optionalIfMatch(request: FastifyRequest) {
+  return header(request, 'if-match') === undefined ? null : ifMatch(request)
 }
 
 function requireEmptyBody(value: unknown) {

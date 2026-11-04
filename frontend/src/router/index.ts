@@ -35,6 +35,8 @@ const routes: RouteRecordRaw[] = pages.map((page) => ({
                       ? () => import('../views/PerformanceView.vue')
                     : page.name === 'performance-linkedin'
                         ? () => import('../views/LinkedInMetricsView.vue')
+                    : page.name === 'performance-inquiries'
+                        ? () => import('../views/BusinessInquiriesView.vue')
                         : page.name === 'integrations'
                           ? () => import('../views/IntegrationsView.vue')
                         : page.name === 'ai-system'

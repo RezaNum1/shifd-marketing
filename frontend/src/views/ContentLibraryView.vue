@@ -8,6 +8,7 @@ import BaseCard from '../components/ui/BaseCard.vue'
 import BaseModal from '../components/ui/BaseModal.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseTable from '../components/ui/BaseTable.vue'
+import FormField from '../components/ui/FormField.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import InlineAlert from '../components/ui/InlineAlert.vue'
@@ -178,7 +179,7 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 
     <BaseCard class="library-controls">
       <div class="library-controls__top">
-        <label class="library-search"><AppIcon name="search" :size="17" /><span class="sr-only">Search content</span><input v-model="search" type="search" placeholder="Search content..." /></label>
+        <FormField id="content-library-search" label="Search content" class="library-search-field"><template #default><div class="library-search"><AppIcon name="search" :size="17" /><input id="content-library-search" v-model="search" type="search" placeholder="Search content..." /></div></template></FormField>
         <div class="library-filters">
           <BaseSelect v-model="context" label="Context" :options="contextOptions" size="compact" />
           <BaseSelect v-model="product" label="Product" :options="productOptions" size="compact" />
@@ -219,8 +220,10 @@ onMounted(() => { void Promise.all([library.load(), products.load(), companyCont
 .library-summary__item strong { font-size: 20px; font-weight: 600; color: var(--color-text); }
 .library-controls :deep(.ui-card__body) { padding: 16px; }
 .library-table-viewport { max-height: 1000px; overflow-y: auto; }
+.library-table-viewport :deep(.ui-badge) { white-space: nowrap; }
 .library-controls__top { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.library-search { display: flex; align-items: center; gap: 8px; flex: 1 1 250px; min-height: 32px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-well); color: var(--color-muted); }
+.library-search-field { flex: 1 1 250px; min-width: 220px; }
+.library-search { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-well); color: var(--color-muted); }
 .library-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; }
 .library-search:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgb(29 78 216 / 0.14); }
 .library-filters { display: grid; grid-template-columns: repeat(5, minmax(125px, 1fr)); flex: 3 1 650px; gap: 8px; }

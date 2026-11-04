@@ -115,6 +115,20 @@ export const usePerformanceStore = defineStore('performance', () => {
     return value ? { metric: value } : { error: error.value || 'Unable to save the LinkedIn metric.' }
   }
 
+  async function saveLinkedInPublicationMetrics(publicationId: string, input: Record<string, number | null>) {
+    error.value = ''
+    const current = publications.value.find((item) => item.publication.id === publicationId)
+    if (!current || current.publication.platform !== 'linkedin') return { success: false as const, error: 'Choose a published LinkedIn post.' }
+    try {
+      const result = await performanceApi.saveLinkedInPublicationMetric(publicationId, input, current.postMetrics?.version)
+      publications.value = publications.value.map((item) => item.publication.id === publicationId ? { ...item, postMetrics: result.data } : item)
+      return { success: true as const, metric: result.data }
+    } catch (reason: unknown) {
+      error.value = errorMessage(reason, 'Unable to save LinkedIn post metrics.')
+      return { success: false as const, error: error.value }
+    }
+  }
+
   async function saveMetric(input: Omit<WeeklyMetric, 'id' | 'source' | 'weekEnd'> & { id?: string; platform: PerformancePlatform; weekEnd?: string }) {
     const weekEnd = input.weekEnd ?? addDays(input.weekStart, 6)
     try {
@@ -149,7 +163,7 @@ export const usePerformanceStore = defineStore('performance', () => {
     }
   }
 
-  return { report, weeklyMetrics, inboundInquiries, publications, loading, supportingLoading, supportingLoaded, loaded, error, evaluation, evaluationLoading, evaluationError, customRange, customRangeLoading, customRangeError, loadCustomEvaluationRange, loadEvaluation, configureEvaluation, recordSnapshot, addBusinessInquiry, addProductionTime, load, loadReport, loadSupportingData, addWeeklyMetric, saveLinkedInMetric }
+  return { report, weeklyMetrics, inboundInquiries, publications, loading, supportingLoading, supportingLoaded, loaded, error, evaluation, evaluationLoading, evaluationError, customRange, customRangeLoading, customRangeError, loadCustomEvaluationRange, loadEvaluation, configureEvaluation, recordSnapshot, addBusinessInquiry, addProductionTime, load, loadReport, loadSupportingData, addWeeklyMetric, saveLinkedInMetric, saveLinkedInPublicationMetrics }
 })
 
 export function normalizeWeeklyMetric(value: BackendWeeklyMetric): WeeklyMetric {

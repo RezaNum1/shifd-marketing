@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { BackendInquiryMetric, BackendPerformanceReport, BackendPublicationFeedItem, BackendOverviewReport, BackendWeeklyMetric } from '../types/backend'
+import type { BackendBusinessInquiry, BackendInquiryMetric, BackendPerformanceReport, BackendPublicationFeedItem, BackendOverviewReport, BackendPublicationMetrics, BackendWeeklyMetric } from '../types/backend'
 import type { CustomEvaluationRange, MarketingEvaluationDashboard } from '../types/performance'
 
 export function getPerformance(weeks: 4 | 8 | 12, platform: 'combined' | 'instagram' | 'linkedin') {
@@ -12,11 +12,12 @@ export function getEvaluationRange(startDate: string, endDate: string) {
 }
 export function saveEvaluation(input: { startDate: string; timezone?: string; definitions?: { customNotes?: string } }) { return request<MarketingEvaluationDashboard['evaluation']>('/evaluation', { method: 'PUT', json: input }) }
 export function recordEvaluationSnapshot(id: string, input: Record<string, unknown>) { return request(`/evaluation/${id}/snapshots`, { method: 'POST', json: input }) }
-export function listBusinessInquiries(page = 1) { return request(`/business-inquiries?page=${page}&limit=100`) }
-export function createBusinessInquiry(input: Record<string, unknown>) { return request('/business-inquiries', { method: 'POST', json: input }) }
+export function listBusinessInquiries(page = 1) { return request<BackendBusinessInquiry[]>(`/business-inquiries?page=${page}&limit=100`) }
+export function createBusinessInquiry(input: Record<string, unknown>) { return request<BackendBusinessInquiry>('/business-inquiries', { method: 'POST', json: input }) }
 export function createProductionTime(input: { contentId: string; minutes: number; occurredAt?: string; notes?: string }) { return request('/production-time', { method: 'POST', json: input }) }
 export function getOverview() { return request<BackendOverviewReport>('/overview') }
 export function listPublications(cursor?: string) { const query = new URLSearchParams({ limit: '100' }); if (cursor) query.set('cursor', cursor); return request<BackendPublicationFeedItem[]>(`/publications?${query.toString()}`) }
+export function saveLinkedInPublicationMetric(id: string, input: Record<string, number | null>, etag?: string | number) { return request<BackendPublicationMetrics>(`/publications/${id}/metrics/linkedin`, { method: 'PUT', json: input, ...(etag === undefined ? {} : { ifMatch: etag }) }) }
 export function listLinkedInMetrics() { return request<BackendWeeklyMetric[]>('/metrics/linkedin?limit=100') }
 export function listInquiryMetrics() { return request<BackendInquiryMetric[]>('/metrics/inquiries?limit=100') }
 export function createLinkedInMetric(input: Record<string, unknown>) { return request<BackendWeeklyMetric>('/metrics/linkedin', { method: 'POST', json: input }) }

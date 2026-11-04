@@ -171,7 +171,7 @@ export async function loadReportingSnapshot(prisma: PrismaClient, companyId: str
       where: { variant: { content: { companyId } } },
       include: {
         marker: { select: { id: true, name: true } },
-        metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
+        metrics: { where: { source: { in: ['instagram_api', 'linkedin_manual'] } }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
         variant: { select: { id: true, platform: true, content: { select: { id: true, companyId: true, masterContent: true, brief: { select: { topic: true, pillarCode: true } } } } } },
       },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -314,7 +314,7 @@ export async function listRecentPublications(prisma: PrismaClient, companyId: st
     where: { AND: filters },
     include: {
       marker: { select: { id: true, name: true } },
-      metrics: { where: { source: 'instagram_api' }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
+      metrics: { where: { source: { in: ['instagram_api', 'linkedin_manual'] } }, orderBy: [{ observedAt: 'desc' }, { id: 'desc' }], take: 1 },
       variant: { select: { id: true, platform: true, content: { select: { id: true, companyId: true, masterContent: true, brief: { select: { topic: true, pillarCode: true } } } } } },
     },
     orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -559,6 +559,7 @@ function sumNullable(values: Array<number | null>) {
 
 function mapPublicationMetric(row: PublicationMetricRow) {
   return {
+    id: row.id,
     scope: 'publication' as const,
     source: row.source,
     externalMediaId: row.externalMediaId,

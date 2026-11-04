@@ -21,7 +21,10 @@ const auth = useAuthStore()
 let desktop: MediaQueryList | undefined
 
 function onViewportChange() {
-  if (desktop?.matches) workspace.closeNavigation()
+  if (desktop?.matches) {
+    workspace.closeNavigation()
+    workspace.hideSidebarPreview()
+  }
 }
 
 async function signOut() {
@@ -49,9 +52,21 @@ onBeforeUnmount(() => desktop?.removeEventListener('change', onViewportChange))
 </script>
 
 <template>
-  <div class="app-shell">
+  <div
+    class="app-shell"
+    :class="{
+      'app-shell--sidebar-collapsed': !workspace.sidebarPinned,
+      'app-shell--sidebar-preview': !workspace.sidebarPinned && workspace.sidebarHovered,
+    }"
+  >
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <AppSidebar />
+    <AppSidebar :visible="workspace.sidebarVisible" />
+    <div
+      v-if="!workspace.sidebarPinned && !workspace.sidebarHovered"
+      class="app-sidebar-hover-trigger"
+      aria-hidden="true"
+      @pointerenter="workspace.showSidebarPreview()"
+    />
     <div class="app-shell__body">
       <AppHeader />
       <main id="main-content" class="app-main" tabindex="-1">
