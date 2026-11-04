@@ -67,7 +67,6 @@ const evaluationStart = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
 const evaluationSaving = ref(false)
 const measurementDefinitionNotes = ref('')
 const snapshotForm = reactive({ stage: 'week0' as 'week0' | 'week4', instagramFollowers: '', linkedinFollowers: '', source: 'Native platform account observation', notes: '' })
-const inquiryForm = reactive({ receivedAt: localDateTimeInput(), channel: 'whatsapp', companyName: '', prospectId: '', summary: '', relevance: 'unreviewed', source: 'Direct message received', sourceReference: '', followUpNotes: '' })
 const productionForm = reactive({ contentId: '', minutes: '', occurredAt: localDateTimeInput(), notes: '' })
 const evaluation = computed(() => performance.evaluation)
 const customRange = computed(() => performance.customRange)
@@ -90,7 +89,6 @@ const platformMetricTotal = computed(() => {
 })
 const visibleEvaluationComparison = computed(() => (evaluation.value?.comparison ?? []).slice((evaluationComparePage.value - 1) * evaluationComparePageSize.value, evaluationComparePage.value * evaluationComparePageSize.value))
 const contentOptions = computed(() => contentLibrary.records.map((record) => ({ value: record.id, label: `${record.title} · ${record.status}` })))
-const prospectOptions = computed(() => [{ value: '', label: 'No linked prospect' }, ...prospects.value.map((prospect) => ({ value: prospect.id, label: `${prospect.name}${prospect.industry ? ` · ${prospect.industry}` : ''}` }))])
 const evaluationPeriodsLabel = computed(() => {
   const periods = evaluation.value?.periods
   return periods ? `${formatDate(periods.baseline.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} baseline · ${formatDate(periods.intervention.start, { dateStyle: 'medium' })} – ${formatDate(periods.intervention.endExclusive, { dateStyle: 'medium' })} intervention` : 'Set a start date to configure the 28-day baseline and intervention.'
@@ -207,12 +205,6 @@ async function saveSnapshot() {
   const capturedAt = new Date().toISOString()
   const saved = await performance.recordSnapshot(config.id, { stage: snapshotForm.stage, capturedAt, measurements, source: snapshotForm.source, notes: snapshotForm.notes || null })
   if (saved) ui.notify(`${snapshotForm.stage === 'week0' ? 'Week 0' : 'Week 4'} snapshot recorded.`, 'success')
-}
-async function saveBusinessInquiry() {
-  const result = await performance.addBusinessInquiry({ ...inquiryForm, receivedAt: new Date(inquiryForm.receivedAt).toISOString(), companyName: inquiryForm.companyName || null, prospectId: inquiryForm.prospectId || null, sourceReference: inquiryForm.sourceReference || null, followUpNotes: inquiryForm.followUpNotes || null })
-  if (!result) return
-  inquiryForm.summary = ''; inquiryForm.companyName = ''; inquiryForm.prospectId = ''; inquiryForm.sourceReference = ''; inquiryForm.followUpNotes = ''
-  ui.notify('Inbound inquiry recorded separately from outbound replies.', 'success')
 }
 async function saveProductionTime() {
   if (!productionForm.contentId || !productionForm.minutes) return
@@ -366,12 +358,6 @@ async function saveSnapshot() {
   const saved = await performance.recordSnapshot(config.id, { stage: snapshotForm.stage, capturedAt: new Date().toISOString(), measurements, source: snapshotForm.source, notes: snapshotForm.notes || null })
   if (saved) ui.notify(`${snapshotForm.stage === 'week0' ? 'Week 0' : 'Week 4'} snapshot recorded.`, 'success')
 }
-async function saveBusinessInquiry() {
-  const result = await performance.addBusinessInquiry({ ...inquiryForm, receivedAt: new Date(inquiryForm.receivedAt).toISOString(), companyName: inquiryForm.companyName || null, prospectId: inquiryForm.prospectId || null, sourceReference: inquiryForm.sourceReference || null, followUpNotes: inquiryForm.followUpNotes || null })
-  if (!result) return
-  inquiryForm.summary = ''; inquiryForm.companyName = ''; inquiryForm.prospectId = ''; inquiryForm.sourceReference = ''; inquiryForm.followUpNotes = ''
-  ui.notify('Inbound inquiry recorded separately from outbound replies.', 'success')
-}
 async function saveProductionTime() {
   if (!productionForm.contentId || !productionForm.minutes) return
   const saved = await performance.addProductionTime({ contentId: productionForm.contentId, minutes: Number(productionForm.minutes), occurredAt: new Date(productionForm.occurredAt).toISOString(), notes: productionForm.notes || undefined })
@@ -458,7 +444,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
               <div class="platform-execution-grid"><div v-for="name in platformRows" :key="name" class="platform-execution"><strong>{{ platformLabel(name) }} · target: 2 per week</strong><p>Baseline: {{ evaluation.baseline.cadence[name].weeklyCounts.join(' · ') }} posts per week <span>({{ evaluation.baseline.cadence[name].weeksMeetingTarget }}/4 weeks met target)</span></p><p>Intervention: {{ evaluation.intervention.cadence[name].weeklyCounts.join(' · ') }} posts per week <span>({{ evaluation.intervention.cadence[name].weeksMeetingTarget }}/4 weeks met target)</span></p><p>Consistency variation: {{ formatMaybeNumber(evaluation.baseline.cadence[name].coefficientOfVariation, '×') }} baseline · {{ formatMaybeNumber(evaluation.intervention.cadence[name].coefficientOfVariation, '×') }} intervention</p></div></div>
               <dl class="summary-list"><div><dt>Campaigns with a published post · baseline / intervention</dt><dd>{{ evaluation.baseline.publications.campaigns }} / {{ evaluation.intervention.publications.campaigns }}</dd></div><div><dt>Planned posts · baseline / intervention</dt><dd>{{ evaluation.baseline.schedules.planned }} / {{ evaluation.intervention.schedules.planned }}</dd></div><div><dt>Published posts · baseline / intervention</dt><dd>{{ evaluation.baseline.publications.total }} / {{ evaluation.intervention.publications.total }}</dd></div></dl>
               <p class="helper-text">Intervention audience: {{ evaluation.intervention.publications.targeting.industryTargeted }} industry focused · {{ evaluation.intervention.publications.targeting.prospectLinked }} linked to prospects · {{ evaluation.intervention.publications.targeting.general }} general posts.</p>
-              <details class="activity-records"><summary>View publication records</summary><ul class="inquiry-record-list"><li v-for="record in evaluation.intervention.publications.records.slice(0, 8)" :key="String(record.id)">{{ record.platform }} · {{ record.targetIndustry || 'General' }} · {{ record.targetProspectId ? 'Prospect linked' : 'No prospect linked' }} · {{ formatDate(record.publishedAt) }}</li><li v-if="!evaluation.intervention.publications.records.length">No intervention publication records.</li></ul></details>
+              <details class="activity-records"><summary>View publication records</summary><ul class="inquiry-record-list"><li v-for="record in evaluation.intervention.publications.records.slice(0, 8)" :key="String(record.id)">{{ record.platform }} · {{ record.targetIndustry || 'General' }} · {{ record.targetProspectId ? 'Prospect linked' : 'No prospect linked' }} · {{ formatDate(String(record.publishedAt)) }}</li><li v-if="!evaluation.intervention.publications.records.length">No intervention publication records.</li></ul></details>
             </BaseCard>
             <BaseCard title="Content creation time" description="Time spent actively creating or editing a content campaign.">
               <div class="output-grid"><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.median, ' min') }}</strong><span>Typical time</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.minimum, ' min') }}</strong><span>Shortest</span></div><div><strong>{{ formatMaybeNumber(evaluation.intervention.productionTime.maximum, ' min') }}</strong><span>Longest</span></div><div><strong>{{ evaluation.intervention.productionTime.count }}</strong><span>Campaigns recorded</span></div></div>
@@ -482,7 +468,7 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
           <div class="activity-group__content evaluation-two-column">
             <BaseCard title="Instagram" description="Account reach and individual post reach are shown separately.">
               <details class="activity-records"><summary>Account observations ({{ evaluation.intervention.social.instagram.weeklyAccountObservations.length }})</summary><div class="platform-observation"><p v-for="observation in evaluation.intervention.social.instagram.weeklyAccountObservations" :key="String(observation.id)">{{ observation.weekStart }} · {{ observation.followers }} followers · {{ observation.accountReach ?? 'Reach not available' }} account reach · Source: {{ observation.source }}</p><p v-if="!evaluation.intervention.social.instagram.weeklyAccountObservations.length">No account observations recorded.</p></div></details>
-              <details class="activity-records"><summary>Post observations ({{ evaluation.intervention.social.instagram.postObservations.length }})</summary><div class="platform-observation"><p v-for="observation in evaluation.intervention.social.instagram.postObservations" :key="String(observation.publicationId)">{{ formatDate(observation.publishedAt) }} · {{ observation.views ?? 'N/A' }} views · {{ observation.reach ?? 'N/A' }} reach · {{ observation.likes ?? 'N/A' }} likes · {{ observation.comments ?? 'N/A' }} comments · {{ observation.saves ?? 'N/A' }} saves · {{ observation.shares ?? 'N/A' }} shares · {{ observation.source }}</p><p v-if="!evaluation.intervention.social.instagram.postObservations.length">No post observations recorded.</p></div></details>
+              <details class="activity-records"><summary>Post observations ({{ evaluation.intervention.social.instagram.postObservations.length }})</summary><div class="platform-observation"><p v-for="observation in evaluation.intervention.social.instagram.postObservations" :key="String(observation.publicationId)">{{ formatDate(String(observation.publishedAt)) }} · {{ observation.views ?? 'N/A' }} views · {{ observation.reach ?? 'N/A' }} reach · {{ observation.likes ?? 'N/A' }} likes · {{ observation.comments ?? 'N/A' }} comments · {{ observation.saves ?? 'N/A' }} saves · {{ observation.shares ?? 'N/A' }} shares · {{ observation.source }}</p><p v-if="!evaluation.intervention.social.instagram.postObservations.length">No post observations recorded.</p></div></details>
             </BaseCard>
             <BaseCard title="LinkedIn" description="Metrics entered from LinkedIn Analytics.">
               <div class="platform-observation"><p v-for="observation in evaluation.intervention.social.linkedin.weeklyAccountObservations" :key="String(observation.id)">{{ observation.weekStart }} · {{ observation.followers }} followers · {{ observation.impressions ?? 'N/A' }} impressions · {{ formatMaybeNumber(typeof observation.nativeEngagementRate === 'number' ? observation.nativeEngagementRate : null, '%') }} engagement rate · {{ observation.reportedPublishedPosts }} posts reported · Source: {{ observation.source }}</p><p v-if="!evaluation.intervention.social.linkedin.weeklyAccountObservations.length">No LinkedIn observations recorded.</p></div>

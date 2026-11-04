@@ -203,6 +203,10 @@ function resetToday() {
   anchorDate.value = startOfDay(new Date())
 }
 
+function goTo(path: string) {
+  void router.push(path)
+}
+
 function clearFilters() {
   platformFilter.value = 'all'
   statusFilter.value = 'all'
@@ -425,7 +429,7 @@ onMounted(() => { void loadCalendar() })
       </div>
     </BaseCard>
 
-    <BaseCard v-if="calendar.loaded && !calendar.loading && !calendar.error && entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Plan approved content for Instagram or LinkedIn. General, industry-targeted, and prospect-linked plans are supported."><BaseButton @click="openPlanning()">Plan Existing Content</BaseButton><BaseButton variant="secondary" @click="router.push('/content/ideas')">Continue an Idea</BaseButton></EmptyState></BaseCard>
+    <BaseCard v-if="calendar.loaded && !calendar.loading && !calendar.error && entries.length === 0"><EmptyState icon="calendar" title="No content scheduled yet." description="Plan approved content for Instagram or LinkedIn. General, industry-targeted, and prospect-linked plans are supported."><BaseButton @click="openPlanning()">Plan Existing Content</BaseButton><BaseButton variant="secondary" @click="goTo('/content/ideas')">Continue an Idea</BaseButton></EmptyState></BaseCard>
 
     <div v-else-if="calendar.loaded && !calendar.loading && !calendar.error" class="calendar-layout">
       <main class="calendar-main">
@@ -474,7 +478,7 @@ onMounted(() => { void loadCalendar() })
     <BaseModal v-model="planningModalOpen" :title="editingEntryId ? 'Edit Planned Content' : 'Plan Content'" description="Schedule approved content for manual publication. Prospect details remain internal planning context.">
       <div class="publication-form">
         <BaseSelect v-model="planningContentId" label="Approved content" :options="planContentOptions" placeholder="Choose approved content" :disabled="Boolean(editingEntryId)" />
-        <p v-if="planContentOptions.length === 0" class="calendar-helper">No approved content is available yet. Complete the existing content workflow and M4 review before planning a publication. <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; router.push('/content/ideas')">Continue an idea</button> · <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; router.push('/content')">Open Content Library</button></p>
+        <p v-if="planContentOptions.length === 0" class="calendar-helper">No approved content is available yet. Complete the existing content workflow and M4 review before planning a publication. <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; goTo('/content/ideas')">Continue an idea</button> · <button type="button" class="calendar-inline-link" @click="planningModalOpen = false; goTo('/content')">Open Content Library</button></p>
         <BaseSelect v-model="planningPlatform" label="Platform" :options="planningPlatformOptions" :disabled="Boolean(editingEntryId)" />
         <div class="planning-datetime"><BaseInput v-model="planningDate" type="date" label="Planned date" required /><BaseInput v-model="planningTime" type="time" label="Planned time" required /></div>
         <BaseInput v-model="planningIndustry" label="Target industry (optional)" list="calendar-industry-suggestions" placeholder="Choose a suggestion or enter an industry" /><datalist id="calendar-industry-suggestions"><option v-for="industry in industrySuggestions" :key="industry" :value="industry" /></datalist>
