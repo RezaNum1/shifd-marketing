@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import CalendarView from './CalendarView.vue'
 
-const api = vi.hoisted(() => ({ load: vi.fn(), loadLibrary: vi.fn(), getById: vi.fn(), etagFor: vi.fn(), replace: vi.fn(), notify: vi.fn(), prospects: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), publish: vi.fn(), markPublished: vi.fn(), push: vi.fn(), entries: [] as any[] }))
+const api = vi.hoisted(() => ({ load: vi.fn(), loadLibrary: vi.fn(), getById: vi.fn(), etagFor: vi.fn(), replace: vi.fn(), notify: vi.fn(), prospects: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), publish: vi.fn(), markPublished: vi.fn(), push: vi.fn(), entries: [] as any[], records: [] as any[] }))
 vi.mock('../api/prospects', () => ({ listProspects: api.prospects }))
 vi.mock('../api/scheduling', () => ({ createSchedules: api.create, updateSchedule: api.update, deleteSchedule: api.remove, publishSchedule: api.publish, getCalendar: vi.fn() }))
 vi.mock('../stores/calendar', () => ({ useCalendarStore: () => ({ entries: api.entries, loaded: true, loading: false, error: '', load: api.load }) }))
-vi.mock('../stores/contentLibrary', () => ({ useContentLibraryStore: () => ({ records: [{ id: 'content-1', title: 'Approval workflows', status: 'Approved', platforms: ['instagram'], targetIndustry: null, targetProspectId: null, planningNotes: null, details: { creative: { instagram: [], linkedin: [], linkedinReusesInstagram: false }, publications: {} } }], load: api.loadLibrary, getById: api.getById, etagFor: api.etagFor, replaceCanonical: api.replace, markPublished: api.markPublished }) }))
+vi.mock('../stores/contentLibrary', () => ({ useContentLibraryStore: () => ({ records: api.records, load: api.loadLibrary, getById: api.getById, etagFor: api.etagFor, replaceCanonical: api.replace, markPublished: api.markPublished }) }))
 vi.mock('../stores/products', () => ({ useProductsStore: () => ({ products: [], load: vi.fn() }) }))
 vi.mock('../stores/companyContext', () => ({ useCompanyContextStore: () => ({ companyProfile: { name: 'Shifd Labs' }, load: vi.fn() }) }))
 vi.mock('../stores/ui', () => ({ useUiStore: () => ({ notify: api.notify }) }))
@@ -30,6 +30,7 @@ function mountPage() {
 describe('CalendarView planning workflow', () => {
   beforeEach(() => {
     api.entries = []
+    api.records = [{ id: 'content-1', title: 'Approval workflows', status: 'Approved', platforms: ['instagram'], targetIndustry: null, targetProspectId: null, planningNotes: null, details: { creative: { instagram: [], linkedin: [], linkedinReusesInstagram: false }, publications: {} } }]
     api.load.mockResolvedValue([]); api.loadLibrary.mockResolvedValue(undefined); api.prospects.mockResolvedValue({ data: [prospect] })
     api.getById.mockResolvedValue({ id: 'content-1', version: 1 }); api.etagFor.mockReturnValue('"1"')
     api.create.mockResolvedValue({ data: { id: 'content-1', version: 2 } }); api.update.mockResolvedValue({ data: { id: 'content-1', version: 2 } })
@@ -76,5 +77,31 @@ describe('CalendarView planning workflow', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'Confirm Publication')?.trigger('click')
     await flushPromises()
     expect(api.markPublished).toHaveBeenCalledWith('content-1', 'instagram', expect.objectContaining({ publishedAt: expect.stringMatching(/[+-]\d\d:\d\d$/), postUrl: '' }))
+  })
+
+  it('shows a saved post URL and preloads it for a publication correction', async () => {
+    const publishedAt = '2026-11-16T10:30:42+07:00'
+    const oldUrl = 'https://www.instagram.com/p/old-post/'
+    const newUrl = 'https://www.instagram.com/p/new-post/'
+    const scheduledAt = new Date(publishedAt)
+    api.entries = [{ id: 'schedule-1', contentId: 'content-1', title: 'Approval workflows', platform: 'instagram', contextName: 'Shifd Labs', pillar: 'Educational', plannedBy: { id: 'user-1', name: 'Founder' }, scheduleCreatedAt: publishedAt, scheduledDate: '2026-11-16', scheduledTime: '09:00', scheduledAt, status: 'Published' }]
+    api.records[0].details.publications.instagram = { publishedAt, postUrl: oldUrl, notes: 'Original note', status: 'Published' }
+    api.getById.mockResolvedValue({ id: 'content-1', version: 2, publications: [{ platform: 'instagram', publishedAt, postUrl: oldUrl, notes: 'Original note' }] })
+    api.markPublished.mockResolvedValue(true)
+
+    const wrapper = mountPage(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('Approval workflows'))?.trigger('click')
+    await flushPromises()
+    expect(wrapper.get(`a[href="${oldUrl}"]`).text()).toBe(oldUrl)
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Edit Publication')?.trigger('click')
+    await flushPromises()
+    expect(api.getById).toHaveBeenCalledWith('content-1', true)
+    expect((wrapper.get('[aria-label="Post URL (optional)"]').element as HTMLInputElement).value).toBe(oldUrl)
+    expect((wrapper.get('[aria-label="Publication notes (optional)"]').element as HTMLInputElement).value).toBe('Original note')
+    await wrapper.get('[aria-label="Post URL (optional)"]').setValue(newUrl)
+    await wrapper.findAll('button').find((button) => button.text() === 'Save Changes')?.trigger('click')
+    await flushPromises()
+    expect(api.markPublished).toHaveBeenCalledWith('content-1', 'instagram', expect.objectContaining({ publishedAt, postUrl: newUrl, notes: 'Original note' }))
   })
 })

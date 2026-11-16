@@ -51,9 +51,11 @@ const copiedEntryId = ref<string | null>(null)
 const previewAsset = ref<ContentAssetRecord | null>(null)
 const previewModalOpen = ref(false)
 const publicationModalOpen = ref(false)
+const publicationSaving = ref(false)
 const publicationEntryId = ref<string | null>(null)
 const publishedDate = ref(dateKey(new Date()))
 const publishedTime = ref(timeKey(new Date()))
+const originalPublishedAt = ref<string | null>(null)
 const postUrl = ref('')
 const publicationNotes = ref('')
 const publicationError = ref('')
@@ -341,25 +343,35 @@ function openCreative(asset?: ContentAssetRecord) {
   previewModalOpen.value = true
 }
 
-function openPublication(entry: ContentCalendarEntry) {
+async function openPublication(entry: ContentCalendarEntry) {
+  const record = await library.getById(entry.contentId, true)
+  if (!record) {
+    ui.notify('Unable to load the publication. Please try again.', 'danger')
+    return
+  }
   publicationEntryId.value = entry.id
-  const now = new Date()
-  publishedDate.value = dateKey(now)
-  publishedTime.value = timeKey(now)
-  postUrl.value = ''
-  publicationNotes.value = ''
+  const previous = record.publications?.find((publication) => publication.platform === entry.platform)
+  const publishedAt = previous ? new Date(previous.publishedAt) : new Date()
+  originalPublishedAt.value = previous?.publishedAt ?? null
+  publishedDate.value = dateKey(publishedAt)
+  publishedTime.value = timeKey(publishedAt)
+  postUrl.value = previous?.postUrl ?? ''
+  publicationNotes.value = previous?.notes ?? ''
   publicationError.value = ''
   publicationModalOpen.value = true
 }
 
 async function confirmPublication() {
-  if (!publicationEntry.value) return
+  if (!publicationEntry.value || publicationSaving.value) return
   const publishedPlatform = publicationEntry.value.platform
   if (!publishedDate.value || !publishedTime.value) {
     publicationError.value = 'Published date and time are required.'
     return
   }
-  const publishedAt = localTimestamp(publishedDate.value, publishedTime.value).scheduledAt
+  const originalDate = originalPublishedAt.value ? new Date(originalPublishedAt.value) : null
+  const publishedAt = originalDate && publishedDate.value === dateKey(originalDate) && publishedTime.value === timeKey(originalDate)
+    ? originalPublishedAt.value!
+    : localTimestamp(publishedDate.value, publishedTime.value).scheduledAt
   if (Number.isNaN(new Date(publishedAt).getTime())) {
     publicationError.value = 'Enter a valid published date and time.'
     return
@@ -374,19 +386,24 @@ async function confirmPublication() {
       return
     }
   }
-  const updated = await library.markPublished(publicationEntry.value.contentId, publicationEntry.value.platform, {
-    publishedAt,
-    postUrl: normalizedPostUrl,
-    notes: publicationNotes.value.trim(),
-  })
-  if (!updated) {
-    publicationError.value = 'This scheduled entry could not be updated.'
-    return
+  publicationSaving.value = true
+  try {
+    const updated = await library.markPublished(publicationEntry.value.contentId, publicationEntry.value.platform, {
+      publishedAt,
+      postUrl: normalizedPostUrl,
+      notes: publicationNotes.value.trim(),
+    })
+    if (!updated) {
+      publicationError.value = library.error || 'This scheduled entry could not be updated.'
+      return
+    }
+    publicationModalOpen.value = false
+    publicationError.value = ''
+    await loadCalendar()
+    ui.notify(`${platformLabel(publishedPlatform)} publication saved.`, 'success')
+  } finally {
+    publicationSaving.value = false
   }
-  publicationModalOpen.value = false
-  publicationError.value = ''
-  await loadCalendar()
-  ui.notify(`${platformLabel(publishedPlatform)} marked as published.`, 'success')
 }
 
 const rangeStart = computed(() => viewMode.value === 'month' ? new Date(anchorDate.value.getFullYear(), anchorDate.value.getMonth(), 1) : startOfWeek(anchorDate.value))
@@ -458,10 +475,10 @@ onMounted(() => { void loadCalendar() })
       <aside class="calendar-sidebar">
         <BaseCard v-if="selectedEntry && selectedRecord" :title="selectedEntry.title" description="Manual publication workspace">
           <template #actions><StatusBadge :tone="calendarTone(selectedEntry.status)" dot>{{ selectedEntry.status }}</StatusBadge></template>
-          <dl class="calendar-entry-details"><div><dt>Platform</dt><dd>{{ platformLabel(selectedEntry.platform) }}</dd></div><div><dt>Product / Context</dt><dd>{{ selectedEntry.contextName }}</dd></div><div><dt>Content Pillar</dt><dd>{{ selectedEntry.pillar }}</dd></div><div><dt>Targeting</dt><dd>{{ selectedEntry.targetIndustry ? `Industry · ${selectedEntry.targetIndustry}` : 'General' }}{{ selectedEntry.prospect ? ` · Prospect · ${selectedEntry.prospect.name}` : '' }}</dd></div><div v-if="selectedEntry.planningNotes"><dt>Planning Notes</dt><dd>{{ selectedEntry.planningNotes }}</dd></div><div><dt>Planned</dt><dd>{{ formatShortDate(selectedEntry.scheduledAt, true) }} · {{ selectedEntry.scheduledTime }}</dd></div><div><dt>Plan recorded</dt><dd>{{ selectedEntry.plannedBy.name }} · {{ formatTimestamp(selectedEntry.scheduleCreatedAt) }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]"><dt>Actual Publication</dt><dd>{{ formatTimestamp(selectedRecord.details.publications[selectedEntry.platform]?.publishedAt ?? '') }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.postUrl"><dt>Published Post</dt><dd><a :href="selectedRecord.details.publications[selectedEntry.platform]?.postUrl" target="_blank" rel="noopener noreferrer">Open post</a></dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.notes"><dt>Publication Notes</dt><dd>{{ selectedRecord.details.publications[selectedEntry.platform]?.notes }}</dd></div><div><dt>Lifecycle Status</dt><dd>{{ contentStatus(selectedRecord) }}</dd></div></dl>
+          <dl class="calendar-entry-details"><div><dt>Platform</dt><dd>{{ platformLabel(selectedEntry.platform) }}</dd></div><div><dt>Product / Context</dt><dd>{{ selectedEntry.contextName }}</dd></div><div><dt>Content Pillar</dt><dd>{{ selectedEntry.pillar }}</dd></div><div><dt>Targeting</dt><dd>{{ selectedEntry.targetIndustry ? `Industry · ${selectedEntry.targetIndustry}` : 'General' }}{{ selectedEntry.prospect ? ` · Prospect · ${selectedEntry.prospect.name}` : '' }}</dd></div><div v-if="selectedEntry.planningNotes"><dt>Planning Notes</dt><dd>{{ selectedEntry.planningNotes }}</dd></div><div><dt>Planned</dt><dd>{{ formatShortDate(selectedEntry.scheduledAt, true) }} · {{ selectedEntry.scheduledTime }}</dd></div><div><dt>Plan recorded</dt><dd>{{ selectedEntry.plannedBy.name }} · {{ formatTimestamp(selectedEntry.scheduleCreatedAt) }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]"><dt>Actual Publication</dt><dd>{{ formatTimestamp(selectedRecord.details.publications[selectedEntry.platform]?.publishedAt ?? '') }}</dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.postUrl"><dt>Published Post</dt><dd><a :href="selectedRecord.details.publications[selectedEntry.platform]?.postUrl" target="_blank" rel="noopener noreferrer">{{ selectedRecord.details.publications[selectedEntry.platform]?.postUrl }}</a></dd></div><div v-if="selectedRecord.details.publications[selectedEntry.platform]?.notes"><dt>Publication Notes</dt><dd>{{ selectedRecord.details.publications[selectedEntry.platform]?.notes }}</dd></div><div><dt>Lifecycle Status</dt><dd>{{ contentStatus(selectedRecord) }}</dd></div></dl>
           <div class="calendar-copy-preview"><span>{{ selectedEntry.platform === 'instagram' ? 'Caption preview' : 'Post preview' }}</span><p>{{ entryCopy(selectedEntry) }}</p></div>
           <div v-if="selectedAssets.length" class="calendar-asset-strip"><ContentAssetThumbnail v-for="asset in selectedAssets" :key="asset.id" :asset="asset" @preview="openCreative" /></div>
-          <div class="calendar-detail-actions"><BaseButton size="compact" @click="router.push(`/content/${selectedEntry.contentId}`)">View Content</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPlanning(selectedEntry)">Edit / Reschedule</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="ghost" size="compact" @click="cancelPlan(selectedEntry)">Cancel Plan</BaseButton><BaseButton variant="secondary" size="compact" @click="copyEntry(selectedEntry)">{{ copiedEntryId === selectedEntry.id ? 'Copied' : selectedEntry.platform === 'instagram' ? 'Copy Caption' : 'Copy Post' }}</BaseButton><BaseButton variant="secondary" size="compact" :disabled="selectedAssets.length === 0" @click="openCreative()">View Creative</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPublication(selectedEntry)">Mark as Published</BaseButton></div>
+          <div class="calendar-detail-actions"><BaseButton size="compact" @click="router.push(`/content/${selectedEntry.contentId}`)">View Content</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="secondary" size="compact" @click="openPlanning(selectedEntry)">Edit / Reschedule</BaseButton><BaseButton v-if="selectedEntry.status !== 'Published'" variant="ghost" size="compact" @click="cancelPlan(selectedEntry)">Cancel Plan</BaseButton><BaseButton variant="secondary" size="compact" @click="copyEntry(selectedEntry)">{{ copiedEntryId === selectedEntry.id ? 'Copied' : selectedEntry.platform === 'instagram' ? 'Copy Caption' : 'Copy Post' }}</BaseButton><BaseButton variant="secondary" size="compact" :disabled="selectedAssets.length === 0" @click="openCreative()">View Creative</BaseButton><BaseButton variant="secondary" size="compact" @click="openPublication(selectedEntry)">{{ selectedEntry.status === 'Published' ? 'Edit Publication' : 'Mark as Published' }}</BaseButton></div>
         </BaseCard>
 
         <BaseCard title="Upcoming Content" description="Next scheduled manual publication tasks.">
@@ -470,9 +487,9 @@ onMounted(() => { void loadCalendar() })
       </aside>
     </div>
 
-    <BaseModal v-model="publicationModalOpen" title="Mark Content as Published" description="Use this after publishing the content manually on the selected platform.">
+    <BaseModal v-model="publicationModalOpen" :title="publicationEntry?.status === 'Published' ? 'Edit Publication' : 'Mark Content as Published'" description="Record the published date, post URL, and notes for this platform.">
       <div v-if="publicationEntry" class="publication-form"><dl><div><dt>Platform</dt><dd>{{ platformLabel(publicationEntry.platform) }}</dd></div><div><dt>Scheduled Date / Time</dt><dd>{{ formatShortDate(publicationEntry.scheduledAt, true) }} · {{ publicationEntry.scheduledTime }}</dd></div></dl><BaseInput v-model="publishedDate" type="date" label="Published Date" required :error="publicationError && !publishedDate ? 'Published date is required.' : undefined" /><BaseInput v-model="publishedTime" type="time" label="Published Time" required :error="publicationError && !publishedTime ? 'Published time is required.' : undefined" /><BaseInput v-model="postUrl" type="url" label="Post URL (optional)" placeholder="https://" /><BaseInput v-model="publicationNotes" label="Publication notes (optional)" placeholder="Internal recording notes" /><p v-if="publicationError" class="publication-error" role="alert">{{ publicationError }}</p></div>
-      <template #footer><div class="calendar-modal-actions"><BaseButton variant="ghost" @click="publicationModalOpen = false">Cancel</BaseButton><BaseButton @click="confirmPublication">Confirm Publication</BaseButton></div></template>
+      <template #footer><div class="calendar-modal-actions"><BaseButton variant="ghost" @click="publicationModalOpen = false">Cancel</BaseButton><BaseButton :disabled="publicationSaving" @click="confirmPublication">{{ publicationSaving ? 'Saving…' : publicationEntry?.status === 'Published' ? 'Save Changes' : 'Confirm Publication' }}</BaseButton></div></template>
     </BaseModal>
 
     <BaseModal v-model="planningModalOpen" :title="editingEntryId ? 'Edit Planned Content' : 'Plan Content'" description="Schedule approved content for manual publication. Prospect details remain internal planning context.">
@@ -549,6 +566,7 @@ onMounted(() => { void loadCalendar() })
 .calendar-entry-details div, .publication-form dl div { display: grid; gap: 3px; }
 .calendar-entry-details dt, .publication-form dt { color: var(--color-muted); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .calendar-entry-details dd, .publication-form dd { font-size: 12px; font-weight: 500; }
+.calendar-entry-details dd { min-width: 0; overflow-wrap: anywhere; }
 .calendar-copy-preview { display: grid; gap: 8px; margin-top: 16px; padding: 12px; border-radius: 6px; background: var(--color-well); }
 .calendar-copy-preview span { color: var(--color-muted); font-size: 10px; font-weight: 600; text-transform: uppercase; }
 .calendar-copy-preview p { display: -webkit-box; overflow: hidden; color: var(--color-text); font-size: 12px; line-height: 1.55; white-space: pre-line; -webkit-box-orient: vertical; -webkit-line-clamp: 6; }
