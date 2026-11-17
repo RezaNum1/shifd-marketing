@@ -44,7 +44,7 @@ function points(values: Array<number | null>) { return values.map((value, index)
       <g v-for="item in series" :key="item.label">
         <polyline :points="points(item.values)" fill="none" :stroke="item.color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
         <template v-for="(value, index) in item.values" :key="`${item.label}-${index}`">
-          <circle v-if="value !== null" :cx="x(index)" :cy="y(value)" r="3.5" :fill="item.color" stroke="white" stroke-width="2" />
+          <circle v-if="value !== null" :cx="x(index)" :cy="y(value)" r="3.5" :fill="item.color" stroke="white" stroke-width="2"><title>{{ item.label }} · {{ labels[index] }}: {{ formatValue(value) }}</title></circle>
         </template>
       </g>
       <g class="trend-chart__x-labels">

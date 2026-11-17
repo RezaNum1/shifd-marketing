@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { getPerformance } from './performance'
-import { request } from './client'
+import { downloadEvaluationRange, downloadPerformanceReport, getPerformance } from './performance'
+import { downloadFile, request } from './client'
 
-vi.mock('./client', () => ({ request: vi.fn() }))
+vi.mock('./client', () => ({ request: vi.fn(), downloadFile: vi.fn() }))
 
 describe('Performance report request', () => {
   it('uses date parameters for a custom reporting range', () => {
@@ -13,5 +13,15 @@ describe('Performance report request', () => {
   it('keeps the existing weekly presets', () => {
     getPerformance(4, 'combined')
     expect(request).toHaveBeenCalledWith('/performance?platform=combined&weeks=4')
+  })
+
+  it('exports Overview with the applied date range and platform', () => {
+    downloadPerformanceReport(8, 'linkedin', { startDate: '2026-11-01', endDate: '2026-11-17' })
+    expect(downloadFile).toHaveBeenCalledWith('/performance/export?platform=linkedin&startDate=2026-11-01&endDate=2026-11-17')
+  })
+
+  it('exports Evaluation with the selected custom dates', () => {
+    downloadEvaluationRange('2026-11-01', '2026-11-17')
+    expect(downloadFile).toHaveBeenCalledWith('/evaluation/range/export?startDate=2026-11-01&endDate=2026-11-17')
   })
 })

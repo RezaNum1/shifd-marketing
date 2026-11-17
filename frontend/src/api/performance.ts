@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 import type { BackendBusinessInquiry, BackendInquiryMetric, BackendPerformanceReport, BackendPublicationFeedItem, BackendOverviewReport, BackendPublicationMetrics, BackendWeeklyMetric } from '../types/backend'
 import type { CustomEvaluationRange, MarketingEvaluationDashboard } from '../types/performance'
 
@@ -12,6 +12,16 @@ export function getEvaluation() { return request<MarketingEvaluationDashboard>('
 export function getEvaluationRange(startDate: string, endDate: string) {
   const query = new URLSearchParams({ startDate, endDate })
   return request<CustomEvaluationRange>(`/evaluation/range?${query.toString()}`)
+}
+export function downloadEvaluationRange(startDate: string, endDate: string) {
+  const query = new URLSearchParams({ startDate, endDate })
+  return downloadFile(`/evaluation/range/export?${query.toString()}`)
+}
+export function downloadPerformanceReport(weeks: 4 | 8 | 12, platform: 'combined' | 'instagram' | 'linkedin', range?: { startDate: string; endDate: string }) {
+  const query = new URLSearchParams({ platform })
+  if (range) { query.set('startDate', range.startDate); query.set('endDate', range.endDate) }
+  else query.set('weeks', String(weeks))
+  return downloadFile(`/performance/export?${query.toString()}`)
 }
 export function saveEvaluation(input: { startDate: string; timezone?: string; definitions?: { customNotes?: string } }) { return request<MarketingEvaluationDashboard['evaluation']>('/evaluation', { method: 'PUT', json: input }) }
 export function recordEvaluationSnapshot(id: string, input: Record<string, unknown>) { return request(`/evaluation/${id}/snapshots`, { method: 'POST', json: input }) }

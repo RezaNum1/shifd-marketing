@@ -18,8 +18,11 @@ import { useContentLibraryStore } from '../stores/contentLibrary'
 import { listProspects } from '../api/prospects'
 import type { Prospect } from '../types/prospect'
 import { useUiStore } from '../stores/ui'
+import * as performanceApi from '../api/performance'
+import { errorMessage } from '../api/client'
 import InlineAlert from '../components/ui/InlineAlert.vue'
 import type { CustomEvaluationRange, PerformancePlatform } from '../types/performance'
+import { evaluationInsights } from '../utils/evaluationInsights'
 import type { SelectOption, Tone } from '../types/ui'
 
 type PlatformFilter = 'combined' | PerformancePlatform
@@ -64,6 +67,7 @@ const prospects = ref<Prospect[]>([])
 const customRangeStart = ref(addLocalDays(localDateInZone(new Date(), 'Asia/Jakarta'), -27))
 const customRangeEnd = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
 const customRangeApplying = ref(false)
+const exportLoading = ref(false)
 const growthMetric = ref('totalInteractions')
 const growthPlatform = ref<PerformancePlatform>('instagram')
 const platformRows = ['instagram', 'linkedin'] as const
@@ -74,6 +78,11 @@ const snapshotForm = reactive({ stage: 'week0' as 'week0' | 'week4', instagramFo
 const productionForm = reactive({ contentId: '', minutes: '', occurredAt: localDateTimeInput(), notes: '' })
 const evaluation = computed(() => performance.evaluation)
 const customRange = computed(() => performance.customRange)
+const rangeInsights = computed(() => customRange.value ? evaluationInsights(customRange.value) : null)
+const rangeWeekLabels = computed(() => rangeInsights.value?.weekLabels.map((date) => formatDate(date, { month: 'short', day: 'numeric' })) ?? [])
+const exportRangeReady = computed(() => isEvaluationPage.value
+  ? Boolean(customRange.value && customRange.value.range.startDate === customRangeStart.value && customRange.value.range.endDate === customRangeEnd.value && !performance.customRangeLoading)
+  : period.value !== 'custom' || Boolean(appliedPerformanceRange.value && appliedPerformanceRange.value.startDate === performanceRangeStart.value && appliedPerformanceRange.value.endDate === performanceRangeEnd.value))
 const growthMetricOptions: SelectOption[] = [
   { value: 'views', label: 'Views' }, { value: 'reach', label: 'Reach' }, { value: 'likes', label: 'Likes' },
   { value: 'comments', label: 'Comments' }, { value: 'saves', label: 'Saves' }, { value: 'shares', label: 'Shares' },
@@ -349,16 +358,6 @@ function localDateInZone(value: Date, timezone: string) { return new Intl.DateTi
 function addLocalDays(value: string, days: number) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
 function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
 function comparisonChange(value: number | null) { return value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toLocaleString()}` }
-function growthForPublication(publication: CustomEvaluationRange['publications'][number]) {
-  const values = publication.metricHistory.flatMap((snapshot) => {
-    const raw = snapshot[growthMetric.value as keyof typeof snapshot]
-    return raw === null ? [] : [Number(raw)]
-  })
-  if (values.length < 2) return null
-  const first = values[0]!
-  const change = values.at(-1)! - first
-  return { change, percentage: first > 0 ? change / first * 100 : null }
-}
 async function saveEvaluation() {
   evaluationSaving.value = true
   const result = await performance.configureEvaluation({ startDate: evaluationStart.value, definitions: { customNotes: measurementDefinitionNotes.value } })
@@ -373,6 +372,33 @@ async function applyCustomRange() {
   customRangeApplying.value = true
   await performance.loadCustomEvaluationRange(customRangeStart.value, customRangeEnd.value)
   customRangeApplying.value = false
+}
+async function exportExcel() {
+  if (exportLoading.value || !exportRangeReady.value) return
+  const evaluationRange = customRange.value?.range
+  if (isEvaluationPage.value ? !evaluationRange : !report.value || performance.loading) return
+  exportLoading.value = true
+  try {
+    const blob = isEvaluationPage.value && evaluationRange
+      ? await performanceApi.downloadEvaluationRange(evaluationRange.startDate, evaluationRange.endDate)
+      : await performanceApi.downloadPerformanceReport(periodWeeks.value, platform.value, period.value === 'custom' ? appliedPerformanceRange.value ?? undefined : undefined)
+    const name = isEvaluationPage.value && evaluationRange
+      ? `evaluation-${evaluationRange.startDate}-to-${evaluationRange.endDate}.xlsx`
+      : `performance-overview-${period.value === 'custom' && appliedPerformanceRange.value ? `${appliedPerformanceRange.value.startDate}-to-${appliedPerformanceRange.value.endDate}` : `latest-${period.value}-weeks`}-${platform.value}.xlsx`
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ui.notify('Excel exported with Panduan Data and Data Dictionary.', 'success')
+  } catch (reason: unknown) {
+    ui.notify(errorMessage(reason, 'Unable to export the Excel workbook.'), 'warning')
+  } finally {
+    exportLoading.value = false
+  }
 }
 async function saveSnapshot() {
   const config = evaluation.value?.evaluation
@@ -404,7 +430,7 @@ watch([period, platform], () => { void loadSelectedReport() })
 <template>
   <div class="page-stack performance-page">
     <PageHeader :title="isEvaluationPage ? 'Performance Evaluation' : 'Performance'" :description="isEvaluationPage ? 'Set the evaluation period, record verified observations, and review the supporting evidence.' : 'A focused view of publishing activity and channel results.'" :breadcrumbs="[{ label: 'Performance', to: '/performance' }, ...(isEvaluationPage ? [{ label: 'Evaluation' }] : [])]" :help="isEvaluationPage ? evaluationHelp : overviewHelp">
-      <template #actions><div v-if="!isEvaluationPage" class="performance-header-controls"><BaseSelect v-model="period" label="Reporting period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="router.push('/performance/evaluation')"><AppIcon name="check" :size="16" />Open Evaluation</BaseButton></div><div v-else class="performance-header-controls"><BaseButton variant="secondary" @click="router.push('/performance')"><AppIcon name="arrow-left" :size="16" />Back to Performance</BaseButton><BaseButton variant="secondary" @click="router.push('/performance/linkedin')"><AppIcon name="linkedin" :size="16" />LinkedIn Metrics</BaseButton></div></template>
+      <template #actions><div v-if="!isEvaluationPage" class="performance-header-controls"><BaseSelect v-model="period" label="Reporting period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" :loading="exportLoading" :disabled="!report || performance.loading || exportLoading || !exportRangeReady" :title="exportRangeReady ? 'Download the applied report as Excel.' : 'Apply the date range before exporting.'" @click="exportExcel">Export Excel</BaseButton><BaseButton variant="secondary" @click="router.push('/performance/evaluation')"><AppIcon name="check" :size="16" />Open Evaluation</BaseButton></div><div v-else class="performance-header-controls"><BaseButton variant="secondary" @click="router.push('/performance')"><AppIcon name="arrow-left" :size="16" />Back to Performance</BaseButton><BaseButton variant="secondary" @click="router.push('/performance/linkedin')"><AppIcon name="linkedin" :size="16" />LinkedIn Metrics</BaseButton><BaseButton variant="secondary" :loading="exportLoading" :disabled="!customRange || performance.customRangeLoading || exportLoading || !exportRangeReady" :title="exportRangeReady ? 'Download the applied report as Excel.' : 'Apply the date range before exporting.'" @click="exportExcel">Export Excel</BaseButton></div></template>
     </PageHeader>
     <section v-if="!isEvaluationPage && period === 'custom'" class="performance-reporting-range" aria-label="Custom reporting period">
       <div class="performance-reporting-range__controls"><BaseInput v-model="performanceRangeStart" label="Start date" type="date" /><BaseInput v-model="performanceRangeEnd" label="End date" type="date" /><BaseButton :disabled="performance.loading || !performanceRangeStart || !performanceRangeEnd || performanceRangeStart > performanceRangeEnd" @click="applyPerformanceRange">{{ performance.loading ? 'Loading…' : 'Apply date range' }}</BaseButton></div>
@@ -422,7 +448,7 @@ watch([period, platform], () => { void loadSelectedReport() })
     <section v-if="isEvaluationPage" class="evaluation-section" aria-label="Four-week research evaluation">
       <BaseCard title="Custom date range" description="Choose any start and end date to review published content and prospect outreach week by week.">
         <div class="evaluation-controls"><BaseInput v-model="customRangeStart" label="Start date" type="date" /><BaseInput v-model="customRangeEnd" label="End date" type="date" /><BaseButton :disabled="customRangeApplying || !customRangeStart || !customRangeEnd || customRangeStart > customRangeEnd" @click="applyCustomRange">{{ customRangeApplying ? 'Loading…' : 'Apply date range' }}</BaseButton></div>
-        <p v-if="customRange" class="helper-text">{{ formatDate(customRange.range.startDate) }} – {{ formatDate(customRange.range.endDate) }} · {{ customRange.range.days }} days · timezone {{ customRange.range.timezone }}</p>
+        <p v-if="customRange" class="helper-text">{{ formatDate(customRange.range.startDate) }} – {{ formatDate(customRange.range.endDate) }} · {{ customRange.range.days }} days · timezone {{ customRange.range.timezone }}. Excel export uses this applied range and includes Panduan Data and Data Dictionary. The four-week research comparison is included when the full baseline and intervention fit inside the range.</p>
         <InlineAlert v-if="performance.customRangeError" title="Date range unavailable" tone="danger">{{ performance.customRangeError }}</InlineAlert>
         <div v-if="performance.customRangeLoading" class="evaluation-note" role="status">Loading the selected period…</div>
         <template v-if="customRange">
@@ -434,8 +460,26 @@ watch([period, platform], () => { void loadSelectedReport() })
             <div class="content-growth__chart"><PublicationMetricChart :items="publicationMetricChartItems" :format-value="formatNumber" /></div>
             <p v-if="platformMetricTotal.postCount > platformMetricTotal.postsWithMetrics" class="helper-text">{{ growthPlatform === 'instagram' ? 'Some posts do not have metrics yet. Connect and sync Instagram to collect available post metrics.' : 'Some posts do not have metrics yet. Add them from LinkedIn Metrics.' }}</p>
           </section>
-          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-content-table"><caption>Post-level metrics for published content in the selected range</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Interactions</th><th>{{ selectedGrowthMetricLabel }} growth</th><th>Observations</th></tr></thead><tbody><tr v-for="publication in customRange.publications" :key="publication.id"><th scope="row"><span class="content-link"><strong>{{ publication.title }}</strong><small>{{ publication.targetIndustry || 'general' }} · {{ publication.targetProspectId ? 'prospect-linked' : 'no prospect linked' }}</small></span></th><td>{{ publication.platform }}</td><td>{{ formatDate(publication.publishedAt) }}</td><td>{{ publication.metrics?.views === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.views)) }}</td><td>{{ publication.metrics?.reach === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.reach)) }}</td><td>{{ publication.metrics?.totalInteractions === null || !publication.metrics ? 'Not available' : formatNumber(Number(publication.metrics.totalInteractions)) }}</td><td>{{ growthForPublication(publication) ? `${signedNumber(growthForPublication(publication)!.change)}${growthForPublication(publication)!.percentage === null ? '' : ` (${formatPercent(growthForPublication(publication)!.percentage!)})`}` : 'Need 2 observations' }}</td><td>{{ publication.metricHistory.length }}</td></tr><tr v-if="!customRange.publications.length"><td colspan="8">No published content in this date range.</td></tr></tbody></table></div>
-          <div class="evaluation-table-wrap"><table class="performance-table evaluation-table custom-range-table"><caption>Weekly publishing and prospect activity, with weeks counted from the selected start date</caption><thead><tr><th>Week</th><th>Published</th><th>Instagram</th><th>LinkedIn</th><th>Outbound</th><th>Prospects emailed</th><th>Replies</th><th>Follow-ups</th><th>Meetings</th><th>Demos</th></tr></thead><tbody><tr v-for="week in customRange.weekly" :key="week.startDate"><th scope="row">{{ formatDate(week.startDate, { month: 'short', day: 'numeric' }) }} – {{ formatDate(week.endDate, { month: 'short', day: 'numeric', year: 'numeric' }) }}</th><td>{{ week.publishedPosts }}</td><td>{{ week.instagram }}</td><td>{{ week.linkedin }}</td><td>{{ week.outboundActivities }}</td><td>{{ week.prospectsContacted }}</td><td>{{ week.repliesReceived }}<small>{{ week.interestedResponses }} interested</small></td><td>{{ week.followUpsCompleted }}</td><td>{{ week.meetings }}</td><td>{{ week.demonstrations }}</td></tr><tr v-if="customRange.weekly.length === 0"><td colspan="10">No activity in this date range.</td></tr></tbody></table></div>
+          <section v-if="rangeInsights" class="custom-range-insights" aria-label="Selected range insights">
+            <div><span>Most active publishing week</span><strong>{{ rangeInsights.peakWeek ? formatDate(rangeInsights.peakWeek.startDate, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No posts yet' }}</strong><small>{{ rangeInsights.peakWeek ? `${rangeInsights.peakWeek.publishedPosts} published posts` : 'No publication recorded in this range' }}</small></div>
+            <div><span>Posts with metric data</span><strong>{{ rangeInsights.measuredPosts }} / {{ rangeInsights.publishedPosts }}</strong><small>A recorded zero counts as measured; missing values do not.</small></div>
+            <div><span>Weeks without a post</span><strong>{{ rangeInsights.weeksWithoutPosts }} / {{ rangeInsights.weekCount }}</strong><small>Weeks are counted from the selected start date.</small></div>
+            <div><span>Interested replies</span><strong>{{ rangeInsights.interestedReplies }} / {{ rangeInsights.replies }}</strong><small>Interested responses among replies recorded in this range.</small></div>
+          </section>
+          <div v-if="rangeInsights" class="custom-range-charts">
+            <section class="custom-range-chart" aria-labelledby="publishing-trend-title">
+              <div class="custom-range-chart__heading"><h3 id="publishing-trend-title">Publishing trend</h3><p>Compare Instagram and LinkedIn posts across the selected weeks.</p></div>
+              <div class="chart-legend"><span v-for="series in rangeInsights.publishingSeries" :key="series.label"><i :style="{ background: series.color }" />{{ series.label }}</span></div>
+              <TrendChart :labels="rangeWeekLabels" :series="rangeInsights.publishingSeries" :format-value="formatNumber" />
+              <p class="custom-range-chart__note">The final week may contain fewer than seven days.</p>
+            </section>
+            <section class="custom-range-chart" aria-labelledby="outreach-trend-title">
+              <div class="custom-range-chart__heading"><h3 id="outreach-trend-title">Prospect activity trend</h3><p>See when outreach and responses were recorded.</p></div>
+              <div class="chart-legend"><span v-for="series in rangeInsights.outreachSeries" :key="series.label"><i :style="{ background: series.color }" />{{ series.label }}</span></div>
+              <TrendChart :labels="rangeWeekLabels" :series="rangeInsights.outreachSeries" :format-value="formatNumber" />
+              <p class="custom-range-chart__note">These are activity counts by week. A reply may follow an email from an earlier week.</p>
+            </section>
+          </div>
           <details class="evaluation-details"><summary>Prospect activities ({{ customRange.outboundActivities.length }})</summary><ul class="inquiry-record-list"><li v-for="activity in customRange.outboundActivities" :key="activity.id">{{ activity.occurredAt ? formatDate(activity.occurredAt.slice(0, 10)) : '—' }} · {{ activity.prospectName }} · {{ activity.activityType.replaceAll('_', ' ') }}<span v-if="activity.responseClassification"> · {{ activity.responseClassification.replaceAll('_', ' ') }}</span></li><li v-if="!customRange.outboundActivities.length">No prospect activities during this range.</li></ul></details>
         </template>
       </BaseCard>
@@ -609,6 +653,16 @@ watch([period, platform], () => { void loadSelectedReport() })
 .custom-range-summary strong { color: var(--color-ink); font-size: 20px; }
 .custom-range-summary span { color: var(--color-ink); font-size: 12px; font-weight: 600; }
 .custom-range-summary small { color: var(--color-muted); font-size: 11px; }
+.custom-range-insights { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.custom-range-insights > div { display: grid; align-content: start; gap: 5px; min-width: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-well); }
+.custom-range-insights span { color: var(--color-subtle); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.custom-range-insights strong { color: var(--color-ink); font-size: 20px; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.custom-range-insights small { color: var(--color-muted); font-size: 11px; line-height: 1.45; }
+.custom-range-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.custom-range-chart { display: grid; align-content: start; gap: 14px; min-width: 0; padding: 18px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.custom-range-chart__heading h3 { margin: 0; color: var(--color-ink); font-size: 15px; }
+.custom-range-chart__heading p, .custom-range-chart__note { margin: 4px 0 0; color: var(--color-muted); font-size: 11px; line-height: 1.5; }
+.custom-range-chart :deep(.trend-chart) { min-height: 220px; }
 .content-growth { display: grid; gap: 8px; margin: 18px 0; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
 .content-growth__heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; }
 .content-growth__heading h3 { margin: 0; color: var(--color-ink); font-size: 15px; }
@@ -630,8 +684,6 @@ watch([period, platform], () => { void loadSelectedReport() })
 .snapshot-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; }
 .evaluation-table-wrap { overflow-x: auto; margin-top: 16px; }
 .evaluation-table { min-width: 820px; }
-.custom-range-table { min-width: 1060px; }
-.custom-range-content-table { min-width: 900px; }
 .platform-execution-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .platform-execution p, .platform-observation p, .evaluation-snapshot p, .outbound-period span { margin: 0; color: var(--color-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .platform-observation { margin: 10px 0; max-height: 260px; overflow: auto; }
@@ -702,7 +754,8 @@ watch([period, platform], () => { void loadSelectedReport() })
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-error { color: var(--color-danger); font-size: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .custom-range-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); } .custom-range-charts { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .performance-header-controls { width: 100%; align-items: stretch; } .performance-header-controls > * { flex: 1 1 180px; } .performance-toolbar, .performance-secondary-actions { align-items: flex-start; flex-direction: column; } .performance-toolbar__source { justify-content: flex-start; } .chart-grid, .performance-two-column { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .evaluation-two-column, .platform-execution-grid, .inquiry-form__grid, .production-form__grid { grid-template-columns: 1fr; } .activity-group > summary { align-items: flex-start; flex-direction: column; gap: 5px; } .activity-group > summary span { text-align: left; } .inquiry-summary small { width: 100%; margin-left: 0; } .custom-range-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .content-growth__heading { align-items: stretch; flex-direction: column; } .content-growth__filters { width: 100%; flex-direction: column; } .evaluation-progress > div:first-child { align-items: flex-start; flex-direction: column; } .snapshot-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list, .snapshot-form { grid-template-columns: 1fr; } }
+@media (max-width: 540px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .custom-range-insights { grid-template-columns: 1fr; } .output-grid { grid-template-columns: repeat(2, 1fr); } .metrics-form__grid, .source-status-list, .snapshot-form { grid-template-columns: 1fr; } }
 </style>

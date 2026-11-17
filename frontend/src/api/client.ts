@@ -105,6 +105,19 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return { data, page, etag: response.headers.get('ETag'), response }
 }
 
+export async function downloadFile(path: string): Promise<Blob> {
+  const response = await fetch(resolveUrl(path), {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'X-Request-ID': createRequestKey('frontend') },
+  })
+  if (!response.ok) {
+    const raw = await readResponseBody(response)
+    throw new ApiError(response.status, isErrorEnvelope(raw) ? raw.error : undefined)
+  }
+  return response.blob()
+}
+
 function resolveUrl(path: string) {
   const configured = String(import.meta.env.VITE_API_BASE_URL ?? '/api').trim() || '/api'
   if (/^https?:\/\//i.test(path)) return path

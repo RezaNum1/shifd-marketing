@@ -26,6 +26,7 @@ import type { Clock } from '../../shared/time/clock.js'
 import type { InstagramInsightsProvider } from './instagram/provider.js'
 import type { InstagramSyncResult } from './instagram/sync.js'
 import { createBusinessInquiry, createProductionTimeLog, readEvaluation, readEvaluationRange, saveEvaluation, saveEvaluationSnapshot } from './evaluation.js'
+import { evaluationWorkbook, performanceWorkbook } from './export-workbook.js'
 
 const metricKeys = ['weekStart', 'weekEnd', 'followers', 'reach', 'impressions', 'engagements', 'likes', 'comments', 'saves', 'publishedPosts', 'nativeEngagementRate', 'evidenceAssetId', 'notes'] as const
 const evaluationKeys = ['startDate', 'timezone', 'definitions'] as const
@@ -52,6 +53,25 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
     if (!startDate || !endDate) throw validationError('Choose both a start date and an end date.')
     if (startDate > endDate) throw validationError('The start date must be on or before the end date.')
     return reply.send({ data: await readEvaluationRange(app.prisma, auth.user.companyId, startDate, endDate) })
+  })
+
+  app.get('/evaluation/range/export', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = queryObject(request)
+    allowedKeys(query, ['startDate', 'endDate'], 'query')
+    const startDate = query.startDate ? parseDateOnly(query.startDate, 'startDate').toISOString().slice(0, 10) : undefined
+    const endDate = query.endDate ? parseDateOnly(query.endDate, 'endDate').toISOString().slice(0, 10) : undefined
+    if (!startDate || !endDate || startDate > endDate) throw validationError('Choose a valid start and end date.')
+    const asOf = options.clock.now()
+    const [data, research] = await Promise.all([
+      readEvaluationRange(app.prisma, auth.user.companyId, startDate, endDate),
+      readEvaluation(app.prisma, auth.user.companyId, asOf),
+    ])
+    const workbook = await evaluationWorkbook(data, asOf, research)
+    return reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', `attachment; filename="evaluation-${startDate}-to-${endDate}.xlsx"`)
+      .header('Cache-Control', 'private, no-store')
+      .send(workbook)
   })
 
   app.put('/evaluation', async (request, reply) => {
@@ -224,6 +244,21 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
     const asOf = options.clock.now()
     const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, asOf })
     return reply.send({ data: buildPerformanceReport(snapshot, query.weeks, query.platform, asOf, query.customRange) })
+  })
+
+  app.get('/performance/export', async (request, reply) => {
+    const auth = await requireAuth(request, reply)
+    const query = parsePerformanceQuery(request)
+    const asOf = options.clock.now()
+    const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, asOf })
+    const report = buildPerformanceReport(snapshot, query.weeks, query.platform, asOf, query.customRange)
+    const overview = buildOverviewReport(snapshot, asOf)
+    const workbook = await performanceWorkbook(report, overview, query.customRange)
+    const label = query.customRange ? `${query.customRange.startDate}-to-${query.customRange.endDate}` : `latest-${query.weeks}-weeks`
+    return reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', `attachment; filename="performance-overview-${label}-${query.platform}.xlsx"`)
+      .header('Cache-Control', 'private, no-store')
+      .send(workbook)
   })
 
   app.get('/overview', async (request, reply) => {
