@@ -24,19 +24,22 @@ export const usePerformanceStore = defineStore('performance', () => {
   const customRange = ref<CustomEvaluationRange | null>(null)
   const customRangeLoading = ref(false)
   const customRangeError = ref('')
+  let reportRequestId = 0
 
-  async function loadReport(weeks: 4 | 8 | 12 = 8, platform: 'combined' | PerformancePlatform = 'combined') {
+  async function loadReport(weeks: 4 | 8 | 12 = 8, platform: 'combined' | PerformancePlatform = 'combined', range?: { startDate: string; endDate: string }) {
+    const requestId = ++reportRequestId
     loading.value = true
     error.value = ''
     try {
-      const result = await performanceApi.getPerformance(weeks, platform)
+      const result = await performanceApi.getPerformance(weeks, platform, range)
+      if (requestId !== reportRequestId) return undefined
       report.value = result.data
       loaded.value = true
       return result.data
     } catch (reason: unknown) {
-      error.value = errorMessage(reason, 'Unable to load performance data.')
+      if (requestId === reportRequestId) error.value = errorMessage(reason, 'Unable to load performance data.')
       return undefined
-    } finally { loading.value = false }
+    } finally { if (requestId === reportRequestId) loading.value = false }
   }
 
   async function loadSupportingData() {

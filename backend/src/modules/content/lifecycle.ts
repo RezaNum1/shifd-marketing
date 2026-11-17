@@ -47,7 +47,7 @@ export function deriveResumeStep(input: {
 }
 
 export function hasCompleteVariantCopy(input: { copy: string | null; cta: string | null; hashtags: string | null; visualRecommendation: string | null }): boolean {
-  return [input.copy, input.cta, input.hashtags, input.visualRecommendation].every((value) => Boolean(value?.trim()))
+  return Boolean(input.copy?.trim())
 }
 
 export function deriveAdaptationState(input: {

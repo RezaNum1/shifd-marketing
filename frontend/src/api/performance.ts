@@ -2,8 +2,11 @@ import { request } from './client'
 import type { BackendBusinessInquiry, BackendInquiryMetric, BackendPerformanceReport, BackendPublicationFeedItem, BackendOverviewReport, BackendPublicationMetrics, BackendWeeklyMetric } from '../types/backend'
 import type { CustomEvaluationRange, MarketingEvaluationDashboard } from '../types/performance'
 
-export function getPerformance(weeks: 4 | 8 | 12, platform: 'combined' | 'instagram' | 'linkedin') {
-  return request<BackendPerformanceReport>(`/performance?weeks=${weeks}&platform=${platform}`)
+export function getPerformance(weeks: 4 | 8 | 12, platform: 'combined' | 'instagram' | 'linkedin', range?: { startDate: string; endDate: string }) {
+  const query = new URLSearchParams({ platform })
+  if (range) { query.set('startDate', range.startDate); query.set('endDate', range.endDate) }
+  else query.set('weeks', String(weeks))
+  return request<BackendPerformanceReport>(`/performance?${query.toString()}`)
 }
 export function getEvaluation() { return request<MarketingEvaluationDashboard>('/evaluation') }
 export function getEvaluationRange(startDate: string, endDate: string) {

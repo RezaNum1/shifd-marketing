@@ -52,7 +52,7 @@ export function saveCanvaDesignLink(id: string, url: string) {
 export function removeCanvaDesignLink(id: string) {
   return request<BackendCanvaDesignLink | null>(`/contents/${id}/canva-design-link`, { method: 'DELETE', json: {} })
 }
-export function createContent(input: { sourceIdeaId?: string; brief: ContentBriefInput; enabledPlatforms: BackendPlatform[] }, idempotencyKey = createRequestKey('content.create')) {
+export function createContent(input: { sourceIdeaId?: string; brief: ContentBriefInput; enabledPlatforms: BackendPlatform[]; creationMode: 'ai' | 'manual' }, idempotencyKey = createRequestKey('content.create')) {
   return request<BackendContent>('/contents', { method: 'POST', json: input, idempotencyKey })
 }
 export function updateContent(id: string, patch: Record<string, unknown>, etag: string | number) {

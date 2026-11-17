@@ -371,6 +371,13 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
     const invalidPlatform = await app.inject({ method: 'GET', url: '/api/performance?platform=whatsapp', headers: { cookie: auth.cookie } })
     expect(invalidWeeks.statusCode).toBe(422)
     expect(invalidPlatform.statusCode).toBe(422)
+    const custom = await app.inject({ method: 'GET', url: '/api/performance?platform=instagram&startDate=2026-09-10&endDate=2026-09-12', headers: { cookie: auth.cookie } })
+    expect(custom.statusCode).toBe(200)
+    expect(custom.json().data.period).toMatchObject({ basis: 'custom_date_range', requestedWeeks: 1, start: '2026-09-09T17:00:00.000Z', end: '2026-09-12T17:00:00.000Z' })
+    expect(custom.json().data.summary.published.explicitPosts).toBe(2)
+    expect((await app.inject({ method: 'GET', url: '/api/performance?startDate=2026-09-10', headers: { cookie: auth.cookie } })).statusCode).toBe(422)
+    expect((await app.inject({ method: 'GET', url: '/api/performance?startDate=2026-09-12&endDate=2026-09-10', headers: { cookie: auth.cookie } })).statusCode).toBe(422)
+    expect((await app.inject({ method: 'GET', url: '/api/performance?weeks=4&startDate=2026-09-10&endDate=2026-09-12', headers: { cookie: auth.cookie } })).statusCode).toBe(422)
     const unchanged = await prisma.$transaction(async (tx) => ({ publication: await tx.publicationRecord.count({ where: { variant: { content: { companyId } } } }), metric: await tx.weeklyMetric.count({ where: { socialAccount: { companyId } } }) }))
     expect(unchanged.publication).toBeGreaterThan(0)
     expect(unchanged.metric).toBeGreaterThan(0)
@@ -406,6 +413,39 @@ runIntegration('Phase 11 Performance, Metrics, and Reporting', () => {
       expect(order).toEqual([...order].sort().reverse())
     } finally {
       await removeReportContent(extra.id)
+    }
+  })
+
+  it('stores and returns every LinkedIn post analytics field across edits and snapshots', async () => {
+    const auth = await session(email)
+    const content = await createReportContent('linkedin-post-fields', ['linkedin'])
+    try {
+      const schedule = await createSchedule(content.id, content.variants[0]!.id, at('2026-09-13', 12), content.approval.id)
+      const publication = await createPublication(content.variants[0]!.id, schedule.id, schedule.scheduledAt, at('2026-09-13', 13))
+      const url = `/api/publications/${publication.id}/metrics/linkedin`
+      const metrics = { impressions: 120, impressionsInNetwork: 62.5, impressionsOutOfNetwork: 37.5, memberReached: 70, views: 60, followersGained: 2, profileViewers: 4, reactions: 8, comments: 1 }
+      expect((await app.inject({ method: 'PUT', url, headers: headers(auth), payload: { ...metrics, reactions: -1 } })).statusCode).toBe(422)
+      expect((await app.inject({ method: 'PUT', url, headers: headers(auth), payload: { ...metrics, impressionsInNetwork: 100.01 } })).statusCode).toBe(422)
+      expect((await app.inject({ method: 'PUT', url, headers: headers(auth), payload: { ...metrics, impressionsInNetwork: 62.555 } })).statusCode).toBe(422)
+
+      const created = await app.inject({ method: 'PUT', url, headers: headers(auth), payload: metrics })
+      expect(created.statusCode).toBe(201)
+      expect(created.json().data).toMatchObject({ ...metrics, reach: metrics.memberReached, likes: metrics.reactions, source: 'linkedin_manual' })
+      const firstVersion = created.json().data.version as number
+      const feed = await app.inject({ method: 'GET', url: '/api/publications?platform=linkedin', headers: { cookie: auth.cookie } })
+      expect(feed.json().data.find((item: AnyRecord) => item.publication.id === publication.id).postMetrics).toMatchObject(metrics)
+
+      const corrected = { ...metrics, impressionsOutOfNetwork: null, reactions: 10 }
+      const updated = await app.inject({ method: 'PUT', url, headers: headers(auth, firstVersion), payload: corrected })
+      expect(updated.statusCode).toBe(200)
+      expect(updated.json().data).toMatchObject({ ...corrected, likes: 10 })
+      expect((await app.inject({ method: 'PUT', url, headers: headers(auth, firstVersion), payload: metrics })).statusCode).toBe(412)
+      const snapshots = await prisma.publicationMetricSnapshot.findMany({ where: { publicationRecordId: publication.id }, orderBy: { createdAt: 'asc' } })
+      expect(snapshots).toHaveLength(2)
+      expect(snapshots.map((item) => item.impressionsOutOfNetwork === null ? null : Number(item.impressionsOutOfNetwork))).toEqual([37.5, null])
+      expect(snapshots.map((item) => item.reactions)).toEqual([8n, 10n])
+    } finally {
+      await removeReportContent(content.id)
     }
   })
 

@@ -133,6 +133,7 @@ export interface ContentLifecycleState {
 
 export interface ContentLibraryRecord {
   ideaId?: string
+  creationMode?: 'ai' | 'manual'
   companyId: string
   productId?: string
   targetIndustry?: string | null

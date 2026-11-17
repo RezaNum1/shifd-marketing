@@ -64,6 +64,7 @@ export interface ContentCreateInput {
   sourceIdeaId: string | null
   brief: BriefInput
   enabledPlatforms: PlatformCode[]
+  creationMode: 'ai' | 'manual'
 }
 
 export interface ContentPatchInput {
@@ -365,6 +366,7 @@ export async function createContent(prisma: PrismaClient, companyId: string, act
           targetProspectId: ideaTarget?.targetProspectId ?? null,
           contextType: input.brief.contextType,
           productId: input.brief.productId,
+          creationMode: input.creationMode,
           editorialStage: 'draft',
           editorialRevision: 1,
           masterRevision: 0,
@@ -565,6 +567,7 @@ export async function duplicateContent(prisma: PrismaClient, companyId: string, 
           sourceIdeaId: source.sourceIdeaId,
           contextType: source.contextType,
           productId: source.productId,
+          creationMode: source.creationMode,
           editorialStage: 'draft',
           editorialRevision: 1,
           masterRevision: master ? Math.max(source.masterRevision, 1) : 0,
@@ -1068,6 +1071,7 @@ export function mapContent(content: CompleteContentRow, freshness?: Map<string, 
     targetIndustry: content.targetIndustry,
     targetProspectId: content.targetProspectId,
     planningNotes: content.planningNotes,
+    creationMode: content.creationMode,
     title: master?.title ?? content.brief.topic,
     brief: {
       contextType: content.contextType,
@@ -1108,6 +1112,7 @@ function mapContentSummary(content: CompleteContentRow, approvalValid = false, a
     targetIndustry: content.targetIndustry,
     targetProspectId: content.targetProspectId,
     planningNotes: content.planningNotes,
+    creationMode: content.creationMode,
     brief: { topic: content.brief.topic, pillarCode: content.brief.pillarCode, objective: content.brief.objective },
     company: { id: content.company.id, name: content.company.name },
     product: content.product ? { id: content.product.id, name: content.product.name } : null,

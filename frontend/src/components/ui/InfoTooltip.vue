@@ -1,13 +1,34 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { ref, useId } from 'vue'
 import AppIcon from './AppIcon.vue'
 
-defineProps<{ text?: string; label?: string; align?: 'start' | 'end' }>()
+const props = defineProps<{ text?: string; label?: string; align?: 'start' | 'end' }>()
 const tooltipId = useId()
+const anchor = ref<HTMLElement>()
+const bubble = ref<HTMLElement>()
+const bubbleStyle = ref<Record<string, string>>({})
+
+function updatePlacement() {
+  if (!anchor.value || !bubble.value) return
+  const anchorRect = anchor.value.getBoundingClientRect()
+  const scrollArea = anchor.value.closest('.ui-overlay__body')?.getBoundingClientRect()
+  const leftEdge = Math.max(8, (scrollArea?.left ?? 0) + 8)
+  const rightEdge = Math.min(window.innerWidth - 8, (scrollArea?.right ?? window.innerWidth) - 8)
+  const width = Math.min(280, Math.max(0, rightEdge - leftEdge))
+  const preferredLeft = props.align === 'end' ? anchorRect.right - width : anchorRect.left
+  const bubbleLeft = Math.min(Math.max(preferredLeft, leftEdge), rightEdge - width)
+  const arrowLeft = Math.min(Math.max(anchorRect.left + anchorRect.width / 2 - bubbleLeft - 5, 8), width - 18)
+  bubbleStyle.value = {
+    left: `${bubbleLeft - anchorRect.left}px`,
+    right: 'auto',
+    width: `${width}px`,
+    '--tooltip-arrow-left': `${arrowLeft}px`,
+  }
+}
 </script>
 
 <template>
-  <span class="info-tooltip" :class="`info-tooltip--${align ?? 'start'}`">
+  <span ref="anchor" class="info-tooltip" :class="`info-tooltip--${align ?? 'start'}`" @mouseenter="updatePlacement" @focusin="updatePlacement">
     <button
       class="info-tooltip__trigger"
       type="button"
@@ -16,7 +37,7 @@ const tooltipId = useId()
     >
       <AppIcon name="info" :size="14" />
     </button>
-    <div :id="tooltipId" class="info-tooltip__bubble" role="tooltip"><slot>{{ text }}</slot></div>
+    <div :id="tooltipId" ref="bubble" class="info-tooltip__bubble" role="tooltip" :style="bubbleStyle"><slot>{{ text }}</slot></div>
   </span>
 </template>
 
@@ -27,8 +48,6 @@ const tooltipId = useId()
 .info-tooltip__bubble { position: absolute; z-index: 80; top: calc(100% + 7px); width: min(280px, calc(100vw - 40px)); padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-container-highest, #fff); color: var(--color-text); box-shadow: 0 8px 24px rgb(15 23 42 / 16%); font-size: 12px; font-weight: 400; line-height: 1.5; letter-spacing: normal; text-align: left; text-transform: none; white-space: normal; opacity: 0; visibility: hidden; pointer-events: auto; transform: translateY(-3px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms; }
 .info-tooltip--start .info-tooltip__bubble { left: 0; }
 .info-tooltip--end .info-tooltip__bubble { right: 0; }
-.info-tooltip__bubble::before { position: absolute; bottom: 100%; width: 9px; height: 9px; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); background: var(--color-surface-container-highest, #fff); content: ''; transform: translateY(5px) rotate(45deg); }
-.info-tooltip--start .info-tooltip__bubble::before { left: 6px; }
-.info-tooltip--end .info-tooltip__bubble::before { right: 6px; }
-.info-tooltip:hover .info-tooltip__bubble { opacity: 1; visibility: visible; transform: translateY(0); }
+.info-tooltip__bubble::before { position: absolute; bottom: 100%; left: var(--tooltip-arrow-left, 6px); width: 9px; height: 9px; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); background: var(--color-surface-container-highest, #fff); content: ''; transform: translateY(5px) rotate(45deg); }
+.info-tooltip:hover .info-tooltip__bubble, .info-tooltip:focus-within .info-tooltip__bubble { opacity: 1; visibility: visible; transform: translateY(0); }
 </style>

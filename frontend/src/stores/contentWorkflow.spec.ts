@@ -5,7 +5,10 @@ import type { ContentLibraryRecord } from '../types/content'
 import type { ContentIdea } from '../types/contentIdea'
 
 describe('content workflow state boundaries', () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
 
   it('starts a new workflow without stale brief values', () => {
     const workflow = useContentWorkflowStore()
@@ -50,5 +53,16 @@ describe('content workflow state boundaries', () => {
     expect(resumeDestinationForStatus('Scheduled')).toBe('schedule')
     expect(resumeDestinationForStatus('Published')).toBe('detail')
     expect(resumeDestinationForStatus('Archived')).toBe('detail')
+  })
+
+  it('resumes a saved manual adaptation at creative upload', () => {
+    const workflow = useContentWorkflowStore()
+    const record: ContentLibraryRecord = {
+      id: 'manual-1', creationMode: 'manual', companyId: 'company-1', title: 'Prepared post', topic: 'Prepared post', context: 'company', pillar: 'Educational', platforms: ['linkedin'], status: 'Adapted', workflowStep: 'adapt', updatedAt: '2026-09-01T00:00:00Z',
+      details: { angle: '', objective: 'awareness', audience: 'Operators', createdBy: 'Operator', createdAt: '2026-09-01T00:00:00Z', creative: { instagram: [], linkedin: [], linkedinReusesInstagram: false }, brandAssessments: {}, schedules: {}, publications: {}, history: [] },
+    }
+    workflow.hydrateRecord(record)
+    expect(workflow.creationMode).toBe('manual')
+    expect(workflow.activeStep).toBe('creative')
   })
 })

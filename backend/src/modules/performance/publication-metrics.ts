@@ -6,13 +6,15 @@ import { LINKEDIN_SOURCE } from './metrics.js'
 export const LINKEDIN_PUBLICATION_SOURCE = LINKEDIN_SOURCE
 
 export interface LinkedInPublicationMetricInput {
+  impressions: number | null
+  impressionsInNetwork: number | null
+  impressionsOutOfNetwork: number | null
+  memberReached: number | null
   views: number | null
-  reach: number | null
-  likes: number | null
+  followersGained: number | null
+  profileViewers: number | null
+  reactions: number | null
   comments: number | null
-  saves: number | null
-  shares: number | null
-  totalInteractions: number | null
 }
 
 export async function saveLinkedInPublicationMetric(
@@ -80,13 +82,17 @@ export async function saveLinkedInPublicationMetric(
 
 function metricData(input: LinkedInPublicationMetricInput) {
   return {
+    impressions: toBigInt(input.impressions),
+    impressionsInNetwork: input.impressionsInNetwork,
+    impressionsOutOfNetwork: input.impressionsOutOfNetwork,
+    memberReached: toBigInt(input.memberReached),
     views: toBigInt(input.views),
-    reach: toBigInt(input.reach),
-    likes: toBigInt(input.likes),
+    followersGained: toBigInt(input.followersGained),
+    profileViewers: toBigInt(input.profileViewers),
+    reactions: toBigInt(input.reactions),
+    reach: toBigInt(input.memberReached),
+    likes: toBigInt(input.reactions),
     comments: toBigInt(input.comments),
-    saves: toBigInt(input.saves),
-    shares: toBigInt(input.shares),
-    totalInteractions: toBigInt(input.totalInteractions),
   }
 }
 
@@ -99,7 +105,14 @@ function mapMetric(row: {
   externalMediaId: string
   source: string
   observedAt: Date
+  impressions: bigint | null
+  impressionsInNetwork: Prisma.Decimal | null
+  impressionsOutOfNetwork: Prisma.Decimal | null
+  memberReached: bigint | null
   views: bigint | null
+  followersGained: bigint | null
+  profileViewers: bigint | null
+  reactions: bigint | null
   reach: bigint | null
   likes: bigint | null
   comments: bigint | null
@@ -113,7 +126,14 @@ function mapMetric(row: {
     scope: 'publication' as const,
     source: row.source,
     externalMediaId: row.externalMediaId,
+    impressions: row.impressions === null ? null : Number(row.impressions),
+    impressionsInNetwork: row.impressionsInNetwork === null ? null : Number(row.impressionsInNetwork),
+    impressionsOutOfNetwork: row.impressionsOutOfNetwork === null ? null : Number(row.impressionsOutOfNetwork),
+    memberReached: row.memberReached === null ? null : Number(row.memberReached),
     views: row.views === null ? null : Number(row.views),
+    followersGained: row.followersGained === null ? null : Number(row.followersGained),
+    profileViewers: row.profileViewers === null ? null : Number(row.profileViewers),
+    reactions: row.reactions === null ? null : Number(row.reactions),
     reach: row.reach === null ? null : Number(row.reach),
     likes: row.likes === null ? null : Number(row.likes),
     comments: row.comments === null ? null : Number(row.comments),

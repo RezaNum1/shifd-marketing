@@ -33,7 +33,7 @@ const overviewHelp = {
   steps: [
     'Choose a reporting period and platform at the top of the page.',
     'Review the metric cards and charts to understand recent results.',
-    'Open Evaluation for the research comparison or LinkedIn Metrics to add weekly LinkedIn data.',
+    'Open Evaluation for the research comparison or LinkedIn Metrics to enter post metrics and review weekly summaries.',
   ],
 }
 const evaluationHelp = {
@@ -51,6 +51,10 @@ const ui = useUiStore()
 const instagramAutoSyncing = ref(false)
 const instagramAutoSyncError = ref('')
 const period = ref('8')
+const performanceRangeStart = ref(addLocalDays(localDateInZone(new Date(), 'Asia/Jakarta'), -27))
+const performanceRangeEnd = ref(localDateInZone(new Date(), 'Asia/Jakarta'))
+const appliedPerformanceRange = ref<{ startDate: string; endDate: string } | null>(null)
+const performanceRangeError = ref('')
 const platform = ref<PlatformFilter>('combined')
 const recentPublishedPage = ref(1)
 const recentPublishedPageSize = ref(10)
@@ -96,7 +100,7 @@ const evaluationPeriodsLabel = computed(() => {
 watch(() => evaluation.value?.evaluation, (config) => { if (config) { evaluationStart.value = config.startDate; measurementDefinitionNotes.value = typeof config.definitions.customNotes === 'string' ? config.definitions.customNotes : '' } })
 watch(() => evaluation.value?.comparison.length, () => { evaluationComparePage.value = 1 })
 
-const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }]
+const periodOptions: SelectOption[] = [{ value: '4', label: 'Last 4 Weeks' }, { value: '8', label: 'Last 8 Weeks' }, { value: '12', label: 'Last 12 Weeks' }, { value: 'custom', label: 'Custom date range' }]
 const platformOptions: SelectOption[] = [{ value: 'combined', label: 'Combined' }, { value: 'instagram', label: 'Instagram' }, { value: 'linkedin', label: 'LinkedIn' }]
 /* Legacy mock-derived selectors are kept below only as a migration marker. */
 /*
@@ -187,7 +191,7 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions = { month
 function formatPercent(value: number) { return `${value.toFixed(1)}%` }
 function formatMetric(value: number | null | undefined) { return value === undefined || value === null ? 'Not available' : formatNumber(value) }
 function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
-function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
+function localDateInZone(value: Date, timezone: string) { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value).map((part) => [part.type, part.value])); return `${parts.year}-${parts.month}-${parts.day}` }
 function localDateTimeInput() { const date = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return date.toISOString().slice(0, 16) }
 function comparisonChange(value: number | null) { return value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toLocaleString()}` }
 function cadenceText(periodData: NonNullable<typeof evaluation.value>['baseline']) { return periodData ? `IG ${periodData.cadence.instagram.weeklyCounts.join(' / ')} · LI ${periodData.cadence.linkedin.weeklyCounts.join(' / ')}` : 'No evaluation data' }
@@ -254,7 +258,7 @@ const latestWeekLabel = computed(() => {
   return latest ? formatDate(latest, { month: 'short', day: 'numeric' }) : 'No recorded week'
 })
 const latestReachDetail = computed(() => latestReach.value === null ? 'No compatible weekly account observation' : `${latestWeekLabel.value} · latest reported week`)
-const impressionsDetail = computed(() => impressionsTotal.value === null ? 'No impressions returned by current sources' : `Total for ${period.value} weeks`)
+const impressionsDetail = computed(() => impressionsTotal.value === null ? 'No impressions returned by current sources' : report.value?.period.basis === 'custom_date_range' ? 'Total from complete weekly observations inside the selected dates' : `Total for ${period.value} weeks`)
 const engagementDetail = computed(() => engagementRate.value === null ? 'Native platform rate is unavailable; no dashboard formula is substituted' : 'Native LinkedIn Analytics value as recorded')
 const publishedCount = computed(() => report.value?.summary.published.effectivePosts ?? 0)
 const consistency = computed(() => report.value?.consistency.map((item) => ({ platform: item.platform, published: item.published.effectivePosts, expected: item.expected, percent: item.percent })) ?? [])
@@ -288,10 +292,14 @@ const recentPublished = computed(() => performance.publications.map((item) => ({
   impressions: item.platformMetricsForPublicationWeek?.impressions ?? null,
   engagements: item.platformMetricsForPublicationWeek?.engagements ?? null,
   postMetrics: item.postMetrics,
-})))
+})).filter((item) => {
+  if (period.value !== 'custom' || !appliedPerformanceRange.value) return true
+  const date = localDateInZone(new Date(item.publication.publishedAt), 'Asia/Jakarta')
+  return date >= appliedPerformanceRange.value.startDate && date <= appliedPerformanceRange.value.endDate
+}))
 const visibleRecentPublished = computed(() => recentPublished.value.slice((recentPublishedPage.value - 1) * recentPublishedPageSize.value, recentPublishedPage.value * recentPublishedPageSize.value))
-watch([platform, () => performance.publications.length], () => { recentPublishedPage.value = 1 })
-const inquiryWindow = computed(() => report.value?.inquiries.weeks.slice(-periodWeeks.value) ?? [])
+watch([platform, () => performance.publications.length, appliedPerformanceRange], () => { recentPublishedPage.value = 1 })
+const inquiryWindow = computed(() => report.value?.inquiries.weeks ?? [])
 const inquiryTotal = computed(() => inquiryWindow.value.reduce((sum, item) => sum + item.count, 0))
 
 function platformLabel(value: PlatformFilter | PerformancePlatform) { return value === 'instagram' ? 'Instagram' : value === 'linkedin' ? 'LinkedIn' : 'Combined' }
@@ -310,15 +318,31 @@ async function syncInstagramForPerformance() {
   try {
     const synced = await integrations.syncInstagram()
     if (synced) await Promise.all([
-      performance.loadReport(periodWeeks.value, platform.value),
+      loadSelectedReport(),
       performance.loadSupportingData(),
     ])
     else instagramAutoSyncError.value = integrations.error || 'Instagram metrics could not be synchronized.'
   } finally { instagramAutoSyncing.value = false }
 }
 async function refreshPerformanceOverview() {
-  await performance.load(periodWeeks.value, platform.value)
+  await Promise.all([loadSelectedReport(), performance.loadSupportingData()])
   await syncInstagramForPerformance()
+}
+function loadSelectedReport() {
+  if (period.value === 'custom') {
+    appliedPerformanceRange.value ??= { startDate: performanceRangeStart.value, endDate: performanceRangeEnd.value }
+    return performance.loadReport(8, platform.value, appliedPerformanceRange.value)
+  }
+  return performance.loadReport(periodWeeks.value, platform.value)
+}
+async function applyPerformanceRange() {
+  if (!performanceRangeStart.value || !performanceRangeEnd.value || performanceRangeStart.value > performanceRangeEnd.value) {
+    performanceRangeError.value = 'Tanggal mulai harus sebelum atau sama dengan tanggal akhir.'
+    return
+  }
+  performanceRangeError.value = ''
+  appliedPerformanceRange.value = { startDate: performanceRangeStart.value, endDate: performanceRangeEnd.value }
+  await loadSelectedReport()
 }
 function formatMaybeNumber(value: number | null | undefined, suffix = '') { return value === undefined || value === null ? 'N/A' : `${value.toLocaleString()}${suffix}` }
 function localDateInZone(value: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value) }
@@ -374,7 +398,7 @@ onMounted(async () => {
   catch { prospects.value = [] }
 })
 watch(isEvaluationPage, (isEvaluation) => { if (!isEvaluation) void refreshPerformanceOverview() })
-watch([period, platform], () => { void performance.load(periodWeeks.value, platform.value) })
+watch([period, platform], () => { void loadSelectedReport() })
 </script>
 
 <template>
@@ -382,6 +406,11 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
     <PageHeader :title="isEvaluationPage ? 'Performance Evaluation' : 'Performance'" :description="isEvaluationPage ? 'Set the evaluation period, record verified observations, and review the supporting evidence.' : 'A focused view of publishing activity and channel results.'" :breadcrumbs="[{ label: 'Performance', to: '/performance' }, ...(isEvaluationPage ? [{ label: 'Evaluation' }] : [])]" :help="isEvaluationPage ? evaluationHelp : overviewHelp">
       <template #actions><div v-if="!isEvaluationPage" class="performance-header-controls"><BaseSelect v-model="period" label="Reporting period" :options="periodOptions" size="compact" /><BaseSelect v-model="platform" label="Platform" :options="platformOptions" size="compact" /><BaseButton variant="secondary" @click="router.push('/performance/evaluation')"><AppIcon name="check" :size="16" />Open Evaluation</BaseButton></div><div v-else class="performance-header-controls"><BaseButton variant="secondary" @click="router.push('/performance')"><AppIcon name="arrow-left" :size="16" />Back to Performance</BaseButton><BaseButton variant="secondary" @click="router.push('/performance/linkedin')"><AppIcon name="linkedin" :size="16" />LinkedIn Metrics</BaseButton></div></template>
     </PageHeader>
+    <section v-if="!isEvaluationPage && period === 'custom'" class="performance-reporting-range" aria-label="Custom reporting period">
+      <div class="performance-reporting-range__controls"><BaseInput v-model="performanceRangeStart" label="Start date" type="date" /><BaseInput v-model="performanceRangeEnd" label="End date" type="date" /><BaseButton :disabled="performance.loading || !performanceRangeStart || !performanceRangeEnd || performanceRangeStart > performanceRangeEnd" @click="applyPerformanceRange">{{ performance.loading ? 'Loading…' : 'Apply date range' }}</BaseButton></div>
+      <p>Publikasi dan jadwal dihitung sesuai tanggal yang dipilih. Target posting dihitung proporsional dari 2 post per 7 hari, lalu dibulatkan ke atas. Metrik akun mingguan hanya dihitung untuk minggu Senin–Minggu yang lengkap dalam rentang tersebut.</p>
+      <p v-if="performanceRangeError" class="form-error" role="alert">{{ performanceRangeError }}</p>
+    </section>
     <InlineAlert v-if="performance.loading" title="Loading performance">Reading the backend performance report…</InlineAlert>
     <InlineAlert v-else-if="performance.error" title="Performance unavailable" tone="danger">{{ performance.error }}</InlineAlert>
     <InlineAlert v-if="!isEvaluationPage && instagramAutoSyncing" title="Refreshing Instagram metrics">Published post metrics are being synchronized…</InlineAlert>
@@ -514,13 +543,13 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
     </section>
 
     <section v-if="!isEvaluationPage" class="performance-two-column">
-      <BaseCard title="Content Output" description="Throughput by lifecycle state. Volume is reported without interpreting quality."><div class="output-grid"><div><strong>{{ outputBreakdown.created }}</strong><span>Content Created</span></div><div><strong>{{ outputBreakdown.approved }}</strong><span>Content Approved</span></div><div><strong>{{ outputBreakdown.scheduled }}</strong><span>Content Scheduled</span></div><div><strong>{{ outputBreakdown.published }}</strong><span>Content Published</span></div></div></BaseCard>
+      <BaseCard title="Content Output" description="Lifecycle totals across all saved content."><div class="output-grid"><div><strong>{{ outputBreakdown.created }}</strong><span>Content Created</span></div><div><strong>{{ outputBreakdown.approved }}</strong><span>Content Approved</span></div><div><strong>{{ outputBreakdown.scheduled }}</strong><span>Content Scheduled</span></div><div><strong>{{ outputBreakdown.published }}</strong><span>Content Published</span></div></div></BaseCard>
       <BaseCard title="Supplementary Inquiry Volume" description="Supplementary Metric · WhatsApp Business manual tracking."><template #actions><strong class="inquiry-total">{{ inquiryTotal }} inquiries</strong></template><div class="inquiry-chart"><div v-for="item in inquiryWindow" :key="item.id" class="inquiry-bar"><span :style="{ height: `${Math.max(8, (item.count / Math.max(1, ...inquiryWindow.map((entry) => entry.count))) * 100)}%` }" /><small>{{ formatDate(item.weekStart, { month: 'short', day: 'numeric' }) }}</small><b>{{ item.count }}</b></div></div><p class="helper-text">Inquiry counts are observed supplementary data; no attribution to individual posts is inferred.</p></BaseCard>
     </section>
 
-      <BaseCard v-if="!isEvaluationPage" title="Recent Published Content" description="Instagram metrics sync automatically; LinkedIn metrics are entered per post in LinkedIn Metrics."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" /></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
+      <BaseCard v-if="!isEvaluationPage" :title="period === 'custom' ? 'Published Content in Selected Range' : 'Recent Published Content'" description="Instagram metrics sync automatically; LinkedIn metrics are entered per post in LinkedIn Metrics."><template #actions><BaseButton variant="ghost" size="compact" @click="router.push('/content')">View Content Library <AppIcon name="arrow-right" :size="14" /> </BaseButton></template><div v-if="recentPublished.length" class="performance-table-wrap"><table class="performance-table"><caption class="sr-only">Recent published content performance</caption><thead><tr><th>Content</th><th>Platform</th><th>Published</th><th>Views</th><th>Reach</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Total Interactions</th></tr></thead><tbody><tr v-for="item in visibleRecentPublished" :key="`${item.record.id}-${item.platform}`"><td><button type="button" class="content-link" @click="router.push(`/content/${item.record.id}`)"><strong>{{ item.record.title }}</strong><small>{{ item.record.topic }}</small></button></td><td><span class="platform-pill" :class="`is-${item.platform}`"><i />{{ platformLabel(item.platform) }}</span></td><td>{{ new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(item.publication.publishedAt)) }}</td><td>{{ formatMetric(item.postMetrics?.views) }}</td><td>{{ formatMetric(item.postMetrics?.reach) }}</td><td>{{ formatMetric(item.postMetrics?.likes) }}</td><td>{{ formatMetric(item.postMetrics?.comments) }}</td><td>{{ formatMetric(item.postMetrics?.saves) }}</td><td>{{ formatMetric(item.postMetrics?.shares) }}</td><td>{{ formatMetric(item.postMetrics?.totalInteractions) }}</td></tr></tbody></table><TablePagination v-model:page="recentPublishedPage" v-model:page-size="recentPublishedPageSize" :total="recentPublished.length" /></div><EmptyState v-else icon="chart" title="No published content yet." description="Recorded publications will appear here after a publication is logged." /></BaseCard>
 
-    <div v-if="!isEvaluationPage" class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>Enter post metrics and weekly LinkedIn observations.</span></div>
+    <div v-if="!isEvaluationPage" class="performance-secondary-actions"><BaseButton variant="secondary" size="compact" @click="router.push('/performance/linkedin')">Manage LinkedIn Metrics <AppIcon name="arrow-right" :size="14" /></BaseButton><span>Enter post metrics and review weekly LinkedIn summaries.</span></div>
     </template>
 
   </div>
@@ -610,6 +639,12 @@ watch([period, platform], () => { void performance.load(periodWeeks.value, platf
 .inquiry-record-list { display: grid; gap: 8px; padding-left: 18px; color: var(--color-muted); font-size: 11px; overflow-wrap: anywhere; }
 .inquiry-weekly-trend { display: grid; gap: 6px; margin: 12px 0; color: var(--color-muted); font-size: 11px; }
 .performance-header-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.performance-reporting-range { display: grid; gap: 8px; padding: 16px 18px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.performance-reporting-range__controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.performance-reporting-range__controls > * { flex: 1 1 170px; }
+.performance-reporting-range__controls :deep(.ui-button) { flex: 0 0 auto; }
+.performance-reporting-range p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.performance-reporting-range .form-error { color: var(--color-danger); }
 .performance-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-well); color: var(--color-muted); font-size: 12px; }
 .performance-toolbar__note, .performance-toolbar__source { display: flex; align-items: center; gap: 8px; }
 .performance-toolbar__source { flex-wrap: wrap; justify-content: flex-end; color: var(--color-subtle); font-size: 11px; }

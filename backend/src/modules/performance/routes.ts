@@ -10,6 +10,7 @@ import {
   assertSafeCount,
   createInquiry,
   createLinkedInMetric,
+  dateOnly,
   listInquiries,
   listLinkedInMetrics,
   parseDateOnly,
@@ -19,7 +20,7 @@ import {
   type MetricListOptions,
   type WeeklyMetricInput,
 } from './metrics.js'
-import { buildOverviewReport, buildPerformanceReport, listRecentPublications, loadReportingSnapshot, type ReportPlatform } from './reporting.js'
+import { buildOverviewReport, buildPerformanceReport, listRecentPublications, loadReportingSnapshot, type CustomPerformanceRange, type ReportPlatform } from './reporting.js'
 import { saveLinkedInPublicationMetric, type LinkedInPublicationMetricInput } from './publication-metrics.js'
 import type { Clock } from '../../shared/time/clock.js'
 import type { InstagramInsightsProvider } from './instagram/provider.js'
@@ -32,7 +33,7 @@ const snapshotKeys = ['stage', 'capturedAt', 'measurements', 'source', 'notes'] 
 const businessInquiryKeys = ['receivedAt', 'channel', 'companyName', 'prospectId', 'summary', 'relevance', 'source', 'sourceReference', 'followUpNotes'] as const
 const productionTimeKeys = ['contentId', 'minutes', 'occurredAt', 'notes'] as const
 const inquiryKeys = ['weekStart', 'weekEnd', 'count'] as const
-const publicationMetricKeys = ['views', 'reach', 'likes', 'comments', 'saves', 'shares', 'totalInteractions'] as const
+const publicationMetricKeys = ['impressions', 'impressionsInNetwork', 'impressionsOutOfNetwork', 'memberReached', 'views', 'followersGained', 'profileViewers', 'reactions', 'comments'] as const
 const reportPlatforms = ['combined', 'instagram', 'linkedin'] as const
 const metricPlatforms = ['instagram', 'linkedin'] as const
 
@@ -222,7 +223,7 @@ export async function performanceRoutes(app: FastifyInstance, options: { config:
     const query = parsePerformanceQuery(request)
     const asOf = options.clock.now()
     const snapshot = await loadReportingSnapshot(app.prisma, auth.user.companyId, { openaiModel: options.config.openaiModel, aiProviderMode: options.config.aiProviderMode, asOf })
-    return reply.send({ data: buildPerformanceReport(snapshot, query.weeks, query.platform, asOf) })
+    return reply.send({ data: buildPerformanceReport(snapshot, query.weeks, query.platform, asOf, query.customRange) })
   })
 
   app.get('/overview', async (request, reply) => {
@@ -280,13 +281,15 @@ function parseWeeklyMetric(value: unknown): WeeklyMetricInput {
 
 function parsePublicationMetric(value: Record<string, unknown>): LinkedInPublicationMetricInput {
   return {
+    impressions: assertOptionalSafeCount(value.impressions, 'impressions'),
+    impressionsInNetwork: assertOptionalPercentage(value.impressionsInNetwork, 'impressionsInNetwork'),
+    impressionsOutOfNetwork: assertOptionalPercentage(value.impressionsOutOfNetwork, 'impressionsOutOfNetwork'),
+    memberReached: assertOptionalSafeCount(value.memberReached, 'memberReached'),
     views: assertOptionalSafeCount(value.views, 'views'),
-    reach: assertOptionalSafeCount(value.reach, 'reach'),
-    likes: assertOptionalSafeCount(value.likes, 'likes'),
+    followersGained: assertOptionalSafeCount(value.followersGained, 'followersGained'),
+    profileViewers: assertOptionalSafeCount(value.profileViewers, 'profileViewers'),
+    reactions: assertOptionalSafeCount(value.reactions, 'reactions'),
     comments: assertOptionalSafeCount(value.comments, 'comments'),
-    saves: assertOptionalSafeCount(value.saves, 'saves'),
-    shares: assertOptionalSafeCount(value.shares, 'shares'),
-    totalInteractions: assertOptionalSafeCount(value.totalInteractions, 'totalInteractions'),
   }
 }
 
@@ -315,12 +318,21 @@ function resultOptions(query: ReturnType<typeof parseMetricQuery>): MetricListOp
 
 function parsePerformanceQuery(request: FastifyRequest) {
   const query = queryObject(request)
-  allowedKeys(query, ['weeks', 'platform'], 'query')
+  allowedKeys(query, ['weeks', 'platform', 'startDate', 'endDate'], 'query')
+  const platform = enumValue(query.platform ?? 'combined', reportPlatforms, 'platform') as ReportPlatform
+  let customRange: CustomPerformanceRange | undefined
+  if (query.startDate !== undefined || query.endDate !== undefined) {
+    if (query.weeks !== undefined) throw validationError('The Performance query is invalid.', { weeks: 'Choose either weeks or a date range.' })
+    const start = parseDateOnly(query.startDate, 'startDate')
+    const end = parseDateOnly(query.endDate, 'endDate')
+    if (start > end) throw validationError('The Performance date range is invalid.', { endDate: 'Use a date on or after startDate.' })
+    if ((end.getTime() - start.getTime()) / 86_400_000 > 3660) throw validationError('The Performance date range is too long.', { endDate: 'Choose at most 10 years.' })
+    customRange = { startDate: dateOnly(start), endDate: dateOnly(end) }
+  }
   const weeksValue = query.weeks === undefined ? '8' : query.weeks
   const weeks = Number(weeksValue)
   if (![4, 8, 12].includes(weeks)) throw validationError('The Performance query is invalid.', { weeks: 'Use 4, 8, or 12.' })
-  const platform = enumValue(query.platform ?? 'combined', reportPlatforms, 'platform') as ReportPlatform
-  return { weeks: weeks as 4 | 8 | 12, platform }
+  return { weeks: weeks as 4 | 8 | 12, platform, customRange }
 }
 
 function parsePublicationQuery(request: FastifyRequest) {
@@ -368,6 +380,14 @@ function parseNullableUuid(value: unknown, path: string) {
 function assertOptionalRate(value: unknown, path: string): number | null {
   if (value === undefined || value === null || value === '') return null
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw validationError('The platform engagement rate is invalid.', { [path]: 'Use a non-negative native platform percentage or leave it blank.' })
+  return value
+}
+
+function assertOptionalPercentage(value: unknown, path: string): number | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100 || Math.abs(value * 100 - Math.round(value * 100)) > 1e-8) {
+    throw validationError('The LinkedIn percentage is invalid.', { [path]: 'Use a percentage from 0 to 100 with at most two decimal places.' })
+  }
   return value
 }
 

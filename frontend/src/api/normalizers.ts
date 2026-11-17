@@ -137,6 +137,7 @@ export function contentSummary(value: BackendContentSummary): ContentLibraryReco
   const publications = Object.fromEntries(value.publications.map((publication) => [publication.platform, { publishedAt: publication.publishedAt, postUrl: publication.postUrl ?? undefined, notes: publication.notes ?? undefined, status: 'Published' as const }])) as ContentRecordDetails['publications']
   return baseRecord({
     id: value.id,
+    creationMode: value.creationMode,
     companyId: value.company.id,
     productId: value.product?.id,
     targetIndustry: value.targetIndustry,
@@ -191,6 +192,7 @@ export function content(value: BackendContent): ContentLibraryRecord {
   }
   return baseRecord({
     id: value.id,
+    creationMode: value.creationMode,
     ideaId: value.sourceIdeaId ?? undefined,
     companyId: value.companyId,
     productId: value.brief.productId ?? undefined,
@@ -224,11 +226,12 @@ export function creativeAsset(value: BackendAsset): CreativeAsset {
   return { id: value.id, name: value.fileName, url: value.contentUrl, mimeType: value.mimeType }
 }
 
-function baseRecord(value: { id: string; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product' | 'general'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
+function baseRecord(value: { id: string; creationMode?: 'ai' | 'manual'; ideaId?: string; companyId: string; productId?: string; targetIndustry?: string | null; targetProspectId?: string | null; planningNotes?: string | null; title: string; topic: string; context: 'company' | 'product' | 'general'; pillar: string; platforms: ContentPlatform[]; status: ContentLifecycleStatus; updatedAt: string; version: number; workflowStep: ContentLibraryRecord['workflowStep']; schedules?: ContentRecordDetails['schedules']; publications?: ContentRecordDetails['publications']; details?: ContentRecordDetails }): ContentLibraryRecord {
   const schedules = value.schedules ?? {}
   const publications = value.publications ?? {}
   return {
     ideaId: value.ideaId,
+    creationMode: value.creationMode,
     companyId: value.companyId,
     productId: value.productId,
     targetIndustry: value.targetIndustry ?? null,

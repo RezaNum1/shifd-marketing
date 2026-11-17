@@ -729,6 +729,7 @@ model Content {
   planningNotes            String?                  @map("planning_notes")
   contextType              String                   @map("context_type")
   productId                String?                  @map("product_id") @db.Uuid
+  creationMode             String                   @default("ai") @map("creation_mode")
   editorialStage           String                   @default("draft") @map("editorial_stage")
   editorialRevision        Int                      @default(1) @map("editorial_revision")
   masterRevision           Int                      @default(0) @map("master_revision")
@@ -960,7 +961,14 @@ model PublicationMetric {
   externalMediaId     String            @map("external_media_id")
   platform            String
   observedAt          DateTime          @map("observed_at") @db.Timestamptz(3)
+  impressions         BigInt?
+  impressionsInNetwork Decimal?         @map("impressions_in_network") @db.Decimal(5, 2)
+  impressionsOutOfNetwork Decimal?      @map("impressions_out_of_network") @db.Decimal(5, 2)
+  memberReached       BigInt?           @map("member_reached")
   views               BigInt?
+  followersGained     BigInt?           @map("followers_gained")
+  profileViewers      BigInt?           @map("profile_viewers")
+  reactions           BigInt?
   reach               BigInt?
   likes               BigInt?
   comments            BigInt?
@@ -985,7 +993,14 @@ model PublicationMetricSnapshot {
   id                  String            @id @default(uuid()) @db.Uuid
   publicationRecordId String            @map("publication_record_id") @db.Uuid
   observedAt          DateTime          @map("observed_at") @db.Timestamptz(3)
+  impressions         BigInt?
+  impressionsInNetwork Decimal?         @map("impressions_in_network") @db.Decimal(5, 2)
+  impressionsOutOfNetwork Decimal?      @map("impressions_out_of_network") @db.Decimal(5, 2)
+  memberReached       BigInt?           @map("member_reached")
   views               BigInt?
+  followersGained     BigInt?           @map("followers_gained")
+  profileViewers      BigInt?           @map("profile_viewers")
+  reactions           BigInt?
   reach               BigInt?
   likes               BigInt?
   comments            BigInt?

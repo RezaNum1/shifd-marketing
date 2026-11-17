@@ -341,6 +341,7 @@ export interface BackendContent {
   targetIndustry: string | null
   targetProspectId: string | null
   planningNotes: string | null
+  creationMode: 'ai' | 'manual'
   title: string
   brief: BackendBrief
   master: BackendMaster | null
@@ -374,6 +375,7 @@ export interface BackendCanvaDesignLink {
 
 export interface BackendContentSummary {
   id: string
+  creationMode: 'ai' | 'manual'
   targetIndustry: string | null
   targetProspectId: string | null
   planningNotes: string | null
@@ -562,7 +564,7 @@ export interface BackendPerformanceSummary {
 export interface BackendPerformanceReport {
   period: {
     basis: string
-    requestedWeeks: 4 | 8 | 12
+    requestedWeeks: number
     start: string | null
     end: string | null
     recordedWeekStarts: string[]
@@ -651,7 +653,14 @@ export interface BackendPublicationMetrics {
   scope: 'publication'
   source: 'instagram_api' | 'linkedin_manual'
   externalMediaId: string
+  impressions: number | null
+  impressionsInNetwork: number | null
+  impressionsOutOfNetwork: number | null
+  memberReached: number | null
   views: number | null
+  followersGained: number | null
+  profileViewers: number | null
+  reactions: number | null
   reach: number | null
   likes: number | null
   comments: number | null

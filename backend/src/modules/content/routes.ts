@@ -415,11 +415,12 @@ function parseBrief(value: unknown): BriefInput {
 
 function parseContentCreate(value: unknown): ContentCreateInput {
   const input = object(value, 'Content creation request')
-  allowedKeys(input, ['sourceIdeaId', 'brief', 'enabledPlatforms'], 'body')
+  allowedKeys(input, ['sourceIdeaId', 'brief', 'enabledPlatforms', 'creationMode'], 'body')
   return {
     sourceIdeaId: optionalResourceId(input.sourceIdeaId, 'sourceIdeaId'),
     brief: parseBrief(input.brief),
     enabledPlatforms: parseEnabledPlatforms(input.enabledPlatforms, 'enabledPlatforms'),
+    creationMode: enumValue(input.creationMode, ['ai', 'manual'] as const, 'creationMode', false) ?? 'ai',
   }
 }
 
@@ -487,7 +488,7 @@ function parseMaster(value: unknown): MasterInput {
     coreMessage: requiredText(input.coreMessage, 'master.coreMessage'),
     hook: requiredText(input.hook, 'master.hook'),
     body: requiredText(input.body, 'master.body'),
-    cta: requiredText(input.cta, 'master.cta'),
+    cta: optionalText(input.cta, 'master.cta') ?? '',
   }
 }
 
@@ -507,9 +508,9 @@ function parseVariantCopy(value: unknown): VariantCopyInput {
   allowedKeys(input, variantCopyKeys, 'body')
   return {
     copy: requiredText(input.copy, 'copy'),
-    cta: requiredText(input.cta, 'cta'),
-    hashtags: requiredText(input.hashtags, 'hashtags'),
-    visualRecommendation: requiredText(input.visualRecommendation, 'visualRecommendation'),
+    cta: optionalText(input.cta, 'cta') ?? '',
+    hashtags: optionalText(input.hashtags, 'hashtags') ?? '',
+    visualRecommendation: optionalText(input.visualRecommendation, 'visualRecommendation') ?? '',
   }
 }
 

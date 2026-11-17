@@ -76,7 +76,14 @@ type PublicationMetricRow = {
   externalMediaId: string
   platform: string
   observedAt: Date
+  impressions: bigint | null
+  impressionsInNetwork: Prisma.Decimal | null
+  impressionsOutOfNetwork: Prisma.Decimal | null
+  memberReached: bigint | null
   views: bigint | null
+  followersGained: bigint | null
+  profileViewers: bigint | null
+  reactions: bigint | null
   reach: bigint | null
   likes: bigint | null
   comments: bigint | null
@@ -151,6 +158,7 @@ interface ReportingSnapshot {
 }
 
 export type ReportPlatform = 'combined' | 'instagram' | 'linkedin'
+export interface CustomPerformanceRange { startDate: string; endDate: string }
 
 export async function loadReportingSnapshot(prisma: PrismaClient, companyId: string, options: ReportingOptions): Promise<ReportingSnapshot> {
   return prisma.$transaction(async (tx) => {
@@ -211,23 +219,29 @@ export async function loadReportingSnapshot(prisma: PrismaClient, companyId: str
   })
 }
 
-export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWeeks: 4 | 8 | 12, platform: ReportPlatform, asOf: Date) {
-  const weeks = selectRecordedWeeks(snapshot.metrics, requestedWeeks)
+export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWeeks: 4 | 8 | 12, platform: ReportPlatform, asOf: Date, customRange?: CustomPerformanceRange) {
+  const weeks = customRange ? calendarWeeksInRange(customRange.startDate, customRange.endDate) : selectRecordedWeeks(snapshot.metrics, requestedWeeks)
   const timezone = snapshot.company.reportingTimezone || 'Asia/Jakarta'
-  const bounds = intervalBounds(weeks, timezone)
-  const selectedMetrics = snapshot.metrics.filter((metric) => weeks.includes(dateOnly(metric.weekStart)))
+  const bounds = customRange ? dateRangeBounds(customRange, timezone) : intervalBounds(weeks, timezone)
+  const selectedMetrics = snapshot.metrics.filter((metric) => customRange
+    ? dateOnly(metric.weekStart) >= customRange.startDate && dateOnly(metric.weekEnd) <= customRange.endDate
+    : weeks.includes(dateOnly(metric.weekStart)))
   const relevantMetrics = platform === 'combined' ? selectedMetrics.filter((metric) => isPerformancePlatform(metric.socialAccount.platform)) : selectedMetrics.filter((metric) => metric.socialAccount.platform === platform)
   const weekly = weeks.map((weekStart) => weeklyRow(selectedMetrics, weekStart, platform))
   const followers = ['instagram', 'linkedin'].map((item) => followerSeries(selectedMetrics, item as PerformancePlatform))
   const published = publicationCounts(snapshot.publications, selectedMetrics, snapshot.metrics, platform, bounds, timezone)
+  const customDays = customRange ? (Date.parse(`${customRange.endDate}T00:00:00.000Z`) - Date.parse(`${customRange.startDate}T00:00:00.000Z`)) / 86_400_000 + 1 : null
   const consistency = (['instagram', 'linkedin'] as const).map((item) => {
     const counts = publicationCounts(snapshot.publications, selectedMetrics.filter((metric) => metric.socialAccount.platform === item), snapshot.metrics.filter((metric) => metric.socialAccount.platform === item), item, bounds, timezone)
-    const expected = requestedWeeks * 2
+    const targetWeeks = customRange ? weeks.length : requestedWeeks
+    const expected = customDays === null ? targetWeeks * 2 : Math.ceil(customDays * 2 / 7)
     const percent = expected > 0 ? (counts.effectivePosts / expected) * 100 : 0
-    return { platform: item, published: counts, targetPerWeek: 2, weeks: requestedWeeks, expected, percent, visualPercent: Math.min(100, Math.max(0, percent)) }
+    return { platform: item, published: counts, targetPerWeek: 2, weeks: targetWeeks, expected, percent, visualPercent: Math.min(100, Math.max(0, percent)) }
   })
   const summary = {
-    latestWeeklyReach: platform === 'combined' ? null : weekly.at(-1)?.reach ?? null,
+    latestWeeklyReach: platform === 'combined' ? null : customRange
+      ? [...weekly].reverse().find((item) => item.reach !== null)?.reach ?? null
+      : weekly.at(-1)?.reach ?? null,
     impressions: platform === 'combined' ? null : sumNullable(relevantMetrics.map((metric) => metric.impressions === null ? null : Number(metric.impressions))),
     engagements: platform === 'combined' ? null : sumNullable(relevantMetrics.map(engagements)),
     // LinkedIn's native rate is preserved as entered; other rates are not reconstructed.
@@ -238,11 +252,11 @@ export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWee
   const periodEnd = bounds ? bounds.end : null
   return {
     period: {
-      basis: 'latest_recorded_intervals' as const,
-      requestedWeeks,
+      basis: customRange ? 'custom_date_range' as const : 'latest_recorded_intervals' as const,
+      requestedWeeks: customRange ? weeks.length : requestedWeeks,
       start: periodStart?.toISOString() ?? null,
       end: periodEnd?.toISOString() ?? null,
-      recordedWeekStarts: weeks,
+      recordedWeekStarts: customRange ? [...new Set(selectedMetrics.map((metric) => dateOnly(metric.weekStart)))].sort() : weeks,
       timezone,
       asOf: asOf.toISOString(),
     },
@@ -253,7 +267,9 @@ export function buildPerformanceReport(snapshot: ReportingSnapshot, requestedWee
     consistency,
     execution: executionSummary(snapshot.schedules, platform, bounds),
     contentOutput: contentOutput(snapshot.contents),
-    inquiries: { channel: 'whatsapp' as const, kind: 'supplementary' as const, weeks: snapshot.inquiries.filter((row) => weeks.includes(dateOnly(row.weekStart))).map(mapInquiry) },
+    inquiries: { channel: 'whatsapp' as const, kind: 'supplementary' as const, weeks: snapshot.inquiries.filter((row) => customRange
+      ? dateOnly(row.weekStart) >= customRange.startDate && dateOnly(row.weekEnd) <= customRange.endDate
+      : weeks.includes(dateOnly(row.weekStart))).map(mapInquiry) },
   }
 }
 
@@ -354,6 +370,19 @@ export function calendarEntry(row: ScheduleRow, asOf: Date) {
 
 function selectRecordedWeeks(metrics: MetricRow[], requestedWeeks: number) {
   return [...new Set(metrics.filter((metric) => isPerformancePlatform(metric.socialAccount.platform)).map((metric) => dateOnly(metric.weekStart)))].sort().slice(-requestedWeeks)
+}
+
+function calendarWeeksInRange(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00.000Z`)
+  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7)
+  const weeks: string[] = []
+  for (let date = start; dateOnly(date) <= endDate; date = addDays(date, 7)) weeks.push(dateOnly(date))
+  return weeks
+}
+
+function dateRangeBounds(range: CustomPerformanceRange, timezone: string) {
+  const endExclusive = dateOnly(addDays(new Date(`${range.endDate}T00:00:00.000Z`), 1))
+  return { start: zonedMidnight(range.startDate, timezone), end: zonedMidnight(endExclusive, timezone), localStart: range.startDate, localEnd: endExclusive }
 }
 
 function weeklyRow(metrics: MetricRow[], weekStart: string, platform: ReportPlatform) {
@@ -563,7 +592,14 @@ function mapPublicationMetric(row: PublicationMetricRow) {
     scope: 'publication' as const,
     source: row.source,
     externalMediaId: row.externalMediaId,
+    impressions: row.impressions === null ? null : Number(row.impressions),
+    impressionsInNetwork: row.impressionsInNetwork === null ? null : Number(row.impressionsInNetwork),
+    impressionsOutOfNetwork: row.impressionsOutOfNetwork === null ? null : Number(row.impressionsOutOfNetwork),
+    memberReached: row.memberReached === null ? null : Number(row.memberReached),
     views: row.views === null ? null : Number(row.views),
+    followersGained: row.followersGained === null ? null : Number(row.followersGained),
+    profileViewers: row.profileViewers === null ? null : Number(row.profileViewers),
+    reactions: row.reactions === null ? null : Number(row.reactions),
     reach: row.reach === null ? null : Number(row.reach),
     likes: row.likes === null ? null : Number(row.likes),
     comments: row.comments === null ? null : Number(row.comments),

@@ -91,6 +91,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
   const canonical = ref<BackendContent | null>(null)
   const etag = ref<string | null>(null)
   const activeStep = ref<WorkflowStep>('brief')
+  const creationMode = ref<'ai' | 'manual'>('ai')
   const brief = reactive<ContentBrief>(blankBrief())
   const generatedVariantIndex = ref(0)
   const generatedContent = reactive<MasterContent>(blankMaster())
@@ -127,6 +128,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
 
   function applyCanonical(value: BackendContent, responseEtag?: string | null, preserveStep = false) {
     const preserveReviewEvidence = canonical.value?.id === value.id && canonical.value.editorialRevision === value.editorialRevision
+    creationMode.value = value.creationMode
     canonical.value = value
     contentId.value = value.id
     sourceIdeaId.value = value.sourceIdeaId ?? undefined
@@ -167,7 +169,10 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     setSchedule('instagram', schedules.instagram)
     setSchedule('linkedin', schedules.linkedin)
     isScheduled.value = value.schedules.some((schedule) => schedule.status !== 'cancelled') || ['Scheduled', 'Published'].includes(value.lifecycleStatus)
-    if (!preserveStep) activeStep.value = value.resumeStep ?? (value.lifecycleStatus === 'Published' || value.lifecycleStatus === 'Archived' ? 'schedule' : 'brief')
+    if (!preserveStep) {
+      const resumeStep = value.resumeStep ?? (value.lifecycleStatus === 'Published' || value.lifecycleStatus === 'Archived' ? 'schedule' : 'brief')
+      activeStep.value = creationMode.value === 'manual' && (resumeStep === 'generate' || resumeStep === 'adapt') ? 'creative' : resumeStep
+    }
   }
 
   function reset() {
@@ -179,6 +184,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     canonical.value = null
     etag.value = null
     activeStep.value = 'brief'
+    creationMode.value = 'ai'
     Object.assign(brief, blankBrief())
     Object.assign(generatedContent, blankMaster())
     Object.assign(visualDirection, blankVisualDirection())
@@ -223,9 +229,11 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
 
   function hydrateRecord(record: ContentLibraryRecord) {
     reset()
+    creationMode.value = record.creationMode ?? 'ai'
     contentId.value = record.id
     sourceIdeaId.value = record.ideaId
-    activeStep.value = workflowStepForStatus(contentStatus(record)) ?? 'schedule'
+    const resumeStep = workflowStepForStatus(contentStatus(record)) ?? 'schedule'
+    activeStep.value = creationMode.value === 'manual' && (resumeStep === 'generate' || resumeStep === 'adapt') ? 'creative' : resumeStep
     Object.assign(brief, { context: record.context, product: record.productId ?? '', pillar: record.pillar, objective: record.details.objective, audience: record.details.audience, topic: record.topic, thesis: record.details.angle, constraints: record.details.instructions ?? '' })
     Object.assign(generatedContent, record.details.masterContent ?? blankMaster())
     Object.assign(visualDirection, record.details.visualDirection ?? blankVisualDirection())
@@ -251,7 +259,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
 
   async function createFromBrief() {
     if (contentId.value && canonical.value) return canonical.value
-    const input = { sourceIdeaId: sourceIdeaId.value, brief: { contextType: brief.context, productId: brief.context === 'product' ? brief.product : null, pillarCode: brief.pillar, objective: brief.objective, targetAudience: brief.audience.trim(), topic: brief.topic.trim(), angle: brief.thesis.trim() || null, additionalInstructions: brief.constraints.trim() || null }, enabledPlatforms: enabledPlatformCodes() }
+    const input = { sourceIdeaId: sourceIdeaId.value, brief: { contextType: brief.context, productId: brief.context === 'product' ? brief.product : null, pillarCode: brief.pillar, objective: brief.objective, targetAudience: brief.audience.trim(), topic: brief.topic.trim(), angle: brief.thesis.trim() || null, additionalInstructions: brief.constraints.trim() || null }, enabledPlatforms: enabledPlatformCodes(), creationMode: creationMode.value }
     const command = beginCommand('content.create', JSON.stringify(input))
     return perform(async () => {
       const result = await contentApi.createContent(input, command.key)
@@ -576,7 +584,7 @@ export const useContentWorkflowStore = defineStore('contentWorkflow', () => {
     Object.assign(scheduledRecords[platform], value ?? blankSchedule())
   }
 
-  return { contentId, sourceIdeaId, canonical, etag, activeStep, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, reviewManualOverrides, reviewCheckErrors, reviewFailureOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, clearBrandCheckEvidence, setBrandCheckPreparationError, brandCheck, override, approve, requestRevision, schedule }
+  return { contentId, sourceIdeaId, canonical, etag, activeStep, creationMode, brief, generatedVariantIndex, generatedContent, visualDirection, enabledPlatforms, instagramVariantIndex, linkedInVariantIndex, instagramContent, linkedInContent, designStatus, reuseInstagramCreative, instagramAssets, linkedInAssets, isApproved, approvedBy, approvedAt, reviewChecklist, reviewEditing, reviewAssessments, reviewOverrides, reviewManualOverrides, reviewCheckErrors, reviewFailureOverrides, isScheduled, useSameSchedule, instagramSchedule, linkedInSchedule, scheduledRecords, loading, error, loaded, startFromIdea, startNewWorkflow, reset, hydrateRecord, resumeContent: hydrateRecord, createFromBrief, load, saveEditorial, generate, adapt, saveVariant, progress, uploadCreative, attachCreative, setReuseCreative, clearBrandCheckEvidence, setBrandCheckPreparationError, brandCheck, override, approve, requestRevision, schedule }
 })
 
 function variantValue(value: BackendContent['variants'][number], platform: PlatformKey) {
